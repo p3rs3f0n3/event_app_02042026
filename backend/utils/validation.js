@@ -70,9 +70,64 @@ const validateManualInactivationPayload = (payload) => {
   return null;
 };
 
+const validateCoordinatorPhotoPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de foto inválido';
+  }
+
+  if (!isValidIdValue(payload.authorUserId)) {
+    return 'El autor de la foto es requerido';
+  }
+
+  if (!isNonEmptyString(payload.uri)) {
+    return 'La foto del evento es requerida';
+  }
+
+  const normalizedUri = normalizeString(payload.uri);
+  const isAllowedUri = normalizedUri.startsWith('http://')
+    || normalizedUri.startsWith('https://')
+    || normalizedUri.startsWith('data:image/');
+
+  if (!isAllowedUri) {
+    return 'La foto debe ser una URL válida o una imagen en base64';
+  }
+
+  return null;
+};
+
+const validateCoordinatorReportPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de informe inválido';
+  }
+
+  if (!isValidIdValue(payload.authorUserId)) {
+    return 'El autor del informe es requerido';
+  }
+
+  if (!isNonEmptyString(payload.startTime) || !isNonEmptyString(payload.endTime)) {
+    return 'La hora de inicio y finalización son obligatorias';
+  }
+
+  if (!isNonEmptyString(payload.initialInventory) || !isNonEmptyString(payload.finalInventory)) {
+    return 'El inventario inicial y final son obligatorios';
+  }
+
+  if (!isNonEmptyString(payload.observations)) {
+    return 'Las observaciones del evento son obligatorias';
+  }
+
+  if (payload.hasRedemptions && (!Number.isInteger(Number(payload.redemptionsCount)) || Number(payload.redemptionsCount) < 0)) {
+    return 'La cantidad de redenciones debe ser un número igual o mayor a cero';
+  }
+
+  return null;
+};
+
 module.exports = {
   badRequest: (res, message) => res.status(400).json({ message }),
   normalizeString,
+  validateCoordinatorPhotoPayload,
+  validateCoordinatorReportPayload,
   validateLoginPayload,
   validateManualInactivationPayload,
   validateEventPayload,

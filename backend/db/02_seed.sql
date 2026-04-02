@@ -59,13 +59,17 @@ ON CONFLICT (id) DO NOTHING;
 
 SELECT setval('cities_id_seq', (SELECT MAX(id) FROM cities));
 
-INSERT INTO coordinators (full_name, cedula, address, phone, rating, photo, city_id)
+INSERT INTO coordinators (user_id, full_name, cedula, address, phone, rating, photo, city_id)
 VALUES
-  ('Isabella Barreiro J.', '31572804', 'Cra 28 No 72', '3116833760', 5, 'https://i.pravatar.cc/150?u=isabella', (SELECT id FROM cities WHERE name = 'Bogotá')),
-  ('Alexander Barreiro H.', '12345678', 'Calle 10 No 5', '3001234567', 4, 'https://i.pravatar.cc/150?u=alex', (SELECT id FROM cities WHERE name = 'Bogotá')),
-  ('Lucia Mendez', '44556677', 'Av 5 No 12', '3109998877', 5, 'https://i.pravatar.cc/150?u=lucia', (SELECT id FROM cities WHERE name = 'Medellín')),
-  ('Roberto Gomez', '77889900', 'Clle 100', '3151112233', 4, 'https://i.pravatar.cc/150?u=robert', (SELECT id FROM cities WHERE name = 'Medellín'))
+  (NULL, 'Isabella Barreiro J.', '31572804', 'Cra 28 No 72', '3116833760', 5, 'https://i.pravatar.cc/150?u=isabella', (SELECT id FROM cities WHERE name = 'Bogotá')),
+  (NULL, 'Alexander Barreiro H.', '12345678', 'Calle 10 No 5', '3001234567', 4, 'https://i.pravatar.cc/150?u=alex', (SELECT id FROM cities WHERE name = 'Bogotá')),
+  ((SELECT id FROM users WHERE username = 'coord'), 'Lucia Mendez', '44556677', 'Av 5 No 12', '3109998877', 5, 'https://i.pravatar.cc/150?u=lucia', (SELECT id FROM cities WHERE name = 'Medellín')),
+  (NULL, 'Roberto Gomez', '77889900', 'Clle 100', '3151112233', 4, 'https://i.pravatar.cc/150?u=robert', (SELECT id FROM cities WHERE name = 'Medellín'))
 ON CONFLICT (cedula) DO NOTHING;
+
+UPDATE coordinators
+SET user_id = (SELECT id FROM users WHERE username = 'coord')
+WHERE cedula = '44556677' AND user_id IS NULL;
 
 INSERT INTO staff (full_name, cedula, city_id, category, photo, clothing_size, shoe_size, measurements)
 VALUES

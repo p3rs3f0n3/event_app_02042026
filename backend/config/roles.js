@@ -17,8 +17,8 @@ const ROLE_CONFIG = {
     code: 'COORDINADOR',
     label: 'Coordinador',
     theme: 'brown',
-    status: 'planned',
-    enabled: false,
+    status: 'active',
+    enabled: true,
   },
   CLIENTE: {
     code: 'CLIENTE',

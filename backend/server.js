@@ -4,7 +4,15 @@ const { config } = require('./config/env');
 const { getRoleConfig, getRoleConfigList } = require('./config/roles');
 const { createRepository } = require('./repositories');
 const { collectScheduledAssignments, validateDraftAssignments } = require('./utils/availability');
-const { badRequest, normalizeString, validateEventPayload, validateLoginPayload, validateManualInactivationPayload } = require('./utils/validation');
+const {
+  badRequest,
+  normalizeString,
+  validateCoordinatorPhotoPayload,
+  validateCoordinatorReportPayload,
+  validateEventPayload,
+  validateLoginPayload,
+  validateManualInactivationPayload,
+} = require('./utils/validation');
 
 const app = express();
 
@@ -146,6 +154,15 @@ app.get('/api/events', asyncHandler(async (req, res) => {
 
   return res.json(await req.app.locals.repository.getEvents({ createdByUserId }));
 }));
+app.get('/api/coordinator/events', asyncHandler(async (req, res) => {
+  const userId = Number(req.query?.userId);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return badRequest(res, 'El userId del coordinador es requerido');
+  }
+
+  return res.json(await req.app.locals.repository.getCoordinatorEvents({ userId }));
+}));
 app.post('/api/events', asyncHandler(async (req, res) => {
   const validationError = validateEventPayload(req.body);
   if (validationError) {
@@ -221,6 +238,58 @@ app.post('/api/events/:id/inactivate', asyncHandler(async (req, res) => {
     createdByUserId: Number(req.body.createdByUserId),
     comment: normalizeString(req.body.comment),
   });
+
+  return res.json(updatedEvent);
+}));
+
+app.post('/api/events/:id/photos', asyncHandler(async (req, res) => {
+  const validationError = validateCoordinatorPhotoPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const updatedEvent = await req.app.locals.repository.addCoordinatorPhoto(req.params.id, {
+    authorUserId: Number(req.body.authorUserId),
+    uri: normalizeString(req.body.uri),
+  });
+
+  if (updatedEvent === false) {
+    return res.status(403).json({ message: 'El coordinador no está autorizado para cargar fotos en este evento' });
+  }
+
+  if (!updatedEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
+
+  return res.json(updatedEvent);
+}));
+
+app.post('/api/events/:id/reports', asyncHandler(async (req, res) => {
+  const validationError = validateCoordinatorReportPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const updatedEvent = await req.app.locals.repository.addCoordinatorReport(req.params.id, {
+    authorUserId: Number(req.body.authorUserId),
+    title: normalizeString(req.body.title),
+    startTime: normalizeString(req.body.startTime),
+    endTime: normalizeString(req.body.endTime),
+    initialInventory: normalizeString(req.body.initialInventory),
+    finalInventory: normalizeString(req.body.finalInventory),
+    observations: normalizeString(req.body.observations),
+    hasRedemptions: Boolean(req.body.hasRedemptions),
+    redemptionsCount: Number(req.body.redemptionsCount || 0),
+    relevantAspects: normalizeString(req.body.relevantAspects),
+  });
+
+  if (updatedEvent === false) {
+    return res.status(403).json({ message: 'El coordinador no está autorizado para cargar informes en este evento' });
+  }
+
+  if (!updatedEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
 
   return res.json(updatedEvent);
 }));

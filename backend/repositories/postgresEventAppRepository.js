@@ -1,4 +1,6 @@
 const { pool, query } = require('../db/postgres/pool');
+const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
+const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 const { normalizeString } = require('../utils/validation');
 const { verifyPassword } = require('../utils/passwords');
@@ -12,8 +14,8 @@ const mapEventRow = (row) => ({
   endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
   createdByUserId: row.created_by_user_id,
   status: row.status,
-  reports: Array.isArray(row.reports) ? row.reports : [],
-  photos: Array.isArray(row.photos) ? row.photos : [],
+  reports: Array.isArray(row.reports) ? row.reports.map(normalizeReportEntry).filter(Boolean) : [],
+  photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
   cities: Array.isArray(row.cities) ? row.cities : [],
   manualInactivatedAt: row.manual_inactivated_at instanceof Date ? row.manual_inactivated_at.toISOString() : row.manual_inactivated_at,
   manualInactivationComment: row.manual_inactivation_comment,
@@ -50,6 +52,42 @@ class PostgresEventAppRepository {
     };
   }
 
+  async findUserById(id) {
+    const result = await query(
+      `
+        SELECT id, username, full_name AS "fullName"
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [Number(id)],
+    );
+
+    return result.rows[0] || null;
+  }
+
+  async findCoordinatorProfileByUserId(userId) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return null;
+    }
+
+    const coordinatorResult = await query(
+      `
+        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.name AS city
+        FROM coordinators c
+        INNER JOIN cities ci ON ci.id = c.city_id
+        WHERE c.user_id = $1 OR c.id = $1
+        ORDER BY CASE WHEN c.user_id = $1 THEN 0 ELSE 1 END, c.id ASC
+        LIMIT 1
+      `,
+      [normalizedUserId],
+    );
+
+    return coordinatorResult.rows[0] || null;
+  }
+
   async getCoordinators({ city } = {}) {
     const result = await query(
       `
@@ -63,6 +101,46 @@ class PostgresEventAppRepository {
     );
 
     return result.rows;
+  }
+
+  async getCoordinatorEvents({ userId }) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return [];
+    }
+
+    const coordinatorProfile = await this.findCoordinatorProfileByUserId(normalizedUserId);
+    if (!coordinatorProfile) {
+      return [];
+    }
+
+    const events = await this.getEvents();
+    const executiveIds = [...new Set(events.map((event) => Number(event.createdByUserId)).filter((id) => Number.isInteger(id) && id > 0))];
+    const executiveContactsById = new Map();
+
+    if (executiveIds.length > 0) {
+      const usersResult = await query(
+        `
+          SELECT id, username, full_name AS "fullName"
+          FROM users
+          WHERE id = ANY($1::bigint[])
+        `,
+        [executiveIds],
+      );
+
+      usersResult.rows.forEach((row) => {
+        executiveContactsById.set(Number(row.id), normalizeExecutiveContact(row));
+      });
+    }
+
+    return events
+      .map((event) => mapCoordinatorEvent({
+        event,
+        coordinatorProfile,
+        executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
+      }))
+      .filter(Boolean);
   }
 
   async getStaff({ city, category } = {}) {
@@ -268,6 +346,76 @@ class PostgresEventAppRepository {
     );
 
     return result.rows[0] ? enrichEventLifecycle(mapEventRow(result.rows[0])) : null;
+  }
+
+  async addCoordinatorPhoto(id, { authorUserId, uri }) {
+    const event = await this.#getEventById(Number(id));
+    if (!event) {
+      return null;
+    }
+
+    const coordinatorProfile = await this.findCoordinatorProfileByUserId(authorUserId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const executiveContact = normalizeExecutiveContact(await this.findUserById(event.createdByUserId));
+    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+      return false;
+    }
+
+    const photo = buildCoordinatorPhoto({
+      uri,
+      coordinatorProfile,
+      user: await this.findUserById(authorUserId),
+    });
+
+    await query(
+      `
+        UPDATE events
+        SET photos = $2::jsonb,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [Number(id), JSON.stringify([...event.photos.map(normalizePhotoEntry).filter(Boolean), photo])],
+    );
+
+    return this.#getEventById(Number(id));
+  }
+
+  async addCoordinatorReport(id, payload) {
+    const event = await this.#getEventById(Number(id));
+    if (!event) {
+      return null;
+    }
+
+    const coordinatorProfile = await this.findCoordinatorProfileByUserId(payload.authorUserId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const executiveContact = normalizeExecutiveContact(await this.findUserById(event.createdByUserId));
+    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+      return false;
+    }
+
+    const report = buildCoordinatorReport({
+      payload,
+      coordinatorProfile,
+      user: await this.findUserById(payload.authorUserId),
+    });
+
+    await query(
+      `
+        UPDATE events
+        SET reports = $2::jsonb,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [Number(id), JSON.stringify([...event.reports.map(normalizeReportEntry).filter(Boolean), report])],
+    );
+
+    return this.#getEventById(Number(id));
   }
 
   async #replaceEventCities(client, eventId, cities) {

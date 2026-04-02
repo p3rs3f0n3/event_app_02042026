@@ -35,6 +35,7 @@ export const login = async (username, password) => {
 
 export const getAppConfig = async () => (await getAPI().get('/app-config')).data;
 export const getEvents = async (createdByUserId) => (await getAPI().get('/events', { params: { createdByUserId } })).data;
+export const getCoordinatorEvents = async (userId) => (await getAPI().get('/coordinator/events', { params: { userId } })).data;
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
 export const getStaff = async (params = {}) => (await getAPI().get('/staff', { params })).data;
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
@@ -42,3 +43,5 @@ export const addColombiaCity = async (name) => (await getAPI().post('/colombia-c
 export const createEvent = async (data) => (await getAPI().post('/events', data)).data;
 export const updateEvent = async (id, data) => (await getAPI().put(`/events/${id}`, data)).data;
 export const inactivateEvent = async (id, data) => (await getAPI().post(`/events/${id}/inactivate`, data)).data;
+export const addCoordinatorEventPhoto = async (id, data) => (await getAPI().post(`/events/${id}/photos`, data)).data;
+export const addCoordinatorEventReport = async (id, data) => (await getAPI().post(`/events/${id}/reports`, data)).data;

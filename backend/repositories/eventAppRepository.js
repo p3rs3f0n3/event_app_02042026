@@ -1,4 +1,6 @@
 const fs = require('fs');
+const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
+const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 
 const DEFAULT_EXECUTIVE_USER_ID = 2;
@@ -20,17 +22,23 @@ const normalizeEvent = (event) => ({
       points: Array.isArray(city.points) ? city.points : [],
     }))
     : [],
-  reports: Array.isArray(event.reports) ? event.reports : [],
-  photos: Array.isArray(event.photos) ? event.photos : [],
+  reports: Array.isArray(event.reports) ? event.reports.map(normalizeReportEntry).filter(Boolean) : [],
+  photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
   manualInactivatedAt: event.manualInactivatedAt || event.manual_inactivated_at || null,
   manualInactivationComment: event.manualInactivationComment || event.manual_inactivation_comment || null,
   manualInactivatedByUserId: Number(event.manualInactivatedByUserId || event.manual_inactivated_by_user_id || 0) || null,
+});
+
+const normalizeCoordinator = (coordinator) => ({
+  ...coordinator,
+  userId: Number(coordinator.userId || coordinator.user_id || 0) || null,
 });
 
 const normalizeDb = (db, initialDb) => ({
   ...clone(initialDb),
   ...db,
   users: Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users),
+  coordinators: Array.isArray(db?.coordinators) && db.coordinators.length > 0 ? db.coordinators.map(normalizeCoordinator) : clone(initialDb.coordinators).map(normalizeCoordinator),
   cities: Array.isArray(db?.cities) && db.cities.length > 0 ? db.cities.map(normalizeCity) : clone(initialDb.cities),
   events: Array.isArray(db?.events) ? db.events.map(normalizeEvent) : [],
 });
@@ -83,12 +91,52 @@ class EventAppRepository {
     };
   }
 
+  findUserById(id) {
+    return this.db.users.find((user) => Number(user.id) === Number(id)) || null;
+  }
+
+  findCoordinatorProfileByUserId(userId) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return null;
+    }
+
+    return this.db.coordinators.find((coordinator) => Number(coordinator.userId) === normalizedUserId)
+      || this.db.coordinators.find((coordinator) => Number(coordinator.id) === normalizedUserId)
+      || null;
+  }
+
   getCoordinators({ city } = {}) {
     if (!city) {
       return this.db.coordinators;
     }
 
     return this.db.coordinators.filter((coordinator) => coordinator.city.toLowerCase() === city.toLowerCase());
+  }
+
+  getCoordinatorEvents({ userId }) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return [];
+    }
+
+    const coordinatorProfile = this.findCoordinatorProfileByUserId(normalizedUserId);
+
+    if (!coordinatorProfile) {
+      return [];
+    }
+
+    const events = this.getEvents();
+
+    return events
+      .map((event) => mapCoordinatorEvent({
+        event,
+        coordinatorProfile,
+        executiveContact: normalizeExecutiveContact(this.db.users.find((user) => Number(user.id) === Number(event.createdByUserId)) || null),
+      }))
+      .filter(Boolean);
   }
 
   getStaff({ city, category } = {}) {
@@ -189,6 +237,80 @@ class EventAppRepository {
       manualInactivatedAt: new Date().toISOString(),
       manualInactivationComment: comment,
       manualInactivatedByUserId: createdByUserId,
+    });
+
+    this.save();
+    return enrichEventLifecycle(this.db.events[eventIndex]);
+  }
+
+  addCoordinatorPhoto(id, { authorUserId, uri }) {
+    const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
+    if (eventIndex === -1) {
+      return null;
+    }
+
+    const coordinatorProfile = this.findCoordinatorProfileByUserId(authorUserId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const event = normalizeEvent(this.db.events[eventIndex]);
+    const isAssigned = mapCoordinatorEvent({
+      event,
+      coordinatorProfile,
+      executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+    });
+
+    if (!isAssigned) {
+      return false;
+    }
+
+    const photo = buildCoordinatorPhoto({
+      uri,
+      coordinatorProfile,
+      user: this.findUserById(authorUserId),
+    });
+
+    this.db.events[eventIndex] = normalizeEvent({
+      ...event,
+      photos: [...event.photos.map(normalizePhotoEntry).filter(Boolean), photo],
+    });
+
+    this.save();
+    return enrichEventLifecycle(this.db.events[eventIndex]);
+  }
+
+  addCoordinatorReport(id, payload) {
+    const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
+    if (eventIndex === -1) {
+      return null;
+    }
+
+    const coordinatorProfile = this.findCoordinatorProfileByUserId(payload.authorUserId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const event = normalizeEvent(this.db.events[eventIndex]);
+    const isAssigned = mapCoordinatorEvent({
+      event,
+      coordinatorProfile,
+      executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+    });
+
+    if (!isAssigned) {
+      return false;
+    }
+
+    const report = buildCoordinatorReport({
+      payload,
+      coordinatorProfile,
+      user: this.findUserById(payload.authorUserId),
+    });
+
+    this.db.events[eventIndex] = normalizeEvent({
+      ...event,
+      reports: [...event.reports.map(normalizeReportEntry).filter(Boolean), report],
     });
 
     this.save();

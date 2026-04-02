@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { getAppConfig } from './src/api/api';
 import { FALLBACK_APP_CONFIG, getRolePresentation } from './src/config/roles';
+import CoordinatorHomeScreen from './src/screens/CoordinatorHomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import ExecutiveHomeScreen from './src/screens/ExecutiveHomeScreen';
 import RolePlaceholderScreen from './src/screens/RolePlaceholderScreen';
+import EntrySplash from './src/components/EntrySplash';
+import { COLORS } from './src/theme/colors';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [appConfig, setAppConfig] = useState(FALLBACK_APP_CONFIG);
   const [loadingConfig, setLoadingConfig] = useState(true);
+  const [showEntrySplash, setShowEntrySplash] = useState(true);
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -28,6 +32,14 @@ export default function App() {
     loadConfig();
   }, []);
 
+  useEffect(() => {
+    const splashTimer = setTimeout(() => {
+      setShowEntrySplash(false);
+    }, 1500);
+
+    return () => clearTimeout(splashTimer);
+  }, []);
+
   const handleLoginSuccess = (userData) => {
     setUser(userData);
   };
@@ -36,12 +48,8 @@ export default function App() {
     setUser(null);
   };
 
-  if (loadingConfig) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#FFF" />
-      </View>
-    );
+  if (loadingConfig || showEntrySplash) {
+    return <EntrySplash appName={appConfig?.appName || FALLBACK_APP_CONFIG.appName} loadingConfig={loadingConfig} />;
   }
 
   if (!user) {
@@ -59,6 +67,14 @@ export default function App() {
     );
   }
 
+  if (role === 'COORDINADOR') {
+    return (
+      <View style={styles.container}>
+        <CoordinatorHomeScreen user={user} onLogout={handleLogout} appConfig={appConfig} roleConfig={roleConfig} />
+      </View>
+    );
+  }
+
   return <RolePlaceholderScreen roleConfig={roleConfig} onLogout={handleLogout} />;
 }
 
@@ -71,6 +87,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#00574B',
+    backgroundColor: COLORS.brand.background,
   }
 });

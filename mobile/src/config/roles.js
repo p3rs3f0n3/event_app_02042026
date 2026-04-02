@@ -3,7 +3,7 @@ export const FALLBACK_APP_CONFIG = {
   roles: [
     { code: 'ADMIN', label: 'Administrador', theme: 'blue', status: 'planned', enabled: false },
     { code: 'EJECUTIVO', label: 'Ejecutivo', theme: 'green', status: 'active', enabled: true },
-    { code: 'COORDINADOR', label: 'Coordinador', theme: 'brown', status: 'planned', enabled: false },
+    { code: 'COORDINADOR', label: 'Coordinador', theme: 'brown', status: 'active', enabled: true },
     { code: 'CLIENTE', label: 'Cliente', theme: 'blue', status: 'planned', enabled: false },
   ],
 };

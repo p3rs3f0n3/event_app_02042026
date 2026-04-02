@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, Image, Alert, Modal, Linking } from 'react-native';
 import { getEvents } from '../api/api';
 import { COLORS } from '../theme/colors';
+import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 
 const ReportsScreen = ({ onBack, user }) => {
   const theme = COLORS.green;
@@ -10,11 +11,11 @@ const ReportsScreen = ({ onBack, user }) => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [modalType, setModalType] = useState(null);
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => { fetchEvents(); }, [user?.id]);
 
   const fetchEvents = async () => {
     try {
-      const data = await getEvents();
+      const data = await getEvents(user?.id);
       setEvents(data);
     } catch (error) {
       Alert.alert('Error', 'No se pudieron cargar los informes');
@@ -70,6 +71,8 @@ const ReportsScreen = ({ onBack, user }) => {
 
   if (selectedEvent) {
     const primaryCoordinator = getPrimaryCoordinator(selectedEvent);
+    const photos = normalizePhotos(selectedEvent.photos);
+    const reports = normalizeReports(selectedEvent.reports);
 
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}>
@@ -110,19 +113,38 @@ const ReportsScreen = ({ onBack, user }) => {
                 
                 <ScrollView contentContainerStyle={styles.modalScroll}>
                   {modalType === 'fotos' ? (
-                    <View style={styles.photoGrid}>
-                      {selectedEvent.photos?.map((url, i) => (
-                        <Image key={i} source={{ uri: url }} style={styles.gridPhoto} />
-                      ))}
-                    </View>
-                  ) : (
-                    selectedEvent.reports?.map((rep, i) => (
-                      <View key={i} style={styles.reportItem}>
-                        <Text style={styles.reportItemTitle}>{rep.title}</Text>
-                        <Text style={styles.reportItemDate}>{rep.date}</Text>
-                        <Text style={styles.reportItemContent}>{rep.content}</Text>
+                    photos.length === 0 ? (
+                      <Text style={styles.emptyModalText}>Todavía no hay fotos cargadas por el coordinador.</Text>
+                    ) : (
+                      <View style={styles.photoGrid}>
+                        {photos.map((photo, i) => (
+                          <View key={photo.id || i} style={styles.photoCard}>
+                            <Image source={{ uri: photo.uri }} style={styles.gridPhoto} />
+                            <Text style={styles.assetMeta}>{photo.author?.fullName || 'Autor no informado'}</Text>
+                            <Text style={styles.assetMeta}>{photo.createdAt ? new Date(photo.createdAt).toLocaleString('es-ES') : 'Fecha no informada'}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))
+                    )
+                  ) : (
+                    reports.length === 0 ? (
+                      <Text style={styles.emptyModalText}>Todavía no hay informes diligenciados por el coordinador.</Text>
+                    ) : (
+                      reports.map((rep, i) => (
+                        <View key={rep.id || i} style={styles.reportItem}>
+                          <Text style={styles.reportItemTitle}>{rep.title}</Text>
+                          <Text style={styles.reportItemDate}>{rep.createdAt ? new Date(rep.createdAt).toLocaleString('es-ES') : rep.date || 'Fecha no informada'}</Text>
+                          {!!rep.author?.fullName && <Text style={styles.reportItemMeta}>Cargó: {rep.author.fullName}</Text>}
+                          <Text style={styles.reportItemContent}>Inicio: {rep.startTime || 'Sin dato'}</Text>
+                          <Text style={styles.reportItemContent}>Finalización: {rep.endTime || 'Sin dato'}</Text>
+                          <Text style={styles.reportItemContent}>Inventario inicial: {rep.initialInventory || 'Sin dato'}</Text>
+                          <Text style={styles.reportItemContent}>Inventario final: {rep.finalInventory || 'Sin dato'}</Text>
+                          <Text style={styles.reportItemContent}>Observaciones: {rep.observations || rep.content || 'Sin dato'}</Text>
+                          <Text style={styles.reportItemContent}>Redenciones: {rep.hasRedemptions === false ? 'No aplica' : (rep.redemptionsCount ?? 'Sin dato')}</Text>
+                          {!!rep.relevantAspects && <Text style={styles.reportItemContent}>Otros aspectos: {rep.relevantAspects}</Text>}
+                        </View>
+                      ))
+                    )
                   )}
                 </ScrollView>
 
@@ -196,14 +218,18 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#333' },
   modalScroll: { gap: 12 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-  gridPhoto: { width: '45%', height: 110, borderRadius: 8 },
+  photoCard: { width: '45%', gap: 4 },
+  gridPhoto: { width: '100%', height: 110, borderRadius: 8 },
+  assetMeta: { fontSize: 11, color: '#666' },
   reportItem: { backgroundColor: '#F0F0F0', padding: 12, borderRadius: 8 },
   reportItemTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
   reportItemDate: { fontSize: 11, color: '#888', marginVertical: 3 },
+  reportItemMeta: { fontSize: 12, color: '#666', marginBottom: 4 },
   reportItemContent: { fontSize: 13, color: '#444' },
   closeBtn: { backgroundColor: '#FFB300', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 15 },
   closeBtnText: { fontWeight: 'bold', color: '#333' },
-  emptyText: { color: '#FFF', textAlign: 'center', marginTop: 40 }
+  emptyText: { color: '#FFF', textAlign: 'center', marginTop: 40 },
+  emptyModalText: { color: '#666', textAlign: 'center' },
 });
 
 export default ReportsScreen;

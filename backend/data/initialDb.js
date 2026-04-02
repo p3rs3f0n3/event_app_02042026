@@ -8,7 +8,7 @@ const INITIAL_DB = {
   coordinators: [
     { id: 1, name: 'Isabella Barreiro J.', cedula: '31572804', address: 'Cra 28 No 72', phone: '3116833760', rating: 5, photo: 'https://i.pravatar.cc/150?u=isabella', city: 'Bogotá' },
     { id: 2, name: 'Alexander Barreiro H.', cedula: '12345678', address: 'Calle 10 No 5', phone: '3001234567', rating: 4, photo: 'https://i.pravatar.cc/150?u=alex', city: 'Bogotá' },
-    { id: 3, name: 'Lucia Mendez', cedula: '44556677', address: 'Av 5 No 12', phone: '3109998877', rating: 5, photo: 'https://i.pravatar.cc/150?u=lucia', city: 'Medellín' },
+    { id: 3, userId: 3, name: 'Lucia Mendez', cedula: '44556677', address: 'Av 5 No 12', phone: '3109998877', rating: 5, photo: 'https://i.pravatar.cc/150?u=lucia', city: 'Medellín' },
     { id: 4, name: 'Roberto Gomez', cedula: '77889900', address: 'Clle 100', phone: '3151112233', rating: 4, photo: 'https://i.pravatar.cc/150?u=robert', city: 'Medellín' },
   ],
   staff: [
