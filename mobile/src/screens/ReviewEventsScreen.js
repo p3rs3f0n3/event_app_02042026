@@ -3,16 +3,18 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Act
 import { getEvents, inactivateEvent } from '../api/api';
 import { COLORS } from '../theme/colors';
 import { getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLifecycle';
+import { getUserDisplayName } from '../utils/user';
 
 const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   const theme = COLORS.green;
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [expandedSections, setExpandedSections] = useState({ active: false, inactive: false });
   const [showInactivationModal, setShowInactivationModal] = useState(false);
   const [inactivationComment, setInactivationComment] = useState('');
   const [submittingInactivation, setSubmittingInactivation] = useState(false);
-  const displayUsername = user?.username || user?.role || 'usuario';
+  const displayUsername = getUserDisplayName(user);
 
   useEffect(() => {
     fetchEvents();
@@ -31,6 +33,20 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
 
   const formatDate = (date) => new Date(date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (date) => new Date(date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const activeEvents = events.filter((event) => !event.isInactive);
+  const inactiveEvents = events.filter((event) => event.isInactive);
+
+  const toggleSection = (section) => {
+    setExpandedSections((current) => {
+      const nextValue = !current[section];
+
+      return {
+        active: false,
+        inactive: false,
+        [section]: nextValue,
+      };
+    });
+  };
 
   const closeInactivationModal = () => {
     setShowInactivationModal(false);
@@ -180,14 +196,42 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>MIS EVENTOS</Text>
-          <Text style={styles.welcome}>Hola @{displayUsername}, revisa tus eventos creados</Text>
+          <Text style={styles.welcome}>Hola, {displayUsername}. Revisá tus eventos creados</Text>
         </View>
 
         <View style={styles.listContainer}>
           {events.length === 0 ? (
             <Text style={styles.emptyText}>No hay eventos creados actualmente.</Text>
           ) : (
-            events.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)
+            <>
+              <View style={styles.sectionBlock}>
+                <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection('active')}>
+                  <Text style={styles.sectionTitle}>EVENTOS ACTIVOS ({activeEvents.length})</Text>
+                  <Text style={styles.sectionChevron}>{expandedSections.active ? '▾' : '▸'}</Text>
+                </TouchableOpacity>
+                {expandedSections.active && (
+                  activeEvents.length === 0 ? (
+                    <Text style={styles.sectionEmpty}>No hay eventos activos.</Text>
+                  ) : (
+                    activeEvents.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)
+                  )
+                )}
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection('inactive')}>
+                  <Text style={styles.sectionTitle}>EVENTOS INACTIVOS ({inactiveEvents.length})</Text>
+                  <Text style={styles.sectionChevron}>{expandedSections.inactive ? '▾' : '▸'}</Text>
+                </TouchableOpacity>
+                {expandedSections.inactive && (
+                  inactiveEvents.length === 0 ? (
+                    <Text style={styles.sectionEmpty}>No hay eventos inactivos.</Text>
+                  ) : (
+                    inactiveEvents.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)
+                  )
+                )}
+              </View>
+            </>
           )}
         </View>
 
@@ -208,15 +252,20 @@ const styles = StyleSheet.create({
   welcome: { fontSize: 14, color: '#FFF', textAlign: 'center', marginTop: 10 },
   emptyText: { color: '#FFF', textAlign: 'center', opacity: 0.9 },
   listContainer: { gap: 20, marginBottom: 30 },
+  sectionBlock: { gap: 12 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.12)', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#FFF' },
+  sectionChevron: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  sectionEmpty: { color: '#D1D5DB', fontSize: 13 },
   eventButton: { backgroundColor: '#FFF', borderRadius: 15, overflow: 'hidden', elevation: 4 },
   eventButtonInactive: { backgroundColor: '#D1D5DB' },
-  eventIcon: { width: '100%', height: 160, resizeMode: 'cover' },
+  eventIcon: { width: '100%', height: 110, resizeMode: 'cover' },
   eventIconInactive: { opacity: 0.45 },
-  eventInfo: { backgroundColor: '#FFD54F', padding: 12, alignItems: 'center' },
+  eventInfo: { backgroundColor: '#FFD54F', paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
   eventInfoInactive: { backgroundColor: '#D1D5DB' },
-  eventTitle: { fontSize: 22, fontWeight: 'bold', color: '#333' },
-  eventSubtitle: { fontSize: 14, fontWeight: 'bold', color: '#555' },
-  description: { fontSize: 12, color: '#666', marginTop: 4 },
+  eventTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', textAlign: 'center' },
+  eventSubtitle: { fontSize: 13, fontWeight: 'bold', color: '#555', textAlign: 'center' },
+  description: { fontSize: 11, color: '#666', marginTop: 4, textAlign: 'center' },
   inactiveBadge: { marginTop: 8, fontSize: 11, fontWeight: 'bold', color: '#555' },
   detailImage: { width: '100%', height: 200, borderRadius: 12, marginBottom: 20 },
   infoBox: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 15, borderRadius: 12 },

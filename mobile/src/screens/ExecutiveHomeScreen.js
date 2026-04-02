@@ -5,13 +5,14 @@ import CreateEventScreen from './CreateEventScreen';
 import ReviewEventsScreen from './ReviewEventsScreen';
 import ReportsScreen from './ReportsScreen';
 import { useResponsiveMetrics } from '../utils/responsive';
+import { getUserDisplayName } from '../utils/user';
 
 const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [editingEvent, setEditingEvent] = useState(null);
   const metrics = useResponsiveMetrics();
   const theme = COLORS[roleConfig?.theme] || COLORS.green;
-  const displayUsername = user?.username || user?.role || 'usuario';
+  const displayUsername = getUserDisplayName(user);
 
   const handleEditEvent = (event) => {
     setEditingEvent(event);
@@ -41,7 +42,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>{appConfig?.appName || 'EVENTAPP'}</Text>
-          <Text style={styles.welcome}>Hola @{displayUsername}</Text>
+          <Text style={styles.welcome}>Hola, {displayUsername}</Text>
         </View>
 
         <View style={[styles.menuContainer, { gap: metrics.sectionGap }]}>
