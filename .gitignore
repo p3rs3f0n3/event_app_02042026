@@ -1,0 +1,15 @@
+backend/node_modules/
+backend/.env
+backend/eventapp_db.json
+
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.kotlin/
+
+.DS_Store
+npm-debug.*
+yarn-debug.*
+yarn-error.*
