@@ -33,6 +33,7 @@ export const login = async (username, password) => {
   }
 };
 
+export const getAppConfig = async () => (await getAPI().get('/app-config')).data;
 export const getEvents = async (createdByUserId) => (await getAPI().get('/events', { params: { createdByUserId } })).data;
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
 export const getStaff = async (params = {}) => (await getAPI().get('/staff', { params })).data;

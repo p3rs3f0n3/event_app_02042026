@@ -4,11 +4,13 @@ import { COLORS } from '../theme/colors';
 import CreateEventScreen from './CreateEventScreen';
 import ReviewEventsScreen from './ReviewEventsScreen';
 import ReportsScreen from './ReportsScreen';
+import { useResponsiveMetrics } from '../utils/responsive';
 
-const ExecutiveHomeScreen = ({ user, onLogout }) => {
+const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [editingEvent, setEditingEvent] = useState(null);
-  const theme = COLORS.green; // Executive role uses Green theme
+  const metrics = useResponsiveMetrics();
+  const theme = COLORS[roleConfig?.theme] || COLORS.green;
   const displayUsername = user?.username || user?.role || 'usuario';
 
   const handleEditEvent = (event) => {
@@ -34,30 +36,32 @@ const ExecutiveHomeScreen = ({ user, onLogout }) => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
       <StatusBar barStyle="light-content" />
-      <View style={styles.header}>
-        <Text style={styles.title}>EVENTAPP</Text>
-        <Text style={styles.welcome}>Hola @{displayUsername}</Text>
-      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>{appConfig?.appName || 'EVENTAPP'}</Text>
+          <Text style={styles.welcome}>Hola @{displayUsername}</Text>
+        </View>
 
-      <View style={styles.menuContainer}>
-        <TouchableOpacity style={styles.button} onPress={() => setCurrentView('createEvent')}>
-          <Text style={styles.buttonText}>CREAR EVENTO</Text>
+        <View style={[styles.menuContainer, { gap: metrics.sectionGap }]}>
+          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('createEvent')}>
+            <Text style={styles.buttonText}>CREAR EVENTO</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reviewEvents')}>
+            <Text style={styles.buttonText}>REVISAR EVENTOS</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reports')}>
+            <Text style={styles.buttonText}>GENERAR INFORMES</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <Text style={styles.buttonText}>REGRESAR / SALIR</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reviewEvents')}>
-          <Text style={styles.buttonText}>REVISAR EVENTOS</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reports')}>
-          <Text style={styles.buttonText}>GENERAR INFORMES</Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-        <Text style={styles.buttonText}>REGRESAR / SALIR</Text>
-      </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -65,19 +69,23 @@ const ExecutiveHomeScreen = ({ user, onLogout }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 30,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
     justifyContent: 'space-between',
-    paddingVertical: 60,
   },
   header: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 12,
   },
   title: {
-    fontSize: 50,
+    fontSize: 38,
     fontWeight: 'bold',
     color: '#FFF',
     letterSpacing: 3,
+    textAlign: 'center',
   },
   welcome: {
     fontSize: 20,
@@ -85,7 +93,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   menuContainer: {
-    gap: 30,
+    gap: 24,
+    marginTop: 24,
   },
   button: {
     backgroundColor: '#D1D5DB',
@@ -109,7 +118,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 35,
     alignItems: 'center',
-    marginBottom: 40,
+    marginTop: 24,
   }
 });
 

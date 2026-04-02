@@ -1,10 +1,32 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, StatusBar, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { getAppConfig } from './src/api/api';
+import { FALLBACK_APP_CONFIG, getRolePresentation } from './src/config/roles';
 import LoginScreen from './src/screens/LoginScreen';
 import ExecutiveHomeScreen from './src/screens/ExecutiveHomeScreen';
+import RolePlaceholderScreen from './src/screens/RolePlaceholderScreen';
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [appConfig, setAppConfig] = useState(FALLBACK_APP_CONFIG);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const remoteConfig = await getAppConfig();
+        if (remoteConfig?.roles?.length) {
+          setAppConfig(remoteConfig);
+        }
+      } catch (error) {
+        setAppConfig(FALLBACK_APP_CONFIG);
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+
+    loadConfig();
+  }, []);
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
@@ -14,30 +36,30 @@ export default function App() {
     setUser(null);
   };
 
-  if (!user) {
-    return <LoginScreen onLogin={handleLoginSuccess} />;
-  }
-
-  const role = user.role?.toUpperCase();
-
-  if (role === 'EJECUTIVO') {
+  if (loadingConfig) {
     return (
-      <View style={styles.container}>
-        <ExecutiveHomeScreen user={user} onLogout={handleLogout} />
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#FFF" />
       </View>
     );
   }
 
-  // Placeholder for other roles (Coordinator, Client)
-  return (
-    <View style={styles.centered}>
-      <Text style={styles.text}>Sesión: {user.role}</Text>
-      <Text style={styles.text}>Módulo en desarrollo...</Text>
-      <TouchableOpacity style={styles.btn} onPress={handleLogout}>
-        <Text style={styles.btnText}>SALIR</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  if (!user) {
+    return <LoginScreen onLogin={handleLoginSuccess} appConfig={appConfig} />;
+  }
+
+  const role = user.role?.toUpperCase();
+  const roleConfig = user.roleConfig || getRolePresentation(appConfig, role);
+
+  if (role === 'EJECUTIVO') {
+    return (
+      <View style={styles.container}>
+        <ExecutiveHomeScreen user={user} onLogout={handleLogout} appConfig={appConfig} roleConfig={roleConfig} />
+      </View>
+    );
+  }
+
+  return <RolePlaceholderScreen roleConfig={roleConfig} onLogout={handleLogout} />;
 }
 
 const styles = StyleSheet.create({
@@ -45,27 +67,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  centered: {
+  loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#00574B', // Match emerald green
-  },
-  text: {
-    color: '#FFF',
-    fontSize: 18,
-    marginBottom: 10,
-  },
-  btn: {
-    marginTop: 20,
-    backgroundColor: '#FFB300',
-    padding: 15,
-    borderRadius: 30,
-    width: 200,
-    alignItems: 'center',
-  },
-  btnText: {
-    fontWeight: 'bold',
-    color: '#333',
+    backgroundColor: '#00574B',
   }
 });
