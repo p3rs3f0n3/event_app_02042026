@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { config } = require('./config/env');
+const { getRoleConfig, getRoleConfigList } = require('./config/roles');
 const { createRepository } = require('./repositories');
 const { collectScheduledAssignments, validateDraftAssignments } = require('./utils/availability');
 const { badRequest, normalizeString, validateEventPayload, validateLoginPayload, validateManualInactivationPayload } = require('./utils/validation');
@@ -18,6 +19,13 @@ const asyncHandler = (handler) => async (req, res, next) => {
 app.use(cors());
 app.use(express.json());
 
+app.get('/api/app-config', asyncHandler(async (req, res) => {
+  return res.json({
+    appName: 'EventApp',
+    roles: getRoleConfigList(),
+  });
+}));
+
 app.post('/api/login', asyncHandler(async (req, res) => {
   const validationError = validateLoginPayload(req.body);
   if (validationError) {
@@ -33,7 +41,10 @@ app.post('/api/login', asyncHandler(async (req, res) => {
     return res.status(401).json({ message: 'Credenciales inválidas' });
   }
 
-  return res.json(user);
+  return res.json({
+    ...user,
+    roleConfig: getRoleConfig(user.role),
+  });
 }));
 
 app.get('/api/coordinators', asyncHandler(async (req, res) => {
