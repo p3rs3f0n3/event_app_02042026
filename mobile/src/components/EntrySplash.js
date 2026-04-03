@@ -3,6 +3,9 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
 import BrandMark from './BrandMark';
 import { COLORS } from '../theme/colors';
+import { RADII, SHADOWS, SPACING, getAppPalette } from '../theme/tokens';
+
+const palette = getAppPalette();
 
 const EntrySplash = ({ appName, loadingConfig = false }) => (
   <View style={styles.container}>
@@ -29,7 +32,7 @@ const EntrySplash = ({ appName, loadingConfig = false }) => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.brand.background,
+    backgroundColor: palette.pageBg,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 28,
@@ -57,12 +60,13 @@ const styles = StyleSheet.create({
     marginTop: 36,
     width: '100%',
     maxWidth: 380,
-    borderRadius: 24,
-    paddingVertical: 18,
+    borderRadius: RADII.lg,
+    paddingVertical: SPACING.lg,
     paddingHorizontal: 20,
     backgroundColor: COLORS.brand.card,
     borderWidth: 1,
     borderColor: COLORS.brand.cardBorder,
+    ...SHADOWS.floating,
   },
   kicker: {
     color: COLORS.brand.highlight,

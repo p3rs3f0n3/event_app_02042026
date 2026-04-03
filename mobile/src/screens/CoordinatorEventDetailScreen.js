@@ -15,10 +15,10 @@ import {
   View,
 } from 'react-native';
 import { addCoordinatorEventPhoto, addCoordinatorEventReport } from '../api/api';
-import { COLORS } from '../theme/colors';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { useResponsiveMetrics } from '../utils/responsive';
+import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_PHOTO_SIZE_MB = 10;
@@ -51,7 +51,7 @@ const createEmptyReportForm = () => ({
   relevantAspects: '',
 });
 
-const Field = ({ label, value, onChangeText, multiline = false, placeholder = '' }) => (
+const Field = ({ styles, label, value, onChangeText, multiline = false, placeholder = '' }) => (
   <View style={styles.fieldGroup}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <TextInput
@@ -69,7 +69,8 @@ const Field = ({ label, value, onChangeText, multiline = false, placeholder = ''
 
 const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, roleConfig }) => {
   const metrics = useResponsiveMetrics();
-  const theme = COLORS[roleConfig?.theme] || COLORS.brown;
+  const palette = getAppPalette(roleConfig?.theme || 'brown');
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [galleryVisible, setGalleryVisible] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [currentEvent, setCurrentEvent] = useState(event);
@@ -210,7 +211,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
+    <SafeAreaView style={styles.container}> 
       <ScrollView contentContainerStyle={[styles.scrollContent, { padding: metrics.screenPadding }]}> 
         <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>DETALLE DEL EVENTO</Text>
 
@@ -271,18 +272,18 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
             <Text style={styles.reportTitle}>Informes del coordinador ({reports.length})</Text>
             <Text style={styles.helperText}>Registrá el cierre operativo del evento. Podés cargar más de un informe y queda persistido para consulta del ejecutivo.</Text>
 
-            <Field label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
+            <Field styles={styles} label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
             <View style={styles.doubleColumn}>
               <View style={styles.columnItem}>
-                <Field label="Hora inicio *" value={reportForm.startTime} onChangeText={(value) => setReportForm((current) => ({ ...current, startTime: value }))} placeholder="08:00 AM" />
+                <Field styles={styles} label="Hora inicio *" value={reportForm.startTime} onChangeText={(value) => setReportForm((current) => ({ ...current, startTime: value }))} placeholder="08:00 AM" />
               </View>
               <View style={styles.columnItem}>
-                <Field label="Hora finalización *" value={reportForm.endTime} onChangeText={(value) => setReportForm((current) => ({ ...current, endTime: value }))} placeholder="06:00 PM" />
+                <Field styles={styles} label="Hora finalización *" value={reportForm.endTime} onChangeText={(value) => setReportForm((current) => ({ ...current, endTime: value }))} placeholder="06:00 PM" />
               </View>
             </View>
-            <Field label="Inventario inicial *" value={reportForm.initialInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, initialInventory: value }))} multiline placeholder="Detalle del inventario al inicio" />
-            <Field label="Inventario final *" value={reportForm.finalInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, finalInventory: value }))} multiline placeholder="Detalle del inventario al cierre" />
-            <Field label="Impacto / observaciones *" value={reportForm.observations} onChangeText={(value) => setReportForm((current) => ({ ...current, observations: value }))} multiline placeholder="Qué pasó durante el evento" />
+            <Field styles={styles} label="Inventario inicial *" value={reportForm.initialInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, initialInventory: value }))} multiline placeholder="Detalle del inventario al inicio" />
+            <Field styles={styles} label="Inventario final *" value={reportForm.finalInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, finalInventory: value }))} multiline placeholder="Detalle del inventario al cierre" />
+            <Field styles={styles} label="Impacto / observaciones *" value={reportForm.observations} onChangeText={(value) => setReportForm((current) => ({ ...current, observations: value }))} multiline placeholder="Qué pasó durante el evento" />
 
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>¿Hubo redención?</Text>
@@ -295,10 +296,10 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
             </View>
 
             {reportForm.hasRedemptions && (
-              <Field label="Cantidad de redenciones *" value={reportForm.redemptionsCount} onChangeText={(value) => setReportForm((current) => ({ ...current, redemptionsCount: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
+              <Field styles={styles} label="Cantidad de redenciones *" value={reportForm.redemptionsCount} onChangeText={(value) => setReportForm((current) => ({ ...current, redemptionsCount: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
             )}
 
-            <Field label="Otros aspectos relevantes" value={reportForm.relevantAspects} onChangeText={(value) => setReportForm((current) => ({ ...current, relevantAspects: value }))} multiline placeholder="Novedades logísticas, incidentes, aprendizajes, etc." />
+            <Field styles={styles} label="Otros aspectos relevantes" value={reportForm.relevantAspects} onChangeText={(value) => setReportForm((current) => ({ ...current, relevantAspects: value }))} multiline placeholder="Novedades logísticas, incidentes, aprendizajes, etc." />
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleSaveReport} disabled={savingReport}>
               {savingReport ? <ActivityIndicator color="#4E342E" /> : <Text style={styles.primaryButtonText}>GUARDAR INFORME</Text>}
@@ -418,59 +419,59 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+const createStyles = (palette) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.pageBg },
   scrollContent: { paddingBottom: 42, gap: 16 },
-  title: { color: '#FFF', fontWeight: 'bold', textAlign: 'center' },
+  title: { color: palette.onHero, fontWeight: 'bold', textAlign: 'center' },
   heroImage: { width: '100%', height: 190, borderRadius: 18, resizeMode: 'cover' },
-  panel: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 18, padding: 18, gap: 8 },
-  eventName: { color: '#FFCC80', fontSize: 24, fontWeight: 'bold' },
-  metaText: { color: '#FFF', fontSize: 14 },
+  panel: { backgroundColor: palette.panel, borderRadius: 18, padding: 18, gap: 8 },
+  eventName: { color: palette.primaryButton, fontSize: 24, fontWeight: 'bold' },
+  metaText: { color: palette.onHero, fontSize: 14 },
   section: { gap: 12 },
-  sectionTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
-  cityCard: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14, gap: 10 },
-  cityName: { color: '#FFCC80', fontSize: 18, fontWeight: 'bold' },
-  cityMeta: { color: '#EFEBE9', fontSize: 12 },
+  sectionTitle: { color: palette.onHero, fontWeight: 'bold', fontSize: 18 },
+  cityCard: { backgroundColor: palette.panelStrong, borderRadius: 16, padding: 14, gap: 10 },
+  cityName: { color: palette.primaryButton, fontSize: 18, fontWeight: 'bold' },
+  cityMeta: { color: palette.onHeroMuted, fontSize: 12 },
   pointCard: { backgroundColor: 'rgba(0,0,0,0.14)', borderRadius: 14, padding: 12, gap: 5 },
-  pointTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  pointTitle: { color: palette.onHero, fontSize: 16, fontWeight: 'bold' },
   pointText: { color: '#F3F4F6', fontSize: 13 },
   staffItem: { color: '#FDE68A', fontSize: 12, marginLeft: 6 },
-  staffItemDark: { color: '#6D4C41', fontSize: 12, marginLeft: 6 },
-  pointDetailButton: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#FFCC80', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  pointDetailButtonText: { color: '#4E342E', fontSize: 12, fontWeight: 'bold' },
+  staffItemDark: { color: palette.text, fontSize: 12, marginLeft: 6 },
+  pointDetailButton: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: palette.primaryButton, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  pointDetailButtonText: { color: palette.primaryButtonText, fontSize: 12, fontWeight: 'bold' },
   sectionRow: { gap: 14 },
-  assetBox: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, gap: 10 },
+  assetBox: { backgroundColor: palette.panel, borderRadius: 16, padding: 14, gap: 10 },
   latestPhoto: { width: '100%', height: 180, borderRadius: 14, resizeMode: 'cover' },
-  helperText: { color: '#EFEBE9', fontSize: 13, lineHeight: 18 },
+  helperText: { color: palette.onHeroMuted, fontSize: 13, lineHeight: 18 },
   helperHint: { color: '#FDE68A', fontSize: 12, lineHeight: 16 },
   rowButtons: { flexDirection: 'row', gap: 10 },
-  secondaryButton: { flex: 1, backgroundColor: '#D7CCC8', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  secondaryButton: { flex: 1, backgroundColor: palette.secondaryButton, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   disabledButton: { opacity: 0.55 },
-  secondaryButtonText: { color: '#3E2723', fontWeight: 'bold' },
-  reportBox: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, gap: 10 },
-  reportTitle: { color: '#FFF', fontSize: 17, fontWeight: 'bold' },
+  secondaryButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
+  reportBox: { backgroundColor: palette.panel, borderRadius: 16, padding: 14, gap: 10 },
+  reportTitle: { color: palette.onHero, fontSize: 17, fontWeight: 'bold' },
   emptyText: { color: '#E5E7EB', fontSize: 13 },
   fieldGroup: { gap: 6 },
-  fieldLabel: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
-  fieldInput: { backgroundColor: '#FFF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: '#222' },
+  fieldLabel: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
+  fieldInput: { backgroundColor: palette.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: '#222' },
   fieldInputMultiline: { minHeight: 92 },
   doubleColumn: { flexDirection: 'row', gap: 10 },
   columnItem: { flex: 1 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  switchLabel: { color: '#FFF', fontWeight: 'bold' },
+  switchLabel: { color: palette.onHero, fontWeight: 'bold' },
   reportCard: { backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 12, padding: 10, gap: 4 },
-  reportCardTitle: { color: '#FFF', fontWeight: 'bold' },
+  reportCardTitle: { color: palette.onHero, fontWeight: 'bold' },
   reportCardDate: { color: '#D7CCC8', fontSize: 12 },
   reportCardMeta: { color: '#FDE68A', fontSize: 12 },
   reportCardContent: { color: '#F3F4F6', fontSize: 13 },
-  primaryButton: { backgroundColor: '#FFCC80', borderRadius: 28, paddingVertical: 15, alignItems: 'center' },
-  primaryButtonText: { color: '#4E342E', fontWeight: 'bold' },
-  contactSection: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, gap: 10 },
-  backButton: { backgroundColor: '#D1D5DB', borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
-  backButtonText: { color: '#333', fontWeight: 'bold' },
+  primaryButton: { backgroundColor: palette.primaryButton, borderRadius: 28, paddingVertical: 15, alignItems: 'center' },
+  primaryButtonText: { color: palette.primaryButtonText, fontWeight: 'bold' },
+  contactSection: { backgroundColor: palette.panel, borderRadius: 16, padding: 14, gap: 10 },
+  backButton: { backgroundColor: palette.secondaryButton, borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
+  backButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, maxHeight: '80%' },
-  modalTitle: { color: '#4E342E', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
+  modalCard: { backgroundColor: palette.surface, borderRadius: 20, padding: 20, maxHeight: '80%' },
+  modalTitle: { color: palette.text, fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
   modalInfoText: { color: '#4B5563', fontSize: 14 },
   pointDetailContent: { gap: 8, marginBottom: 18 },
   galleryContent: { gap: 12 },

@@ -8,7 +8,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import ExecutiveHomeScreen from './src/screens/ExecutiveHomeScreen';
 import RolePlaceholderScreen from './src/screens/RolePlaceholderScreen';
 import EntrySplash from './src/components/EntrySplash';
-import { COLORS } from './src/theme/colors';
+import { getAppPalette } from './src/theme/tokens';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -90,12 +90,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: getAppPalette().pageBg,
   },
-  loading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.brand.background,
-  }
 });

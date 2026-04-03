@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, Image, Alert, TextInput } from 'react-native';
 import { getEvents, saveExecutiveEventReport } from '../api/api';
-import { COLORS } from '../theme/colors';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { createExecutiveReportDraft, normalizeExecutiveReport } from '../utils/executiveReport';
 import { getInactiveBadgeLabel } from '../utils/eventLifecycle';
+import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const FORM_FIELDS = [
   ['title', 'Título'],
@@ -64,6 +64,8 @@ const createListSections = (events) => {
 };
 
 const ReportsScreen = ({ onBack, user }) => {
+  const palette = getAppPalette('green');
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState(null);
@@ -178,7 +180,7 @@ const ReportsScreen = ({ onBack, user }) => {
   };
 
   if (loading) {
-    return <View style={styles.loading}><ActivityIndicator color="#FFF" size="large" /></View>;
+      return <View style={styles.loading}><ActivityIndicator color="#FFF" size="large" /></View>;
   }
 
   if (!selectedEvent) {
@@ -357,70 +359,70 @@ const ReportsScreen = ({ onBack, user }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.green.primary },
-  loading: { flex: 1, backgroundColor: COLORS.green.primary, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: 20, paddingBottom: 60 },
-  title: { fontSize: 28, color: '#FFF', textAlign: 'center', fontWeight: '800' },
-  subtitle: { color: '#E8F5E9', textAlign: 'center', marginTop: 8, marginBottom: 20, lineHeight: 20 },
+const createStyles = (palette) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.pageBg },
+  loading: { flex: 1, backgroundColor: palette.pageBg, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { padding: SPACING.xl, paddingBottom: 60 },
+  title: { fontSize: 28, color: palette.onHero, textAlign: 'center', fontWeight: '800' },
+  subtitle: { color: palette.onHeroMuted, textAlign: 'center', marginTop: 8, marginBottom: 20, lineHeight: 20 },
   listGap: { gap: 14 },
   sectionBlock: { gap: 12 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.12)', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12 },
-  listSectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#FFF' },
-  sectionChevron: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: palette.panel, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADII.sm },
+  listSectionTitle: { fontSize: 17, fontWeight: 'bold', color: palette.onHero },
+  sectionChevron: { color: palette.onHero, fontSize: 20, fontWeight: 'bold' },
   sectionEmpty: { color: '#D1D5DB', fontSize: 13 },
   groupGap: { gap: 14 },
   groupBlock: { gap: 10 },
   groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  groupTitle: { color: '#E8F5E9', fontWeight: '800', fontSize: 14, textTransform: 'uppercase' },
-  groupCount: { color: '#E8F5E9', fontWeight: '700' },
+  groupTitle: { color: palette.onHeroMuted, fontWeight: '800', fontSize: 14, textTransform: 'uppercase' },
+  groupCount: { color: palette.onHeroMuted, fontWeight: '700' },
   groupEmpty: { color: '#D1D5DB', fontSize: 13 },
-  emptyText: { color: '#FFF', textAlign: 'center', marginTop: 20 },
-  eventCard: { backgroundColor: '#FFF', borderRadius: 18, overflow: 'hidden' },
+  emptyText: { color: palette.onHero, textAlign: 'center', marginTop: 20 },
+  eventCard: { backgroundColor: palette.surface, borderRadius: 18, overflow: 'hidden' },
   eventImage: { width: '100%', height: 150 },
   eventImageInactive: { opacity: 0.45 },
   eventBody: { padding: 14, gap: 4 },
-  eventBodyInactive: { backgroundColor: '#D1D5DB' },
-  eventTitle: { fontSize: 18, fontWeight: '800', color: '#1B5E20' },
+  eventBodyInactive: { backgroundColor: palette.secondaryButton },
+  eventTitle: { fontSize: 18, fontWeight: '800', color: palette.text },
   eventMeta: { color: '#4B5563' },
-  statusBadge: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, color: '#1B5E20', fontWeight: '700', overflow: 'hidden' },
+  statusBadge: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: palette.pageBgSoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, color: palette.text, fontWeight: '700', overflow: 'hidden' },
   statusBadgePublished: { backgroundColor: '#DCfCE7', color: '#166534' },
   statusBadgeDraft: { backgroundColor: '#FEF3C7', color: '#92400E' },
   inactiveBadge: { marginTop: 4, fontSize: 11, fontWeight: 'bold', color: '#555' },
-  infoCard: { backgroundColor: '#FFF', borderRadius: 18, padding: 16, marginBottom: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1B5E20', marginBottom: 10 },
+  infoCard: { backgroundColor: palette.surface, borderRadius: 18, padding: 16, marginBottom: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: palette.text, marginBottom: 10 },
   infoText: { color: '#374151', marginBottom: 6 },
   lockedText: { marginTop: 8, color: '#B45309', fontWeight: '700', lineHeight: 20 },
   assetRow: { gap: 12 },
   inlineActions: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  inlineButton: { backgroundColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  inlineButton: { backgroundColor: palette.secondaryButton, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   inlineButtonText: { color: '#1F2937', fontWeight: '800', fontSize: 12 },
   disabledInlineButton: { opacity: 0.55 },
-  photoCard: { width: 170, backgroundColor: '#F8FAFC', borderRadius: 14, padding: 10 },
+  photoCard: { width: 170, backgroundColor: palette.surfaceMuted, borderRadius: 14, padding: 10 },
   photoPreview: { width: '100%', height: 110, borderRadius: 10, marginBottom: 8 },
   assetCaption: { color: '#475569', fontSize: 12 },
-  selectedCard: { borderWidth: 2, borderColor: '#FFB300' },
+  selectedCard: { borderWidth: 2, borderColor: palette.primaryButton },
   lockedAsset: { opacity: 0.8 },
-  reportCard: { backgroundColor: '#F8FAFC', borderRadius: 14, padding: 12 },
+  reportCard: { backgroundColor: palette.surfaceMuted, borderRadius: 14, padding: 12 },
   reportTitle: { fontSize: 16, fontWeight: '800', color: '#111827' },
   reportMeta: { color: '#6B7280', marginTop: 4, marginBottom: 6, fontSize: 12 },
   reportBody: { color: '#374151', lineHeight: 19 },
-  reportSelection: { color: '#1B5E20', fontWeight: '700', marginTop: 8, fontSize: 12 },
+  reportSelection: { color: palette.text, fontWeight: '700', marginTop: 8, fontSize: 12 },
   fieldBlock: { marginBottom: 12 },
-  fieldLabel: { color: '#1B5E20', fontWeight: '700', marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', paddingHorizontal: 12, color: '#111827' },
+  fieldLabel: { color: palette.text, fontWeight: '700', marginBottom: 6 },
+  input: { backgroundColor: palette.surfaceMuted, borderRadius: 12, borderWidth: 1, borderColor: palette.inputBorder, paddingHorizontal: 12, color: '#111827' },
   inputSingle: { minHeight: 48, paddingVertical: 12 },
   inputMulti: { minHeight: 110, paddingVertical: 12 },
   actionRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
-  primaryButton: { flex: 1, backgroundColor: '#D1D5DB', borderRadius: 16, paddingVertical: 15, alignItems: 'center' },
+  primaryButton: { flex: 1, backgroundColor: palette.secondaryButton, borderRadius: 16, paddingVertical: 15, alignItems: 'center' },
   primaryButtonText: { color: '#1F2937', fontWeight: '800' },
-  publishButton: { flex: 1, backgroundColor: '#FFB300', borderRadius: 16, paddingVertical: 15, alignItems: 'center' },
+  publishButton: { flex: 1, backgroundColor: palette.primaryButton, borderRadius: 16, paddingVertical: 15, alignItems: 'center' },
   publishButtonText: { color: '#1F2937', fontWeight: '800' },
   disabledButton: { opacity: 0.65 },
   lockedBox: { backgroundColor: '#FFF7ED', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#FDBA74' },
   lockedBoxTitle: { color: '#9A3412', fontWeight: '800', marginBottom: 6, fontSize: 16 },
   lockedBoxText: { color: '#7C2D12', lineHeight: 20 },
-  secondaryButton: { backgroundColor: '#D1D5DB', borderRadius: 16, paddingVertical: 15, alignItems: 'center', marginTop: 14 },
+  secondaryButton: { backgroundColor: palette.secondaryButton, borderRadius: 16, paddingVertical: 15, alignItems: 'center', marginTop: 14 },
   secondaryButtonText: { color: '#1F2937', fontWeight: '800' },
 });
 

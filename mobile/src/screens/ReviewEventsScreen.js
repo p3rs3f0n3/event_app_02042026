@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, Image, Alert, Modal, TextInput } from 'react-native';
 import { getEvents, inactivateEvent } from '../api/api';
-import { COLORS } from '../theme/colors';
 import { getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLifecycle';
 import { getUserDisplayName } from '../utils/user';
+import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
-  const theme = COLORS.green;
+  const palette = getAppPalette('green');
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -100,7 +101,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
 
   if (selectedEvent) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
+      <SafeAreaView style={styles.container}> 
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <Text style={styles.title}>DETALLE DEL EVENTO</Text>
 
@@ -192,7 +193,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
+    <SafeAreaView style={styles.container}> 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>MIS EVENTOS</Text>
@@ -243,59 +244,59 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  loading: { flex: 1, backgroundColor: COLORS.green.primary, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: 20, paddingBottom: 60 },
+const createStyles = (palette) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.pageBg },
+  loading: { flex: 1, backgroundColor: palette.pageBg, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { padding: SPACING.xl, paddingBottom: 60 },
   header: { alignItems: 'center', marginBottom: 30 },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#FFF', textAlign: 'center' },
-  welcome: { fontSize: 14, color: '#FFF', textAlign: 'center', marginTop: 10 },
-  emptyText: { color: '#FFF', textAlign: 'center', opacity: 0.9 },
+  title: { fontSize: 32, fontWeight: 'bold', color: palette.onHero, textAlign: 'center' },
+  welcome: { fontSize: 14, color: palette.onHero, textAlign: 'center', marginTop: 10 },
+  emptyText: { color: palette.onHero, textAlign: 'center', opacity: 0.9 },
   listContainer: { gap: 20, marginBottom: 30 },
   sectionBlock: { gap: 12 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.12)', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#FFF' },
-  sectionChevron: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: palette.panel, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADII.sm },
+  sectionTitle: { fontSize: 17, fontWeight: 'bold', color: palette.onHero },
+  sectionChevron: { color: palette.onHero, fontSize: 20, fontWeight: 'bold' },
   sectionEmpty: { color: '#D1D5DB', fontSize: 13 },
-  eventButton: { backgroundColor: '#FFF', borderRadius: 15, overflow: 'hidden', elevation: 4 },
-  eventButtonInactive: { backgroundColor: '#D1D5DB' },
+  eventButton: { backgroundColor: palette.surface, borderRadius: 15, overflow: 'hidden', elevation: 4 },
+  eventButtonInactive: { backgroundColor: palette.secondaryButton },
   eventIcon: { width: '100%', height: 110, resizeMode: 'cover' },
   eventIconInactive: { opacity: 0.45 },
-  eventInfo: { backgroundColor: '#FFD54F', paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
-  eventInfoInactive: { backgroundColor: '#D1D5DB' },
-  eventTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', textAlign: 'center' },
+  eventInfo: { backgroundColor: palette.primaryButton, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
+  eventInfoInactive: { backgroundColor: palette.secondaryButton },
+  eventTitle: { fontSize: 18, fontWeight: 'bold', color: palette.primaryButtonText, textAlign: 'center' },
   eventSubtitle: { fontSize: 13, fontWeight: 'bold', color: '#555', textAlign: 'center' },
   description: { fontSize: 11, color: '#666', marginTop: 4, textAlign: 'center' },
   inactiveBadge: { marginTop: 8, fontSize: 11, fontWeight: 'bold', color: '#555' },
-  detailImage: { width: '100%', height: 200, borderRadius: 12, marginBottom: 20 },
-  infoBox: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 15, borderRadius: 12 },
-  detailTitle: { fontSize: 28, fontWeight: 'bold', color: '#FFB300', marginBottom: 15 },
-  detailLabel: { fontSize: 16, color: '#FFF', fontWeight: 'bold', marginBottom: 5 },
+  detailImage: { width: '100%', height: 200, borderRadius: RADII.sm, marginBottom: 20 },
+  infoBox: { backgroundColor: palette.panelStrong, padding: 15, borderRadius: RADII.sm },
+  detailTitle: { fontSize: 28, fontWeight: 'bold', color: palette.primaryButton, marginBottom: 15 },
+  detailLabel: { fontSize: 16, color: palette.onHero, fontWeight: 'bold', marginBottom: 5 },
   detailValue: { fontWeight: 'normal', color: '#EEE' },
   inactiveBox: { marginTop: 14, padding: 12, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.2)' },
   inactiveBoxTitle: { color: '#D1D5DB', fontWeight: 'bold', marginBottom: 6 },
   inactiveBoxText: { color: '#EEE' },
-  dividerLarge: { height: 1, backgroundColor: '#FFF', marginVertical: 20, opacity: 0.3 },
+  dividerLarge: { height: 1, backgroundColor: palette.onHero, marginVertical: 20, opacity: 0.3 },
   citySection: { marginBottom: 25 },
-  cityName: { fontSize: 20, fontWeight: 'bold', color: '#FFF', marginBottom: 12 },
-  pointDetailCard: { backgroundColor: 'rgba(255,255,255,0.1)', padding: 12, borderRadius: 10, marginBottom: 10 },
-  pointName: { fontSize: 17, fontWeight: 'bold', color: '#FFB300', marginBottom: 5 },
-  pointInfo: { fontSize: 14, color: '#FFF', marginBottom: 3 },
+  cityName: { fontSize: 20, fontWeight: 'bold', color: palette.onHero, marginBottom: 12 },
+  pointDetailCard: { backgroundColor: palette.panel, padding: 12, borderRadius: RADII.sm, marginBottom: 10 },
+  pointName: { fontSize: 17, fontWeight: 'bold', color: palette.primaryButton, marginBottom: 5 },
+  pointInfo: { fontSize: 14, color: palette.onHero, marginBottom: 3 },
   coordSubSection: { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 10 },
-  coordLabel: { fontSize: 15, fontWeight: 'bold', color: '#FFF' },
+  coordLabel: { fontSize: 15, fontWeight: 'bold', color: palette.onHero },
   staffCount: { fontSize: 13, color: '#DDD', marginVertical: 3 },
   staffItem: { fontSize: 12, color: '#EEE', marginLeft: 10 },
-  editButton: { backgroundColor: '#FFB300', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  editButtonText: { color: '#333', fontWeight: 'bold', fontSize: 16 },
+  editButton: { backgroundColor: palette.primaryButton, paddingVertical: 14, borderRadius: RADII.sm, alignItems: 'center', marginTop: 10 },
+  editButtonText: { color: palette.primaryButtonText, fontWeight: 'bold', fontSize: 16 },
   inactivateButton: { backgroundColor: '#6B7280', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   inactivateButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  actionButton: { backgroundColor: '#D1D5DB', paddingVertical: 14, borderRadius: 30, alignItems: 'center', marginTop: 15 },
-  actionText: { fontSize: 15, fontWeight: 'bold', color: '#333' },
+  actionButton: { backgroundColor: palette.secondaryButton, paddingVertical: 14, borderRadius: 30, alignItems: 'center', marginTop: 15 },
+  actionText: { fontSize: 15, fontWeight: 'bold', color: palette.secondaryButtonText },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 10, textAlign: 'center' },
+  modalCard: { backgroundColor: palette.surface, borderRadius: 16, padding: 20 },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', color: palette.text, marginBottom: 10, textAlign: 'center' },
   modalText: { color: '#444', marginBottom: 12, textAlign: 'center' },
-  modalInput: { minHeight: 110, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, padding: 12, textAlignVertical: 'top', color: '#222' },
+  modalInput: { minHeight: 110, borderWidth: 1, borderColor: palette.inputBorder, borderRadius: 10, padding: 12, textAlignVertical: 'top', color: '#222' },
 });
 
 export default ReviewEventsScreen;

@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { COLORS } from '../theme/colors';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
 import CoordinatorEventDetailScreen from './CoordinatorEventDetailScreen';
 import CoordinatorEventsScreen from './CoordinatorEventsScreen';
-import { useResponsiveMetrics } from '../utils/responsive';
 import { getUserDisplayName } from '../utils/user';
+import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
+import { getAppPalette, SPACING } from '../theme/tokens';
 
 const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [refreshToken, setRefreshToken] = useState(0);
-  const metrics = useResponsiveMetrics();
-  const theme = COLORS[roleConfig?.theme] || COLORS.brown;
+  const palette = getAppPalette(roleConfig?.theme || 'brown');
+  const styles = useMemo(() => createStyles(palette), [palette]);
 
   if (currentView === 'events') {
     return (
@@ -44,41 +45,40 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
-      <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={[styles.scrollContent, { padding: metrics.screenPadding }]}> 
-        <View style={styles.header}>
-          <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>{appConfig?.appName || 'EVENTAPP'}</Text>
-          <Text style={styles.welcome}>Hola, {getUserDisplayName(user)}</Text>
-          <Text style={styles.helper}>Tenés acceso a gestión operativa: podés revisar tus puntos, cargar fotos, diligenciar informes y contactar al ejecutivo.</Text>
-        </View>
+    <ScreenShell palette={palette} contentContainerStyle={styles.content}>
+      <SectionTitle
+        kicker="Panel coordinador"
+        title={appConfig?.appName || 'EventApp'}
+        subtitle={`Hola, ${getUserDisplayName(user)}. Revisá puntos asignados, cargá fotos y reportes, y mantené contacto con ejecutivo.`}
+      />
 
-        <View style={styles.menuContainer}>
-          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('events')}>
-            <Text style={styles.buttonText}>VER EVENTOS ASIGNADOS</Text>
-          </TouchableOpacity>
+      <SurfaceCard style={styles.summaryCard}>
+        <View style={styles.badges}>
+          <StatusBadge label="Fotos" tone="info" />
+          <StatusBadge label="Reportes" tone="warning" />
+          <StatusBadge label="Contacto" tone="muted" />
         </View>
+        <Text style={styles.cardTitle}>Gestión operativa en campo</Text>
+        <Text style={styles.cardText}>La vista mantiene intactos los flujos de carga de evidencia, informes y consulta de puntos.</Text>
+      </SurfaceCard>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutButtonText}>REGRESAR / SALIR</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+      <SurfaceCard>
+        <Text style={styles.cardTitle}>Eventos asignados</Text>
+        <Text style={styles.cardText}>Entrá a la lista para ver detalle, equipo por punto y acciones disponibles.</Text>
+        <AppButton title="VER EVENTOS ASIGNADOS" onPress={() => setCurrentView('events')} />
+      </SurfaceCard>
+
+      <AppButton title="REGRESAR / SALIR" variant="secondary" onPress={onLogout} />
+    </ScreenShell>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: 'space-between', paddingVertical: 24 },
-  header: { alignItems: 'center', gap: 10, marginTop: 16 },
-  title: { color: '#FFF', fontWeight: 'bold', letterSpacing: 3, textAlign: 'center' },
-  welcome: { color: '#FFF', fontSize: 20 },
-  helper: { color: '#EFEBE9', textAlign: 'center', maxWidth: 360, lineHeight: 21 },
-  menuContainer: { marginTop: 30, gap: 18 },
-  button: { backgroundColor: '#D7CCC8', borderRadius: 34, paddingVertical: 20, alignItems: 'center' },
-  buttonText: { color: '#3E2723', fontWeight: 'bold', fontSize: 18 },
-  logoutButton: { backgroundColor: '#D1D5DB', borderRadius: 30, paddingVertical: 16, alignItems: 'center' },
-  logoutButtonText: { color: '#333', fontWeight: 'bold' },
+const createStyles = (palette) => StyleSheet.create({
+  content: { justifyContent: 'space-between' },
+  summaryCard: { backgroundColor: palette.surfaceMuted },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  cardTitle: { fontSize: 22, fontWeight: '800', color: palette.text },
+  cardText: { color: palette.textMuted, lineHeight: 20 },
 });
 
 export default CoordinatorHomeScreen;

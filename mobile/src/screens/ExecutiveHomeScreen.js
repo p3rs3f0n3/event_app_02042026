@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar, ScrollView } from 'react-native';
-import { COLORS } from '../theme/colors';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
 import CreateEventScreen from './CreateEventScreen';
 import ReviewEventsScreen from './ReviewEventsScreen';
 import ReportsScreen from './ReportsScreen';
-import { useResponsiveMetrics } from '../utils/responsive';
 import { getUserDisplayName } from '../utils/user';
+import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
+import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
 
 const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [editingEvent, setEditingEvent] = useState(null);
-  const metrics = useResponsiveMetrics();
-  const theme = COLORS[roleConfig?.theme] || COLORS.green;
+  const palette = getAppPalette(roleConfig?.theme || 'green');
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const displayUsername = getUserDisplayName(user);
 
   const handleEditEvent = (event) => {
@@ -37,90 +38,57 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
-      <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>{appConfig?.appName || 'EVENTAPP'}</Text>
-          <Text style={styles.welcome}>Hola, {displayUsername}</Text>
+    <ScreenShell palette={palette} contentContainerStyle={styles.content}>
+      <SectionTitle
+        kicker="Panel ejecutivo"
+        title={appConfig?.appName || 'EventApp'}
+        subtitle={`Hola, ${displayUsername}. Gestioná creación, seguimiento y cierre ejecutivo sin tocar la lógica operativa.`}
+      />
+
+      <SurfaceCard style={styles.heroCard}>
+        <View style={styles.badgeRow}>
+          <StatusBadge label="Operación activa" tone="success" />
+          <StatusBadge label="UI global aplicada" tone="info" />
         </View>
+        <Text style={styles.heroTitle}>Centro de control comercial</Text>
+        <Text style={styles.heroText}>Entrá rápido a creación, revisión e informe final con la misma capa visual reutilizable.</Text>
+      </SurfaceCard>
 
-        <View style={[styles.menuContainer, { gap: metrics.sectionGap }]}>
-          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('createEvent')}>
-            <Text style={styles.buttonText}>CREAR EVENTO</Text>
-          </TouchableOpacity>
+      <View style={styles.menuContainer}>
+        <SurfaceCard style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Crear evento</Text>
+          <Text style={styles.menuText}>Carga técnica, ciudades, puntos, disponibilidad y asignación.</Text>
+          <AppButton title="ABRIR CREACIÓN" onPress={() => setCurrentView('createEvent')} />
+        </SurfaceCard>
 
-          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reviewEvents')}>
-            <Text style={styles.buttonText}>REVISAR EVENTOS</Text>
-          </TouchableOpacity>
+        <SurfaceCard style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Revisar eventos</Text>
+          <Text style={styles.menuText}>Seguimiento, edición e inactivación sin cambiar reglas de negocio.</Text>
+          <AppButton title="ABRIR REVISIÓN" onPress={() => setCurrentView('reviewEvents')} />
+        </SurfaceCard>
 
-          <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reports')}>
-            <Text style={styles.buttonText}>INFORME FINAL</Text>
-          </TouchableOpacity>
-        </View>
+        <SurfaceCard style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Informe final</Text>
+          <Text style={styles.menuText}>Consolidá fotos, reportes operativos y publicación para cliente.</Text>
+          <AppButton title="ABRIR INFORME" onPress={() => setCurrentView('reports')} />
+        </SurfaceCard>
+      </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.buttonText}>REGRESAR / SALIR</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+      <AppButton title="REGRESAR / SALIR" variant="secondary" onPress={onLogout} />
+    </ScreenShell>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    justifyContent: 'space-between',
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  title: {
-    fontSize: 38,
-    fontWeight: 'bold',
-    color: '#FFF',
-    letterSpacing: 3,
-    textAlign: 'center',
-  },
-  welcome: {
-    fontSize: 20,
-    color: '#FFF',
-    marginTop: 10,
-  },
-  menuContainer: {
-    gap: 24,
-    marginTop: 24,
-  },
-  button: {
-    backgroundColor: '#D1D5DB',
-    paddingVertical: 20,
-    borderRadius: 35,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  buttonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    letterSpacing: 1,
-  },
-  logoutButton: {
-    backgroundColor: '#D1D5DB',
-    paddingVertical: 18,
-    borderRadius: 35,
-    alignItems: 'center',
-    marginTop: 24,
-  }
+const createStyles = (palette) => StyleSheet.create({
+  content: { justifyContent: 'space-between' },
+  heroCard: { backgroundColor: palette.surfaceMuted },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  heroTitle: { fontSize: 24, fontWeight: '800', color: palette.text },
+  heroText: { color: palette.textMuted, lineHeight: 20 },
+  menuContainer: { gap: SPACING.md },
+  menuCard: { gap: SPACING.md, borderRadius: RADII.lg, ...SHADOWS.card },
+  menuTitle: { fontSize: 20, fontWeight: '800', color: palette.text },
+  menuText: { color: palette.textMuted, lineHeight: 20 },
 });
 
 export default ExecutiveHomeScreen;

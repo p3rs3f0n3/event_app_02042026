@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getCoordinatorEvents } from '../api/api';
-import { COLORS } from '../theme/colors';
 import { useResponsiveMetrics } from '../utils/responsive';
+import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const formatDate = (date) => new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -10,7 +10,8 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const metrics = useResponsiveMetrics();
-  const theme = COLORS[roleConfig?.theme] || COLORS.brown;
+  const palette = getAppPalette(roleConfig?.theme || 'brown');
+  const styles = useMemo(() => createStyles(palette), [palette]);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -29,14 +30,14 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
 
   if (loading) {
     return (
-      <View style={[styles.loading, { backgroundColor: theme.primary }]}> 
+      <View style={styles.loading}> 
         <ActivityIndicator size="large" color="#FFF" />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}> 
+    <SafeAreaView style={styles.container}> 
       <ScrollView contentContainerStyle={[styles.scrollContent, { padding: metrics.screenPadding }]}> 
         <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>MIS EVENTOS</Text>
         <Text style={styles.subtitle}>Solo ves los eventos donde estás asignado como coordinador.</Text>
@@ -71,23 +72,23 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+const createStyles = (palette) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.pageBg },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 48, gap: 18 },
-  title: { color: '#FFF', fontWeight: 'bold', textAlign: 'center' },
-  subtitle: { color: '#EFEBE9', textAlign: 'center' },
+  title: { color: palette.onHero, fontWeight: 'bold', textAlign: 'center' },
+  subtitle: { color: palette.onHeroMuted, textAlign: 'center' },
   listContainer: { gap: 16 },
-  emptyCard: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 18, padding: 20, alignItems: 'center', gap: 8 },
-  emptyTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
-  emptyText: { color: '#EFEBE9', textAlign: 'center' },
-  eventCard: { backgroundColor: '#FFF', borderRadius: 18, overflow: 'hidden' },
+  emptyCard: { backgroundColor: palette.panel, borderRadius: 18, padding: 20, alignItems: 'center', gap: 8 },
+  emptyTitle: { color: palette.onHero, fontWeight: 'bold', fontSize: 18 },
+  emptyText: { color: palette.onHeroMuted, textAlign: 'center' },
+  eventCard: { backgroundColor: palette.surface, borderRadius: 18, overflow: 'hidden' },
   eventImage: { width: '100%', height: 150, resizeMode: 'cover' },
-  eventBody: { padding: 14, backgroundColor: '#D7CCC8', gap: 4 },
-  eventTitle: { color: '#3E2723', fontSize: 18, fontWeight: 'bold' },
-  eventText: { color: '#4E342E', fontSize: 13 },
-  backButton: { backgroundColor: '#D1D5DB', borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
-  backButtonText: { color: '#333', fontWeight: 'bold' },
+  eventBody: { padding: 14, backgroundColor: palette.surfaceMuted, gap: 4 },
+  eventTitle: { color: palette.text, fontSize: 18, fontWeight: 'bold' },
+  eventText: { color: palette.textMuted, fontSize: 13 },
+  backButton: { backgroundColor: palette.secondaryButton, borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
+  backButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
 });
 
 export default CoordinatorEventsScreen;
