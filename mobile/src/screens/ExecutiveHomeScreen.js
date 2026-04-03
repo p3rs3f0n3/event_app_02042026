@@ -55,7 +55,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={() => setCurrentView('reports')}>
-            <Text style={styles.buttonText}>GENERAR INFORMES</Text>
+            <Text style={styles.buttonText}>INFORME FINAL</Text>
           </TouchableOpacity>
         </View>
 

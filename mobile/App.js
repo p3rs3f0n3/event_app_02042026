@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { getAppConfig } from './src/api/api';
 import { FALLBACK_APP_CONFIG, getRolePresentation } from './src/config/roles';
 import CoordinatorHomeScreen from './src/screens/CoordinatorHomeScreen';
+import ClientHomeScreen from './src/screens/ClientHomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import ExecutiveHomeScreen from './src/screens/ExecutiveHomeScreen';
 import RolePlaceholderScreen from './src/screens/RolePlaceholderScreen';
@@ -71,6 +72,14 @@ export default function App() {
     return (
       <View style={styles.container}>
         <CoordinatorHomeScreen user={user} onLogout={handleLogout} appConfig={appConfig} roleConfig={roleConfig} />
+      </View>
+    );
+  }
+
+  if (role === 'CLIENTE') {
+    return (
+      <View style={styles.container}>
+        <ClientHomeScreen user={user} onLogout={handleLogout} appConfig={appConfig} roleConfig={roleConfig} />
       </View>
     );
   }

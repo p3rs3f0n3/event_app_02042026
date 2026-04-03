@@ -4,7 +4,7 @@ export const FALLBACK_APP_CONFIG = {
     { code: 'ADMIN', label: 'Administrador', theme: 'blue', status: 'planned', enabled: false },
     { code: 'EJECUTIVO', label: 'Ejecutivo', theme: 'green', status: 'active', enabled: true },
     { code: 'COORDINADOR', label: 'Coordinador', theme: 'brown', status: 'active', enabled: true },
-    { code: 'CLIENTE', label: 'Cliente', theme: 'blue', status: 'planned', enabled: false },
+    { code: 'CLIENTE', label: 'Cliente', theme: 'blue', status: 'active', enabled: true },
   ],
 };
 

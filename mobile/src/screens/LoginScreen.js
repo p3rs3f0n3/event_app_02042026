@@ -21,6 +21,13 @@ const DEMO_ACCOUNTS = [
     password: 'ChangeMe.Coordinador.123',
     accent: '#BCAAA4',
   },
+  {
+    key: 'cliente',
+    role: 'Cliente',
+    username: 'cliente',
+    password: 'ChangeMe.Cliente.123',
+    accent: '#64B5F6',
+  },
 ];
 
 const LoginScreen = ({ onLogin, appConfig }) => {
