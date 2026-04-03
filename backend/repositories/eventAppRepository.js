@@ -27,7 +27,9 @@ const normalizeEvent = (event) => ({
     : [],
   reports: Array.isArray(event.reports) ? event.reports.map(normalizeReportEntry).filter(Boolean) : [],
   photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
-  executiveReport: normalizeExecutiveReportEntry(event.executiveReport || event.executive_report),
+  executiveReport: normalizeExecutiveReportEntry(event.executiveReport || event.executive_report, {
+    photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
+  }),
   manualInactivatedAt: event.manualInactivatedAt || event.manual_inactivated_at || null,
   manualInactivationComment: event.manualInactivationComment || event.manual_inactivation_comment || null,
   manualInactivatedByUserId: Number(event.manualInactivatedByUserId || event.manual_inactivated_by_user_id || 0) || null,
@@ -363,11 +365,16 @@ class EventAppRepository {
       return false;
     }
 
+    if (event.executiveReport?.status === 'published') {
+      return { errorCode: 'EXECUTIVE_REPORT_LOCKED' };
+    }
+
     const user = this.findUserById(payload.authorUserId);
     const executiveReport = buildExecutiveReport({
       payload,
       user,
       existingReport: event.executiveReport,
+      event,
     });
 
     this.db.events[eventIndex] = normalizeEvent({

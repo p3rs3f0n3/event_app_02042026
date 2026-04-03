@@ -20,7 +20,9 @@ const mapEventRow = (row) => ({
   status: row.status,
   reports: Array.isArray(row.reports) ? row.reports.map(normalizeReportEntry).filter(Boolean) : [],
   photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
-  executiveReport: normalizeExecutiveReportEntry(row.executive_report),
+  executiveReport: normalizeExecutiveReportEntry(row.executive_report, {
+    photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
+  }),
   cities: Array.isArray(row.cities) ? row.cities : [],
   manualInactivatedAt: row.manual_inactivated_at instanceof Date ? row.manual_inactivated_at.toISOString() : row.manual_inactivated_at,
   manualInactivationComment: row.manual_inactivation_comment,
@@ -439,11 +441,16 @@ class PostgresEventAppRepository {
       return false;
     }
 
+    if (event.executiveReport?.status === 'published') {
+      return { errorCode: 'EXECUTIVE_REPORT_LOCKED' };
+    }
+
     const user = await this.findUserById(payload.authorUserId);
     const executiveReport = buildExecutiveReport({
       payload,
       user,
       existingReport: event.executiveReport,
+      event,
     });
 
     await query(

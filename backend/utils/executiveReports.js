@@ -2,6 +2,13 @@ const { normalizeString } = require('./validation');
 
 const VALID_REPORT_STATUSES = new Set(['draft', 'published']);
 
+const normalizeSelectedAssetEntries = (assets, selectedIds) => {
+  const normalizedAssets = Array.isArray(assets) ? assets.filter(Boolean) : [];
+  const allowedIds = new Set(selectedIds);
+
+  return normalizedAssets.filter((asset) => allowedIds.has(normalizeString(asset?.id)));
+};
+
 const normalizeAuthor = (author) => {
   if (!author || typeof author !== 'object') {
     return null;
@@ -28,12 +35,14 @@ const normalizeSelectedIds = (values) => (Array.isArray(values)
     .filter(Boolean)
   : []);
 
-const normalizeExecutiveReportEntry = (report) => {
+const normalizeExecutiveReportEntry = (report, assets = {}) => {
   if (!report || typeof report !== 'object' || Array.isArray(report)) {
     return null;
   }
 
   const status = normalizeString(report.status).toLowerCase();
+  const selectedPhotoIds = normalizeSelectedIds(report.selectedPhotoIds);
+  const selectedPhotos = normalizeSelectedAssetEntries(report.selectedPhotos || assets.photos, selectedPhotoIds);
 
   return {
     id: normalizeString(report.id) || `executive-report-${Date.now()}`,
@@ -45,7 +54,8 @@ const normalizeExecutiveReportEntry = (report) => {
     highlights: normalizeString(report.highlights || ''),
     incidents: normalizeString(report.incidents || ''),
     recommendations: normalizeString(report.recommendations || ''),
-    selectedPhotoIds: normalizeSelectedIds(report.selectedPhotoIds),
+    selectedPhotoIds,
+    selectedPhotos,
     selectedReportIds: normalizeSelectedIds(report.selectedReportIds),
     status: VALID_REPORT_STATUSES.has(status) ? status : 'draft',
     createdAt: report.createdAt || report.created_at || null,
@@ -55,14 +65,17 @@ const normalizeExecutiveReportEntry = (report) => {
   };
 };
 
-const buildExecutiveReport = ({ payload, user, existingReport }) => {
+const buildExecutiveReport = ({ payload, user, existingReport, event }) => {
   const now = new Date().toISOString();
-  const normalizedExistingReport = normalizeExecutiveReportEntry(existingReport);
+  const normalizedExistingReport = normalizeExecutiveReportEntry(existingReport, event);
   const normalizedStatus = normalizeString(payload.status).toLowerCase();
   const status = VALID_REPORT_STATUSES.has(normalizedStatus) ? normalizedStatus : 'draft';
   const createdAt = normalizedExistingReport?.createdAt || now;
   const currentPublishedAt = normalizedExistingReport?.publishedAt || null;
   const nextPublishedAt = status === 'published' ? (currentPublishedAt || now) : null;
+  const selectedPhotoIds = normalizeSelectedIds(payload.selectedPhotoIds);
+  const selectedReportIds = normalizeSelectedIds(payload.selectedReportIds);
+  const selectedPhotos = normalizeSelectedAssetEntries(event?.photos, selectedPhotoIds);
 
   return {
     id: normalizedExistingReport?.id || `executive-report-${Date.now()}`,
@@ -74,8 +87,9 @@ const buildExecutiveReport = ({ payload, user, existingReport }) => {
     highlights: normalizeString(payload.highlights),
     incidents: normalizeString(payload.incidents),
     recommendations: normalizeString(payload.recommendations),
-    selectedPhotoIds: normalizeSelectedIds(payload.selectedPhotoIds),
-    selectedReportIds: normalizeSelectedIds(payload.selectedReportIds),
+    selectedPhotoIds,
+    selectedPhotos,
+    selectedReportIds,
     status,
     createdAt,
     updatedAt: now,
@@ -88,8 +102,8 @@ const buildExecutiveReport = ({ payload, user, existingReport }) => {
   };
 };
 
-const sanitizePublishedExecutiveReport = (report) => {
-  const normalizedReport = normalizeExecutiveReportEntry(report);
+const sanitizePublishedExecutiveReport = (report, assets = {}) => {
+  const normalizedReport = normalizeExecutiveReportEntry(report, assets);
 
   if (!normalizedReport || normalizedReport.status !== 'published') {
     return null;
@@ -102,7 +116,7 @@ const sanitizeEventForClient = ({ event, executiveContact }) => ({
   ...event,
   reports: [],
   photos: [],
-  executiveReport: sanitizePublishedExecutiveReport(event.executiveReport),
+  executiveReport: sanitizePublishedExecutiveReport(event.executiveReport, { photos: event.photos }),
   executiveContact: executiveContact || null,
 });
 

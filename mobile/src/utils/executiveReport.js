@@ -1,3 +1,5 @@
+import { normalizePhotoItem } from './eventAssets';
+
 const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '');
 
 export const normalizeExecutiveReport = (report) => {
@@ -18,6 +20,7 @@ export const normalizeExecutiveReport = (report) => {
     incidents: toTrimmedString(report.incidents),
     recommendations: toTrimmedString(report.recommendations),
     selectedPhotoIds: Array.isArray(report.selectedPhotoIds) ? report.selectedPhotoIds.map((item) => toTrimmedString(item)).filter(Boolean) : [],
+    selectedPhotos: Array.isArray(report.selectedPhotos) ? report.selectedPhotos.map(normalizePhotoItem).filter(Boolean) : [],
     selectedReportIds: Array.isArray(report.selectedReportIds) ? report.selectedReportIds.map((item) => toTrimmedString(item)).filter(Boolean) : [],
     status: status || 'draft',
     createdAt: report.createdAt || report.created_at || null,
@@ -40,6 +43,7 @@ export const createExecutiveReportDraft = (report) => {
     incidents: normalized?.incidents || '',
     recommendations: normalized?.recommendations || '',
     selectedPhotoIds: normalized?.selectedPhotoIds || [],
+    selectedPhotos: normalized?.selectedPhotos || [],
     selectedReportIds: normalized?.selectedReportIds || [],
     status: normalized?.status || 'draft',
   };

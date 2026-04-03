@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
 import { getClientEvents } from '../api/api';
 import { COLORS } from '../theme/colors';
 import { normalizeExecutiveReport } from '../utils/executiveReport';
@@ -153,6 +153,20 @@ const ClientHomeScreen = ({ user, onLogout, appConfig }) => {
                 <Text style={styles.reportBody}>{report.incidents}</Text>
                 <Text style={styles.reportSectionTitle}>Recomendaciones</Text>
                 <Text style={styles.reportBody}>{report.recommendations}</Text>
+
+                {report.selectedPhotos?.length > 0 ? (
+                  <>
+                    <Text style={styles.reportSectionTitle}>Fotos seleccionadas por el ejecutivo</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
+                      {report.selectedPhotos.map((photo) => (
+                        <View key={photo.id} style={styles.photoCard}>
+                          <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+                          <Text style={styles.photoCaption}>{photo.author?.fullName || 'Coordinación'}</Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : null}
               </View>
             )}
           </View>
@@ -212,6 +226,10 @@ const styles = StyleSheet.create({
   reportMeta: { color: '#6B7280', marginBottom: 4 },
   reportSectionTitle: { color: COLORS.blue.text, fontWeight: '800', marginTop: 4 },
   reportBody: { color: '#374151', lineHeight: 20 },
+  photoRow: { gap: 12, marginTop: 4 },
+  photoCard: { width: 180, backgroundColor: '#F8FAFC', borderRadius: 14, padding: 10 },
+  photoPreview: { width: '100%', height: 120, borderRadius: 10, marginBottom: 8 },
+  photoCaption: { color: '#475569', fontSize: 12 },
 });
 
 export default ClientHomeScreen;

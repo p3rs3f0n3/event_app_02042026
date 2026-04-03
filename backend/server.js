@@ -332,6 +332,10 @@ app.put('/api/events/:id/executive-report', asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'No podés guardar el informe final de un evento de otro ejecutivo' });
   }
 
+  if (updatedEvent?.errorCode === 'EXECUTIVE_REPORT_LOCKED') {
+    return res.status(409).json({ message: 'El informe final ya fue publicado y quedó bloqueado' });
+  }
+
   if (!updatedEvent) {
     return res.status(404).json({ message: 'Evento no encontrado' });
   }
