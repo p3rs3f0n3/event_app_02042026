@@ -62,12 +62,14 @@ CREATE TABLE IF NOT EXISTS events (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(180) NOT NULL,
   client VARCHAR(180) NOT NULL,
+  client_user_id BIGINT REFERENCES users(id),
   image TEXT NOT NULL,
   start_date TIMESTAMPTZ NOT NULL,
   end_date TIMESTAMPTZ NOT NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'Pendiente',
   reports JSONB NOT NULL DEFAULT '[]'::jsonb,
   photos JSONB NOT NULL DEFAULT '[]'::jsonb,
+  executive_report JSONB,
   created_by_user_id BIGINT REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -76,6 +78,9 @@ CREATE TABLE IF NOT EXISTS events (
 ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivated_at TIMESTAMPTZ;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivation_comment TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivated_by_user_id BIGINT REFERENCES users(id);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS client_user_id BIGINT REFERENCES users(id);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS executive_report JSONB;
+UPDATE events SET client_user_id = (SELECT id FROM users WHERE username = 'cliente') WHERE client_user_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS event_cities (
   id BIGSERIAL PRIMARY KEY,

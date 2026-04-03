@@ -3,6 +3,7 @@ backend/.env
 backend/eventapp_db.json
 
 mobile/node_modules/
+mobile/.env
 mobile/.expo/
 mobile/dist/
 mobile/web-build/

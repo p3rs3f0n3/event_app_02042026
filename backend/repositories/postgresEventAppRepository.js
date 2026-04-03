@@ -1,14 +1,18 @@
 const { pool, query } = require('../db/postgres/pool');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
+const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 const { normalizeString } = require('../utils/validation');
 const { verifyPassword } = require('../utils/passwords');
+
+const DEFAULT_CLIENT_USER_ID = 4;
 
 const mapEventRow = (row) => ({
   id: row.id,
   name: row.name,
   client: row.client,
+  clientUserId: Number(row.client_user_id || DEFAULT_CLIENT_USER_ID),
   image: row.image,
   startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
   endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
@@ -16,6 +20,7 @@ const mapEventRow = (row) => ({
   status: row.status,
   reports: Array.isArray(row.reports) ? row.reports.map(normalizeReportEntry).filter(Boolean) : [],
   photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
+  executiveReport: normalizeExecutiveReportEntry(row.executive_report),
   cities: Array.isArray(row.cities) ? row.cities : [],
   manualInactivatedAt: row.manual_inactivated_at instanceof Date ? row.manual_inactivated_at.toISOString() : row.manual_inactivated_at,
   manualInactivationComment: row.manual_inactivation_comment,
@@ -201,7 +206,7 @@ class PostgresEventAppRepository {
   async getEvents({ createdByUserId } = {}) {
     const result = await query(
       `
-        SELECT e.id, e.name, e.client, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.created_by_user_id,
+        SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
                e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
                COALESCE(
                   json_agg(
@@ -227,6 +232,40 @@ class PostgresEventAppRepository {
     return result.rows.map(mapEventRow).map(enrichEventLifecycle);
   }
 
+  async getClientEvents({ userId }) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return [];
+    }
+
+    const events = await this.getEvents();
+    const executiveIds = [...new Set(events.map((event) => Number(event.createdByUserId)).filter((id) => Number.isInteger(id) && id > 0))];
+    const executiveContactsById = new Map();
+
+    if (executiveIds.length > 0) {
+      const usersResult = await query(
+        `
+          SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+          FROM users
+          WHERE id = ANY($1::bigint[])
+        `,
+        [executiveIds],
+      );
+
+      usersResult.rows.forEach((row) => {
+        executiveContactsById.set(Number(row.id), normalizeExecutiveContact(row));
+      });
+    }
+
+    return events
+      .filter((event) => Number(event.clientUserId) === normalizedUserId)
+      .map((event) => sanitizeEventForClient({
+        event,
+        executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
+      }));
+  }
+
   async createEvent(eventData) {
     const client = await pool.connect();
 
@@ -235,11 +274,11 @@ class PostgresEventAppRepository {
 
         const eventResult = await client.query(
           `
-          INSERT INTO events (name, client, image, start_date, end_date, status, reports, photos, created_by_user_id)
-          VALUES ($1, $2, $3, $4, $5, 'Pendiente', '[]'::jsonb, '[]'::jsonb, $6)
+          INSERT INTO events (name, client, client_user_id, image, start_date, end_date, status, reports, photos, executive_report, created_by_user_id)
+          VALUES ($1, $2, $3, $4, $5, $6, 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $7)
           RETURNING id
         `,
-        [eventData.name, eventData.client, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [eventData.name, eventData.client, Number(eventData.clientUserId || DEFAULT_CLIENT_USER_ID), eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       const event = eventResult.rows[0];
@@ -267,10 +306,11 @@ class PostgresEventAppRepository {
           UPDATE events
           SET name = $2,
               client = $3,
-              image = $4,
-              start_date = $5,
-              end_date = $6,
-              created_by_user_id = COALESCE(created_by_user_id, $7),
+              client_user_id = $4,
+              image = $5,
+              start_date = $6,
+              end_date = $7,
+              created_by_user_id = COALESCE(created_by_user_id, $8),
               manual_inactivated_at = NULL,
               manual_inactivation_comment = NULL,
               manual_inactivated_by_user_id = NULL,
@@ -278,7 +318,7 @@ class PostgresEventAppRepository {
           WHERE id = $1
           RETURNING id
         `,
-        [id, eventData.name, eventData.client, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [id, eventData.name, eventData.client, Number(eventData.clientUserId || DEFAULT_CLIENT_USER_ID), eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       if (eventResult.rowCount === 0) {
@@ -299,11 +339,7 @@ class PostgresEventAppRepository {
   }
 
   async getEventById(id) {
-    return mapCoordinatorEvent({
-      event: await this.#getEventById(Number(id)),
-      coordinatorProfile,
-      executiveContact,
-    });
+    return this.#getEventById(Number(id));
   }
 
   async inactivateEvent(id, { createdByUserId, comment }) {
@@ -324,17 +360,13 @@ class PostgresEventAppRepository {
       return null;
     }
 
-    return mapCoordinatorEvent({
-      event: await this.#getEventById(Number(id)),
-      coordinatorProfile,
-      executiveContact,
-    });
+    return this.#getEventById(Number(id));
   }
 
   async #getEventById(id) {
     const result = await query(
       `
-        SELECT e.id, e.name, e.client, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.created_by_user_id,
+        SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
                e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
                COALESCE(
                   json_agg(
@@ -392,6 +424,36 @@ class PostgresEventAppRepository {
         WHERE id = $1
       `,
       [Number(id), JSON.stringify([...event.photos.map(normalizePhotoEntry).filter(Boolean), photo])],
+    );
+
+    return this.#getEventById(Number(id));
+  }
+
+  async saveExecutiveReport(id, payload) {
+    const event = await this.#getEventById(Number(id));
+    if (!event) {
+      return null;
+    }
+
+    if (Number(event.createdByUserId) !== Number(payload.authorUserId)) {
+      return false;
+    }
+
+    const user = await this.findUserById(payload.authorUserId);
+    const executiveReport = buildExecutiveReport({
+      payload,
+      user,
+      existingReport: event.executiveReport,
+    });
+
+    await query(
+      `
+        UPDATE events
+        SET executive_report = $2::jsonb,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [Number(id), JSON.stringify(executiveReport)],
     );
 
     return this.#getEventById(Number(id));

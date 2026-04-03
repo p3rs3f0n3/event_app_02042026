@@ -9,6 +9,7 @@ const {
   normalizeString,
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
+  validateExecutiveReportPayload,
   validateEventPayload,
   validateLoginPayload,
   validateManualInactivationPayload,
@@ -163,6 +164,15 @@ app.get('/api/coordinator/events', asyncHandler(async (req, res) => {
 
   return res.json(await req.app.locals.repository.getCoordinatorEvents({ userId }));
 }));
+app.get('/api/client/events', asyncHandler(async (req, res) => {
+  const userId = Number(req.query?.userId);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return badRequest(res, 'El userId del cliente es requerido');
+  }
+
+  return res.json(await req.app.locals.repository.getClientEvents({ userId }));
+}));
 app.post('/api/events', asyncHandler(async (req, res) => {
   const validationError = validateEventPayload(req.body);
   if (validationError) {
@@ -288,6 +298,38 @@ app.post('/api/events/:id/reports', asyncHandler(async (req, res) => {
 
   if (updatedEvent === false) {
     return res.status(403).json({ message: 'El coordinador no está autorizado para cargar informes en este evento' });
+  }
+
+  if (!updatedEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
+
+  return res.json(updatedEvent);
+}));
+
+app.put('/api/events/:id/executive-report', asyncHandler(async (req, res) => {
+  const validationError = validateExecutiveReportPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const updatedEvent = await req.app.locals.repository.saveExecutiveReport(req.params.id, {
+    authorUserId: Number(req.body.authorUserId),
+    title: normalizeString(req.body.title),
+    executiveSummary: normalizeString(req.body.executiveSummary),
+    objectivesCompliance: normalizeString(req.body.objectivesCompliance),
+    resultsImpact: normalizeString(req.body.resultsImpact),
+    redemptions: normalizeString(req.body.redemptions),
+    highlights: normalizeString(req.body.highlights),
+    incidents: normalizeString(req.body.incidents),
+    recommendations: normalizeString(req.body.recommendations),
+    selectedPhotoIds: Array.isArray(req.body.selectedPhotoIds) ? req.body.selectedPhotoIds : [],
+    selectedReportIds: Array.isArray(req.body.selectedReportIds) ? req.body.selectedReportIds : [],
+    status: normalizeString(req.body.status).toLowerCase(),
+  });
+
+  if (updatedEvent === false) {
+    return res.status(403).json({ message: 'No podés guardar el informe final de un evento de otro ejecutivo' });
   }
 
   if (!updatedEvent) {

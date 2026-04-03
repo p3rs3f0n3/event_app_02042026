@@ -1,9 +1,11 @@
 const fs = require('fs');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
+const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 
 const DEFAULT_EXECUTIVE_USER_ID = 2;
+const DEFAULT_CLIENT_USER_ID = 4;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -16,6 +18,7 @@ const normalizeCity = (city) => ({
 const normalizeEvent = (event) => ({
   ...event,
   createdByUserId: Number(event.createdByUserId || event.created_by_user_id || DEFAULT_EXECUTIVE_USER_ID),
+  clientUserId: Number(event.clientUserId || event.client_user_id || DEFAULT_CLIENT_USER_ID),
   cities: Array.isArray(event.cities)
     ? event.cities.map((city) => ({
       ...city,
@@ -24,6 +27,7 @@ const normalizeEvent = (event) => ({
     : [],
   reports: Array.isArray(event.reports) ? event.reports.map(normalizeReportEntry).filter(Boolean) : [],
   photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
+  executiveReport: normalizeExecutiveReportEntry(event.executiveReport || event.executive_report),
   manualInactivatedAt: event.manualInactivatedAt || event.manual_inactivated_at || null,
   manualInactivationComment: event.manualInactivationComment || event.manual_inactivation_comment || null,
   manualInactivatedByUserId: Number(event.manualInactivatedByUserId || event.manual_inactivated_by_user_id || 0) || null,
@@ -193,6 +197,21 @@ class EventAppRepository {
     return events;
   }
 
+  getClientEvents({ userId }) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return [];
+    }
+
+    return this.getEvents()
+      .filter((event) => Number(event.clientUserId) === normalizedUserId)
+      .map((event) => sanitizeEventForClient({
+        event,
+        executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+      }));
+  }
+
   createEvent(eventData) {
     const newEvent = normalizeEvent({
       id: Date.now(),
@@ -200,6 +219,8 @@ class EventAppRepository {
       status: 'Pendiente',
       reports: [],
       photos: [],
+      clientUserId: Number(eventData.clientUserId || DEFAULT_CLIENT_USER_ID),
+      executiveReport: null,
     });
 
     this.db.events.push(newEvent);
@@ -329,6 +350,33 @@ class EventAppRepository {
       coordinatorProfile,
       executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
     });
+  }
+
+  saveExecutiveReport(id, payload) {
+    const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
+    if (eventIndex === -1) {
+      return null;
+    }
+
+    const event = normalizeEvent(this.db.events[eventIndex]);
+    if (Number(event.createdByUserId) !== Number(payload.authorUserId)) {
+      return false;
+    }
+
+    const user = this.findUserById(payload.authorUserId);
+    const executiveReport = buildExecutiveReport({
+      payload,
+      user,
+      existingReport: event.executiveReport,
+    });
+
+    this.db.events[eventIndex] = normalizeEvent({
+      ...event,
+      executiveReport,
+    });
+
+    this.save();
+    return enrichEventLifecycle(this.db.events[eventIndex]);
   }
 }
 

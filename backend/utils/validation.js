@@ -148,6 +148,50 @@ const validateCoordinatorReportPayload = (payload) => {
   return null;
 };
 
+const validateExecutiveReportPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de informe final inválido';
+  }
+
+  if (!isValidIdValue(payload.authorUserId)) {
+    return 'El autor del informe final es requerido';
+  }
+
+  const status = normalizeString(payload.status).toLowerCase();
+  if (!['draft', 'published'].includes(status)) {
+    return 'El estado del informe final debe ser draft o published';
+  }
+
+  if (payload.selectedPhotoIds != null && !Array.isArray(payload.selectedPhotoIds)) {
+    return 'Las fotos seleccionadas deben enviarse como lista';
+  }
+
+  if (payload.selectedReportIds != null && !Array.isArray(payload.selectedReportIds)) {
+    return 'Los reportes seleccionados deben enviarse como lista';
+  }
+
+  if (status === 'published') {
+    const requiredFields = [
+      ['title', 'El título del informe final es obligatorio'],
+      ['executiveSummary', 'El resumen ejecutivo es obligatorio'],
+      ['objectivesCompliance', 'El cumplimiento de objetivos es obligatorio'],
+      ['resultsImpact', 'Los resultados / impacto son obligatorios'],
+      ['redemptions', 'Las redenciones o la aclaración correspondiente son obligatorias'],
+      ['highlights', 'Los hallazgos o highlights son obligatorios'],
+      ['incidents', 'Los incidentes son obligatorios'],
+      ['recommendations', 'Las recomendaciones son obligatorias'],
+    ];
+
+    for (const [fieldName, message] of requiredFields) {
+      if (!isNonEmptyString(payload[fieldName])) {
+        return message;
+      }
+    }
+  }
+
+  return null;
+};
+
 module.exports = {
   ALLOWED_COORDINATOR_PHOTO_MIME_TYPES,
   MAX_COORDINATOR_PHOTO_SIZE_BYTES,
@@ -155,6 +199,7 @@ module.exports = {
   normalizeString,
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
+  validateExecutiveReportPayload,
   validateLoginPayload,
   validateManualInactivationPayload,
   validateEventPayload,

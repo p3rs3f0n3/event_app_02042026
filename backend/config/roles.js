@@ -24,8 +24,8 @@ const ROLE_CONFIG = {
     code: 'CLIENTE',
     label: 'Cliente',
     theme: 'blue',
-    status: 'planned',
-    enabled: false,
+    status: 'active',
+    enabled: true,
   },
 };
 
