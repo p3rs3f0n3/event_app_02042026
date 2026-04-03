@@ -80,7 +80,6 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivation_comment TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivated_by_user_id BIGINT REFERENCES users(id);
 ALTER TABLE events ADD COLUMN IF NOT EXISTS client_user_id BIGINT REFERENCES users(id);
 ALTER TABLE events ADD COLUMN IF NOT EXISTS executive_report JSONB;
-UPDATE events SET client_user_id = (SELECT id FROM users WHERE username = 'cliente') WHERE client_user_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS event_cities (
   id BIGSERIAL PRIMARY KEY,

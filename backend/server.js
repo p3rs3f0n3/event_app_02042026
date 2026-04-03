@@ -86,6 +86,10 @@ app.get('/api/coordinators', asyncHandler(async (req, res) => {
   }));
 }));
 
+app.get('/api/clients', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getClients());
+}));
+
 app.get('/api/staff', asyncHandler(async (req, res) => {
   const { city, category, startTime, endTime, eventStartDate, eventEndDate, selectedStaffIds } = req.query;
   const repository = req.app.locals.repository;

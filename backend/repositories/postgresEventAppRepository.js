@@ -6,13 +6,43 @@ const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 const { normalizeString } = require('../utils/validation');
 const { verifyPassword } = require('../utils/passwords');
 
-const DEFAULT_CLIENT_USER_ID = 4;
+const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 
-const mapEventRow = (row) => ({
+const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
+  const normalizedRawClientUserId = Number(rawClientUserId);
+  if (Number.isInteger(normalizedRawClientUserId) && normalizedRawClientUserId > 0) {
+    const explicitClient = clients.find((candidate) => Number(candidate.id) === normalizedRawClientUserId) || null;
+    const comparableClient = normalizeComparableValue(client);
+
+    if (explicitClient && normalizeComparableValue(explicitClient.username) === 'cliente') {
+      const matchesDemoIdentity = [explicitClient.fullName, explicitClient.username, explicitClient.email]
+        .some((value) => normalizeComparableValue(value) === comparableClient);
+
+      return matchesDemoIdentity ? normalizedRawClientUserId : null;
+    }
+
+    return normalizedRawClientUserId;
+  }
+
+  const comparableClient = normalizeComparableValue(client);
+  if (!comparableClient) {
+    return null;
+  }
+
+  const matches = clients.filter((candidate) => [
+    candidate.fullName,
+    candidate.username,
+    candidate.email,
+  ].some((value) => normalizeComparableValue(value) === comparableClient));
+
+  return matches.length === 1 ? Number(matches[0].id) : null;
+};
+
+const mapEventRow = (row, clients = []) => ({
   id: row.id,
   name: row.name,
   client: row.client,
-  clientUserId: Number(row.client_user_id || DEFAULT_CLIENT_USER_ID),
+  clientUserId: resolveClientUserId({ rawClientUserId: row.client_user_id, client: row.client, clients }),
   image: row.image,
   startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
   endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
@@ -74,6 +104,28 @@ class PostgresEventAppRepository {
     );
 
     return result.rows[0] || null;
+  }
+
+  async getClients() {
+    const result = await query(
+      `
+        SELECT u.id, u.username, u.full_name AS "fullName", u.phone, u.whatsapp_phone AS "whatsappPhone", u.email, r.code AS role
+        FROM users u
+        INNER JOIN roles r ON r.id = u.role_id
+        WHERE r.code = 'CLIENTE' AND u.is_active = TRUE
+        ORDER BY u.full_name ASC, u.id ASC
+      `,
+    );
+
+    return result.rows.map((row) => ({
+      id: Number(row.id),
+      username: row.username,
+      fullName: row.fullName,
+      phone: row.phone || null,
+      whatsappPhone: row.whatsappPhone || null,
+      email: row.email || null,
+      role: row.role,
+    }));
   }
 
   async findCoordinatorProfileByUserId(userId) {
@@ -206,6 +258,7 @@ class PostgresEventAppRepository {
   }
 
   async getEvents({ createdByUserId } = {}) {
+    const clients = await this.getClients();
     const result = await query(
       `
         SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
@@ -231,7 +284,7 @@ class PostgresEventAppRepository {
       [Number.isInteger(Number(createdByUserId)) && Number(createdByUserId) > 0 ? Number(createdByUserId) : null],
     );
 
-    return result.rows.map(mapEventRow).map(enrichEventLifecycle);
+    return result.rows.map((row) => mapEventRow(row, clients)).map(enrichEventLifecycle);
   }
 
   async getClientEvents({ userId }) {
@@ -280,7 +333,7 @@ class PostgresEventAppRepository {
           VALUES ($1, $2, $3, $4, $5, $6, 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $7)
           RETURNING id
         `,
-        [eventData.name, eventData.client, Number(eventData.clientUserId || DEFAULT_CLIENT_USER_ID), eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [eventData.name, eventData.client, Number.isInteger(Number(eventData.clientUserId)) && Number(eventData.clientUserId) > 0 ? Number(eventData.clientUserId) : null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       const event = eventResult.rows[0];
@@ -320,7 +373,7 @@ class PostgresEventAppRepository {
           WHERE id = $1
           RETURNING id
         `,
-        [id, eventData.name, eventData.client, Number(eventData.clientUserId || DEFAULT_CLIENT_USER_ID), eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [id, eventData.name, eventData.client, Number.isInteger(Number(eventData.clientUserId)) && Number(eventData.clientUserId) > 0 ? Number(eventData.clientUserId) : null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       if (eventResult.rowCount === 0) {
@@ -390,7 +443,11 @@ class PostgresEventAppRepository {
       [id],
     );
 
-    return result.rows[0] ? enrichEventLifecycle(mapEventRow(result.rows[0])) : null;
+    if (!result.rows[0]) {
+      return null;
+    }
+
+    return enrichEventLifecycle(mapEventRow(result.rows[0], await this.getClients()));
   }
 
   async addCoordinatorPhoto(id, { authorUserId, uri, mimeType, fileSize, fileName }) {

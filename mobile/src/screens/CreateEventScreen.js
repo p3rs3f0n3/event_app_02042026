@@ -2,11 +2,29 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert, Platform, Image, ActivityIndicator, Modal } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { createEvent, updateEvent, getCoordinators, getStaff, getColombiaCities, addColombiaCity } from '../api/api';
+import { createEvent, updateEvent, getClients, getCoordinators, getStaff, getColombiaCities, addColombiaCity } from '../api/api';
 import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const isOtherCityOption = (city) => Boolean(city?.isOther || String(city?.name || '').trim().toUpperCase() === 'OTRO');
 const normalizeCityName = (value) => String(value || '').trim().toLowerCase();
+const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
+
+const getClientDescription = (client) => [client?.username ? `@${client.username}` : null, client?.email || null].filter(Boolean).join(' · ');
+
+const findMatchingClient = (clients, eventLike) => {
+  const explicitClientId = Number(eventLike?.clientUserId);
+  if (Number.isInteger(explicitClientId) && explicitClientId > 0) {
+    return clients.find((client) => Number(client.id) === explicitClientId) || null;
+  }
+
+  const comparableClient = normalizeComparableValue(eventLike?.client);
+  if (!comparableClient) {
+    return null;
+  }
+
+  const matches = clients.filter((client) => [client.fullName, client.username, client.email].some((value) => normalizeComparableValue(value) === comparableClient));
+  return matches.length === 1 ? matches[0] : null;
+};
 
 const createEmptyPoint = () => ({ establishment: '', address: '', contact: '', phone: '', startTime: null, endTime: null, coordinator: null, assignedStaff: [] });
 
@@ -51,10 +69,10 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [step, setStep] = useState(1);
   const [showPicker, setShowPicker] = useState(null);
-  const [apiLists, setApiLists] = useState({ coordinators: [], staff: [], cities: [] });
+  const [apiLists, setApiLists] = useState({ coordinators: [], staff: [], cities: [], clients: [] });
   const [loading, setLoading] = useState(true);
   const [eventData, setEventData] = useState({
-    name: eventToEdit?.name || '', client: eventToEdit?.client || '',
+    name: eventToEdit?.name || '', client: eventToEdit?.client || '', clientUserId: eventToEdit?.clientUserId || null,
     startDate: eventToEdit?.startDate ? new Date(eventToEdit.startDate) : null,
     endDate: eventToEdit?.endDate ? new Date(eventToEdit.endDate) : null,
     image: eventToEdit?.image || null, cities: eventToEdit?.cities || []
@@ -66,12 +84,18 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [isNewCity, setIsNewCity] = useState(false);
   const [manualCityName, setManualCityName] = useState('');
   const [showCitySearch, setShowCitySearch] = useState(false);
+  const [showClientSearch, setShowClientSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [staffInDetail, setStaffInDetail] = useState(null);
   const categories = ['BARISTAS', 'IMPULSADORES', 'LOGISTICOS'];
 
   const [currentPoint, setCurrentPoint] = useState(createEmptyPoint());
+  const selectedClient = useMemo(
+    () => apiLists.clients.find((client) => Number(client.id) === Number(eventData.clientUserId)) || null,
+    [apiLists.clients, eventData.clientUserId],
+  );
 
   const resolvedCityName = (isNewCity ? manualCityName : currentCityName).trim();
 
@@ -132,11 +156,33 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   useEffect(() => {
     const fetchInitial = async () => {
       try {
-        const cities = await getColombiaCities(); { setApiLists(prev => ({ ...prev, cities })); }
+        const [cities, clients] = await Promise.all([getColombiaCities(), getClients()]);
+        setApiLists(prev => ({ ...prev, cities, clients }));
       } catch (error) { Alert.alert('Error', 'No se cargaron ciudades'); } finally { setLoading(false); }
     };
     fetchInitial();
   }, []);
+
+  useEffect(() => {
+    if (apiLists.clients.length === 0) {
+      return;
+    }
+
+    const matchedClient = findMatchingClient(apiLists.clients, eventData);
+    if (!matchedClient) {
+      return;
+    }
+
+    if (Number(eventData.clientUserId) === Number(matchedClient.id) && eventData.client === matchedClient.fullName) {
+      return;
+    }
+
+    setEventData((prev) => ({
+      ...prev,
+      client: matchedClient.fullName,
+      clientUserId: matchedClient.id,
+    }));
+  }, [apiLists.clients, eventData]);
 
   useEffect(() => {
     if (eventToEdit?.isInactive) {
@@ -145,7 +191,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   }, [eventToEdit?.id, eventToEdit?.isInactive, onBack]);
 
   const validateEventMetadata = () => {
-    if (!eventData.name || !eventData.client || !eventData.startDate || !eventData.endDate || !eventData.image) {
+    if (!eventData.name || !eventData.client || !eventData.clientUserId || !eventData.startDate || !eventData.endDate || !eventData.image) {
       Alert.alert('Incompleto', 'Llene todos los campos técnicos y cargue foto'); return false;
     }
     if (new Date(eventData.endDate) <= new Date(eventData.startDate)) {
@@ -314,7 +360,8 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
               if (!res.canceled) setEventData({ ...eventData, image: res.assets[0].uri });
             }}>{eventData.image ? <Image source={{ uri: eventData.image }} style={styles.selectedImage} /> : <View style={styles.photoPlaceholder}><Text style={styles.photoText}>FOTO EVENTO *</Text></View>}</TouchableOpacity>
             <InputField styles={styles} label="Evento *" value={eventData.name} onChangeText={(t) => setEventData({...eventData, name: t})} />
-            <InputField styles={styles} label="Cliente *" value={eventData.client} onChangeText={(t) => setEventData({...eventData, client: t})} />
+             <InputField styles={styles} label="Cliente *" value={selectedClient?.fullName || eventData.client} placeholder="Seleccionar cliente..." editable={false} onPress={() => setShowClientSearch(true)} />
+             {selectedClient ? <Text style={styles.helperText}>{getClientDescription(selectedClient)}</Text> : null}
             <TouchableOpacity onPress={() => setShowPicker('start_date')}><InputField styles={styles} label="Inicio *" value={eventData.startDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
             <TouchableOpacity onPress={() => setShowPicker('end_date')}><InputField styles={styles} label="Fin *" value={eventData.endDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
             <TouchableOpacity style={styles.actionButton} onPress={() => { if (validateEventMetadata()) setStep(2); }}><Text style={styles.actionText}>SIGUIENTE</Text></TouchableOpacity>
@@ -416,6 +463,10 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         <Modal visible={showCitySearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Filtrar ciudad</Text><TextInput style={styles.searchInput} placeholder="Buscar..." value={searchQuery} onChangeText={setSearchQuery} /><ScrollView style={{maxHeight: 400}}>
           {apiLists.cities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(i => (<TouchableOpacity key={i.id} style={styles.cityItem} onPress={() => { setCurrentPoint((prev) => ({ ...prev, coordinator: null, assignedStaff: [] })); if (isOtherCityOption(i)) { setIsNewCity(true); setCurrentCityName(''); setManualCityName(''); } else { setIsNewCity(false); setCurrentCityName(i.name); setManualCityName(''); } setShowCitySearch(false); setSearchQuery(''); }}><Text style={styles.cityItemText}>{i.name}</Text></TouchableOpacity>))}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => setShowCitySearch(false)}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
+        <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar cliente..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><ScrollView style={{maxHeight: 400}}>
+          {apiLists.clients.filter((client) => [client.fullName, client.username, client.email].some((value) => normalizeComparableValue(value).includes(normalizeComparableValue(clientSearchQuery)))).map((client) => (<TouchableOpacity key={client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: client.fullName, clientUserId: client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{client.fullName}</Text><Text style={styles.clientItemMeta}>{getClientDescription(client)}</Text></TouchableOpacity>))}
+          {apiLists.clients.length === 0 ? <Text style={styles.emptyModalText}>No hay clientes disponibles.</Text> : null}
+        </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => { setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
         {showPicker && <DateTimePicker value={(showPicker === 'start_time' ? currentPoint.startTime : showPicker === 'end_time' ? currentPoint.endTime : showPicker === 'start_date' ? eventData.startDate : eventData.endDate) || new Date()} mode={showPicker.includes('date') ? 'date' : 'time'} is24Hour={false} display="default" onChange={onPickerChange} />}
       </ScrollView>
     </SafeAreaView>
@@ -435,6 +486,7 @@ const createStyles = (palette) => StyleSheet.create({
   inputContainer: { marginBottom: 10 },
   label: { color: palette.onHero, fontSize: 13, marginBottom: 2, fontWeight: 'bold' },
   input: { color: palette.onHero, fontSize: 16, paddingVertical: 5 },
+  helperText: { color: palette.onHero, fontSize: 12, marginTop: -4, marginBottom: 8, opacity: 0.8 },
   divider: { height: 1, backgroundColor: palette.onHero, marginBottom: 8, opacity: 0.5 },
   pointFrame: { backgroundColor: palette.panel, padding: 15, borderRadius: RADII.sm, marginVertical: 8, borderLeftWidth: 4, borderLeftColor: palette.primaryButton },
   pointTitle: { color: palette.primaryButton, fontSize: 15, fontWeight: 'bold', marginBottom: 10 },
@@ -459,6 +511,8 @@ const createStyles = (palette) => StyleSheet.create({
   searchInput: { backgroundColor: palette.surfaceMuted, padding: 12, borderRadius: RADII.sm, marginBottom: 15, fontSize: 16, color: palette.text },
   cityItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
   cityItemText: { fontSize: 16, color: palette.text },
+  clientItemMeta: { fontSize: 12, color: '#666', marginTop: 4 },
+  emptyModalText: { color: palette.textMuted, textAlign: 'center', paddingVertical: 24 },
   closeBtn: { backgroundColor: palette.secondaryButton, paddingVertical: 12, borderRadius: RADII.sm, alignItems: 'center', marginTop: 15 },
   closeBtnText: { fontWeight: 'bold', color: palette.secondaryButtonText },
   coordCard: { backgroundColor: palette.surface, padding: 15, borderRadius: RADII.sm, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 15 },

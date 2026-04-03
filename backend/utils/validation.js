@@ -29,10 +29,11 @@ const validateEventPayload = (payload) => {
     return 'Payload de evento inválido';
   }
 
-  const { name, client, startDate, endDate, image, cities, createdByUserId } = payload;
+  const { name, client, clientUserId, startDate, endDate, image, cities, createdByUserId } = payload;
 
   if (!isNonEmptyString(name)) return 'El nombre del evento es requerido';
   if (!isNonEmptyString(client)) return 'El cliente es requerido';
+  if (!isValidIdValue(clientUserId)) return 'Debés seleccionar un cliente válido';
   if (!isNonEmptyString(image)) return 'La imagen del evento es requerida';
   if (!isValidIdValue(createdByUserId)) return 'El usuario creador del evento es requerido';
   if (!isValidDateValue(startDate) || !isValidDateValue(endDate)) return 'Las fechas del evento son inválidas';

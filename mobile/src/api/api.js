@@ -38,6 +38,7 @@ export const getAppConfig = async () => (await getAPI().get('/app-config')).data
 export const getEvents = async (createdByUserId) => (await getAPI().get('/events', { params: { createdByUserId } })).data;
 export const getCoordinatorEvents = async (userId) => (await getAPI().get('/coordinator/events', { params: { userId } })).data;
 export const getClientEvents = async (userId) => (await getAPI().get('/client/events', { params: { userId } })).data;
+export const getClients = async () => (await getAPI().get('/clients')).data;
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
 export const getStaff = async (params = {}) => (await getAPI().get('/staff', { params })).data;
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
