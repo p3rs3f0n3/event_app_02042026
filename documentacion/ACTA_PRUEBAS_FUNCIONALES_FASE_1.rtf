@@ -1,0 +1,99 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Arial;}}
+\fs24
+\b ACTA DE PRUEBAS FUNCIONALES - EVENTAPP FASE 1\b0\par
+\par
+\b Informacion general\b0\par
+Proyecto: EventApp\par
+Version: Fase 1\par
+Fecha: ____________________\par
+Probador(a): ____________________\par
+Ambiente: ____________________\par
+Dispositivo: ____________________\par
+\par
+\b Usuarios de prueba\b0\par
+- Ejecutivo 1: ejecutivo.ana\par
+- Ejecutivo 2: ejecutivo.bruno\par
+- Coordinador: coord\par
+- Cliente 1: cliente.alpina\par
+- Cliente 2: cliente.colcafe\par
+- Cliente 3: cliente.nutresa\par
+\par
+Contrasena: Funcional.EventApp.2026\par
+\par
+\b 1. Acceso\b0\par
+L01 - Login Ejecutivo 1 - Ingresa correctamente - Estado: __________ - Observaciones: ____________________\par
+L02 - Login Ejecutivo 2 - Ingresa correctamente - Estado: __________ - Observaciones: ____________________\par
+L03 - Login Coordinador - Ingresa correctamente - Estado: __________ - Observaciones: ____________________\par
+L04 - Login Cliente - Ingresa correctamente - Estado: __________ - Observaciones: ____________________\par
+L05 - Login invalido - No permite acceso - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 2. Creacion y gestion de eventos\b0\par
+E01 - Crear evento con cliente - Guarda correctamente - Estado: __________ - Observaciones: ____________________\par
+E02 - Crear evento con ciudad existente - Guarda correctamente - Estado: __________ - Observaciones: ____________________\par
+E03 - Crear evento con ciudad nueva/OTRO - Guarda correctamente - Estado: __________ - Observaciones: ____________________\par
+E04 - Crear evento con punto completo - Guarda datos completos - Estado: __________ - Observaciones: ____________________\par
+E05 - Crear evento con varias ciudades/puntos - Guarda correctamente - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 3. Cruces de coordinador y staff\b0\par
+C01 - Coordinador ocupado - No permite asignarlo - Estado: __________ - Observaciones: ____________________\par
+C02 - Staff ocupado - No permite asignarlo - Estado: __________ - Observaciones: ____________________\par
+C03 - Coordinador libre - Permite asignarlo - Estado: __________ - Observaciones: ____________________\par
+C04 - Staff libre - Permite asignarlo - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 4. Revision de eventos por ejecutivo\b0\par
+R01 - Ejecutivo ve sus eventos - Solo sus eventos - Estado: __________ - Observaciones: ____________________\par
+R02 - Clasificacion Activos/Inactivos - Correcta - Estado: __________ - Observaciones: ____________________\par
+R03 - Evento vencido - Inactivo y sin edicion - Estado: __________ - Observaciones: ____________________\par
+R04 - Inactivar manual con comentario - Se inactiva - Estado: __________ - Observaciones: ____________________\par
+R05 - Inactivar sin comentario - No permite - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 5. Modulo Coordinador\b0\par
+CO01 - Ver eventos asignados - Solo los suyos - Estado: __________ - Observaciones: ____________________\par
+CO02 - Ver puntos agrupados por ciudad - Correcto - Estado: __________ - Observaciones: ____________________\par
+CO03 - Ver detalle del punto - Muestra informacion - Estado: __________ - Observaciones: ____________________\par
+CO04 - Contacto punto por llamada - Funciona - Estado: __________ - Observaciones: ____________________\par
+CO05 - Contacto punto por WhatsApp - Funciona - Estado: __________ - Observaciones: ____________________\par
+CO06 - Contacto ejecutivo - Llamada/WhatsApp - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 6. Fotos y reportes del coordinador\b0\par
+F01 - Cargar foto valida - Se guarda - Estado: __________ - Observaciones: ____________________\par
+F02 - Ver galeria - Muestra fotos guardadas - Estado: __________ - Observaciones: ____________________\par
+RP01 - Guardar reporte operativo - Se guarda - Estado: __________ - Observaciones: ____________________\par
+RP02 - Guardar reporte con redenciones - Se guarda - Estado: __________ - Observaciones: ____________________\par
+RP03 - Reingresar al evento - Ve fotos/reportes cargados - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 7. Informe final del ejecutivo\b0\par
+IE01 - Ver listado de informes - Clasificado correctamente - Estado: __________ - Observaciones: ____________________\par
+IE02 - Seleccionar algunas fotos - Permite seleccionar - Estado: __________ - Observaciones: ____________________\par
+IE03 - Seleccionar todas las fotos - Permite seleccionar - Estado: __________ - Observaciones: ____________________\par
+IE04 - Guardar borrador - Guarda correctamente - Estado: __________ - Observaciones: ____________________\par
+IE05 - Publicar informe final - Publica correctamente - Estado: __________ - Observaciones: ____________________\par
+IE06 - Editar despues de publicar - No permite - Estado: __________ - Observaciones: ____________________\par
+IE07 - Guardar borrador despues de publicar - No permite - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 8. Modulo Cliente\b0\par
+CL01 - Cliente ve sus eventos - Solo sus eventos - Estado: __________ - Observaciones: ____________________\par
+CL02 - Cliente ve informe publicado - Correctamente - Estado: __________ - Observaciones: ____________________\par
+CL03 - Cliente no ve borradores - Correctamente - Estado: __________ - Observaciones: ____________________\par
+CL04 - Cliente ve fotos seleccionadas - Solo las seleccionadas - Estado: __________ - Observaciones: ____________________\par
+CL05 - Cliente contacta ejecutivo - Llamada/WhatsApp - Estado: __________ - Observaciones: ____________________\par
+\par
+\b 9. Flujo End-to-End\b0\par
+E2E01 - Ejecutivo crea -> Coordinador reporta -> Ejecutivo publica -> Cliente ve - Flujo completo exitoso - Estado: __________ - Observaciones: ____________________\par
+E2E02 - Dos ejecutivos crean eventos distintos - No se cruzan datos - Estado: __________ - Observaciones: ____________________\par
+E2E03 - Cliente A intenta ver evento de Cliente B - No lo ve - Estado: __________ - Observaciones: ____________________\par
+E2E04 - Cruces de staff/coordinador - Se bloquean correctamente - Estado: __________ - Observaciones: ____________________\par
+\par
+\b Resultado general\b0\par
+Resultado final: ____________________________________________\par
+\par
+Observaciones generales:\par
+____________________________________________________________\par
+____________________________________________________________\par
+____________________________________________________________\par
+\par
+Responsable: ________________________________\par
+Firma: _____________________________________\par
+Fecha: _____________________________________\par
+}

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Singleton for API URL Management
 let apiInstance = null;
-const DEFAULT_API_URL = 'http://192.168.18.244:3001/api';
+const DEFAULT_API_URL = 'http://localhost:3001/api';
 let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
 const getAPI = () => {
@@ -16,7 +16,6 @@ const getAPI = () => {
 export const setBaseUrl = (newUrl) => {
   currentBaseUrl = newUrl;
   apiInstance = axios.create({ baseURL: currentBaseUrl });
-  console.log('📡 API URL updated to:', currentBaseUrl);
 };
 
 export const getBaseUrl = () => currentBaseUrl;
@@ -30,7 +29,7 @@ export const login = async (username, password) => {
       username: res.data?.username || username,
     };
   } catch (error) {
-    throw error.response?.data?.message || 'Falla de conexión: Verifique IP del servidor';
+    throw error.response?.data?.message || 'No se pudo conectar con el servicio';
   }
 };
 

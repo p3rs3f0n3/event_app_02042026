@@ -1,0 +1,68 @@
+
+
+Directorio instalación
+C:\Program Files\PostgreSQL\18
+
+Directorio datos
+C:\Program Files\PostgreSQL\18\data
+
+ingreso bd
+postgres
+p3rs3f0n3
+
+puerto : 5433
+
+http://192.168.20.35:3001/api/health
+http://192.168.20.35:3001/api/health
+http://192.168.20.35:3001/api/login
+
+usuario: ejecutivo
+contraseña: ChangeMe.Ejecutivo.123
+
+- usuario: coord
+- contraseña: ChangeMe.Coordinador.123
+
+Si no conecta desde el celular
+Entrá al login del mobile → Configuración del servidor  
+y verificá que esté exactamente así:
+http://192.168.20.35:3001/api
+
+
+https://github.com/p3rs3f0n3/event_app_02042026.git
+
+vernatiens  --> opiniones de la gente
+observaciones --> novedades reportadas por el coordinador
+
+- ✅ Ejecutivo funcional
+- ✅ Coordinador funcional
+- ✅ Persistencia en PostgreSQL
+- ✅ Fotos e informes visibles entre roles
+- ✅ Inactivación de eventos
+- ✅ Contacto básico entre actores
+- 🔲 Admin completo
+- 🔲 Cliente completo
+- 🔲 seguridad/auth real
+- 🔲 storage externo de imágenes
+- 🔲 tests automáticos completos
+---
+4. Resolver solo lo crítico para pruebas
+Antes de entr
+
+
+Credenciales sugeridas para funcional
+
+Ejecutivos
+- ejecutivo.ana / Funcional.EventApp.2026
+- ejecutivo.bruno / Funcional.EventApp.2026
+
+Coordinador
+- coord / Funcional.EventApp.2026
+
+Clientes
+- cliente.alpina / Funcional.EventApp.2026
+- cliente.colcafe / Funcional.EventApp.2026
+- cliente.nutresa / Funcional.EventApp.2026
+
+Admin
+- admin / Admin.EventApp.2026
+

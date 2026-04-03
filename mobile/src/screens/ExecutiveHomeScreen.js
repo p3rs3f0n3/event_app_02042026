@@ -42,28 +42,28 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Panel ejecutivo"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${displayUsername}. Gestioná creación, seguimiento y cierre ejecutivo sin tocar la lógica operativa.`}
+        subtitle={`Hola, ${displayUsername}. Gestioná creación, seguimiento y cierre ejecutivo desde un único panel.`}
       />
 
       <SurfaceCard style={styles.heroCard}>
         <View style={styles.badgeRow}>
           <StatusBadge label="Operación activa" tone="success" />
-          <StatusBadge label="UI global aplicada" tone="info" />
+          <StatusBadge label="Cobertura multirol" tone="info" />
         </View>
         <Text style={styles.heroTitle}>Centro de control comercial</Text>
-        <Text style={styles.heroText}>Entrá rápido a creación, revisión e informe final con la misma capa visual reutilizable.</Text>
+        <Text style={styles.heroText}>Accedé rápido a la creación, revisión y publicación final de cada evento.</Text>
       </SurfaceCard>
 
       <View style={styles.menuContainer}>
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Crear evento</Text>
-          <Text style={styles.menuText}>Carga técnica, ciudades, puntos, disponibilidad y asignación.</Text>
+          <Text style={styles.menuText}>Definí cliente, ciudades, puntos operativos, disponibilidad y asignación.</Text>
           <AppButton title="ABRIR CREACIÓN" onPress={() => setCurrentView('createEvent')} />
         </SurfaceCard>
 
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Revisar eventos</Text>
-          <Text style={styles.menuText}>Seguimiento, edición e inactivación sin cambiar reglas de negocio.</Text>
+          <Text style={styles.menuText}>Hacé seguimiento, edición e inactivación con el flujo actual.</Text>
           <AppButton title="ABRIR REVISIÓN" onPress={() => setCurrentView('reviewEvents')} />
         </SurfaceCard>
 

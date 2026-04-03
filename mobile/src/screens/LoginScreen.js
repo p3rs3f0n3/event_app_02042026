@@ -4,20 +4,14 @@ import { LockKeyhole, ShieldCheck, UserRound, Wifi } from 'lucide-react-native';
 
 import { getBaseUrl, login, setBaseUrl } from '../api/api';
 import BrandMark from '../components/BrandMark';
-import { AppButton, StatusBadge, SurfaceCard } from '../components/ui';
+import { AppButton, SurfaceCard } from '../components/ui';
 import { COLORS } from '../theme/colors';
 import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 import { useResponsiveMetrics } from '../utils/responsive';
 
-const DEMO_ACCOUNTS = [
-  { key: 'ejecutivo', role: 'Ejecutivo', username: 'ejecutivo', password: 'ChangeMe.Ejecutivo.123' },
-  { key: 'coord', role: 'Coordinador', username: 'coord', password: 'ChangeMe.Coordinador.123' },
-  { key: 'cliente', role: 'Cliente', username: 'cliente', password: 'ChangeMe.Cliente.123' },
-];
-
 const LoginScreen = ({ onLogin, appConfig }) => {
-  const [username, setUsername] = useState('ejecutivo');
-  const [password, setPassword] = useState('ChangeMe.Ejecutivo.123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showConfig, setShowConfig] = useState(false);
@@ -32,12 +26,6 @@ const LoginScreen = ({ onLogin, appConfig }) => {
     [appConfig],
   );
 
-  const handlePickDemo = (account) => {
-    setUsername(account.username);
-    setPassword(account.password);
-    setError('');
-  };
-
   const handleLogin = async () => {
     if (!username || !password) {
       setError('Datos requeridos');
@@ -50,7 +38,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
       const user = await login(username, password);
       onLogin(user);
     } catch (err) {
-      setError('Falla de conexión: verificá IP del servidor o tus credenciales.');
+      setError(typeof err === 'string' ? err : 'No pudimos iniciar sesión. Revisá tus credenciales e intentá de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -63,7 +51,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
     }
     setBaseUrl(newIp);
     setShowConfig(false);
-    Alert.alert('Configuración guardada', 'La nueva URL del servidor fue aplicada.');
+    Alert.alert('Configuración guardada', 'La conexión quedó actualizada.');
   };
 
   const openHiddenConfig = () => {
@@ -96,7 +84,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
               </View>
               <View style={styles.valueItem}>
                 <Wifi color={COLORS.brand.highlight} size={16} strokeWidth={2.4} />
-                <Text style={styles.valueText}>Sincronización con backend actual</Text>
+                <Text style={styles.valueText}>Operación conectada</Text>
               </View>
             </View>
           </Pressable>
@@ -107,20 +95,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
               <Text style={styles.kickerMeta}>{activeAccounts.join(' · ')}</Text>
             </View>
             <Text style={styles.subtitle}>Ingresá a tu espacio de trabajo</Text>
-            <Text style={styles.helperText}>Usá un acceso demo para revisar el flujo o iniciá sesión con tus credenciales reales.</Text>
-
-            <View style={styles.demoSection}>
-              {DEMO_ACCOUNTS.map((account) => {
-                const isSelected = username === account.username;
-                return (
-                  <Pressable key={account.key} style={[styles.demoCard, isSelected && styles.demoCardSelected]} onPress={() => handlePickDemo(account)}>
-                    <Text style={styles.demoRole}>{account.role}</Text>
-                    <Text style={styles.demoUser}>{account.username}</Text>
-                    {isSelected ? <StatusBadge label="Activo" tone="info" /> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Text style={styles.helperText}>Usá las credenciales asignadas para tu rol y continuá con la operación.</Text>
 
             <View style={styles.formSection}>
               <Text style={styles.fieldLabel}>Usuario</Text>
@@ -141,7 +116,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
             <AppButton title={loading ? 'INGRESANDO...' : 'INGRESAR'} onPress={handleLogin} disabled={loading} />
             {loading ? <ActivityIndicator color={palette.hero} style={styles.loader} /> : null}
 
-            <Text style={styles.secondaryCopy}>Tu acceso mantiene la lógica actual de autenticación y navegación por roles.</Text>
+            <Text style={styles.secondaryCopy}>Cada perfil accede a su flujo operativo y mantiene la navegación vigente por rol.</Text>
           </SurfaceCard>
 
           <Pressable style={styles.footer} onLongPress={openHiddenConfig} delayLongPress={700}>
@@ -154,17 +129,17 @@ const LoginScreen = ({ onLogin, appConfig }) => {
       <Modal visible={showConfig} transparent animationType="slide">
         <View style={styles.overlay}>
           <SurfaceCard style={styles.configCard}>
-            <Text style={styles.configTitle}>Configurar servidor</Text>
-            <Text style={styles.configLabel}>URL API (IP local o túnel)</Text>
+            <Text style={styles.configTitle}>Configurar conexión</Text>
+            <Text style={styles.configLabel}>URL del servicio</Text>
             <TextInput
               style={styles.configInput}
               value={newIp}
               onChangeText={setNewIp}
               autoCapitalize="none"
-              placeholder="http://192.168.20.xxx:3001/api"
+              placeholder="http://localhost:3001/api"
               placeholderTextColor={palette.inputPlaceholder}
             />
-            <Text style={styles.hint}>Actualizá esta URL cuando cambie tu red WiFi.</Text>
+            <Text style={styles.hint}>Este acceso queda oculto para soporte técnico y ajustes del entorno.</Text>
             <View style={styles.configFooter}>
               <AppButton title="CANCELAR" variant="secondary" style={styles.modalButton} onPress={() => setShowConfig(false)} />
               <AppButton title="APLICAR" style={styles.modalButton} onPress={handleUpdateConfig} />
@@ -207,11 +182,6 @@ const createStyles = (palette, metrics) => StyleSheet.create({
   kickerMeta: { flex: 1, color: palette.textMuted, fontSize: 12, textAlign: 'right' },
   subtitle: { fontSize: metrics.subtitleSize, fontWeight: '800', color: COLORS.brand.body, marginBottom: 10 },
   helperText: { color: palette.textMuted, marginBottom: 22, fontSize: 14, lineHeight: 21 },
-  demoSection: { gap: 12, marginBottom: 24 },
-  demoCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: palette.border, borderRadius: RADII.md, paddingVertical: 14, paddingHorizontal: 14, gap: 6 },
-  demoCardSelected: { backgroundColor: palette.pageBgSoft },
-  demoRole: { color: COLORS.brand.body, fontWeight: '700', fontSize: 15 },
-  demoUser: { color: palette.textMuted, fontSize: 12 },
   formSection: { marginBottom: 6 },
   fieldLabel: { color: COLORS.brand.body, fontSize: 13, fontWeight: '700', marginBottom: 8, marginLeft: 4 },
   inputShell: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: palette.inputBorder, paddingHorizontal: 14, marginBottom: 15 },

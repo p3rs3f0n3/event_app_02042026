@@ -24,10 +24,18 @@ npm run db:init
 npm run dev
 ```
 
-Credenciales demo:
+Reset operativo recomendado:
 
-- usuario: `ejecutivo`
-- contraseña: `ChangeMe.Ejecutivo.123`
+```bash
+npm run db:init
+```
+
+Usuarios sugeridos para pruebas funcionales:
+
+- Ejecutivo 1: `ejecutivo.ana` / `Funcional.EventApp.2026`
+- Ejecutivo 2: `ejecutivo.bruno` / `Funcional.EventApp.2026`
+- Coordinador: `coord` / `Funcional.EventApp.2026`
+- Clientes: `cliente.alpina`, `cliente.colcafe`, `cliente.nutresa` / `Funcional.EventApp.2026`
 
 ## Mobile
 
@@ -38,7 +46,7 @@ npm install
 npx expo start
 ```
 
-Configurá la URL del backend con la IP local del host, por ejemplo:
+Si necesitás cambiar la URL del backend en mobile, configurala con el host disponible en tu entorno, por ejemplo:
 
 ```txt
 http://192.168.20.35:3001/api

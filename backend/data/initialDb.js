@@ -1,14 +1,18 @@
 const INITIAL_DB = {
   users: [
-    { id: 1, username: 'admin', password: 'ChangeMe.Admin.123', fullName: 'Administrador Base', phone: '3005550101', whatsappPhone: '3005550101', email: 'admin@eventapp.local', role: 'ADMIN' },
-    { id: 2, username: 'ejecutivo', password: 'ChangeMe.Ejecutivo.123', fullName: 'Ejecutivo Base', phone: '3005550202', whatsappPhone: '3005550202', email: 'ejecutivo@eventapp.local', role: 'EJECUTIVO' },
-    { id: 3, username: 'coord', password: 'ChangeMe.Coordinador.123', fullName: 'Coordinador Base', phone: '3005550303', whatsappPhone: '3005550303', email: 'coord@eventapp.local', role: 'COORDINADOR' },
-    { id: 4, username: 'cliente', password: 'ChangeMe.Cliente.123', fullName: 'Cliente Base', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente@eventapp.local', role: 'CLIENTE' },
+    { id: 1, username: 'admin', password: 'Admin.EventApp.2026', fullName: 'Administrador Base', phone: '3005550101', whatsappPhone: '3005550101', email: 'admin@eventapp.local', role: 'ADMIN' },
+    { id: 2, username: 'ejecutivo.ana', password: 'Funcional.EventApp.2026', fullName: 'Ana Torres', phone: '3005550202', whatsappPhone: '3005550202', email: 'ana.torres@eventapp.local', role: 'EJECUTIVO' },
+    { id: 3, username: 'ejecutivo.bruno', password: 'Funcional.EventApp.2026', fullName: 'Bruno Diaz', phone: '3005550203', whatsappPhone: '3005550203', email: 'bruno.diaz@eventapp.local', role: 'EJECUTIVO' },
+    { id: 4, username: 'coord', password: 'Funcional.EventApp.2026', fullName: 'Lucia Mendez', phone: '3005550303', whatsappPhone: '3005550303', email: 'lucia.mendez@eventapp.local', role: 'COORDINADOR' },
+    { id: 5, username: 'cliente', password: 'Funcional.EventApp.2026', fullName: 'Cliente Base QA', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente.base@eventapp.local', role: 'CLIENTE' },
+    { id: 6, username: 'cliente.alpina', password: 'Funcional.EventApp.2026', fullName: 'Alpina QA', phone: '3005550405', whatsappPhone: '3005550405', email: 'alpina.qa@eventapp.local', role: 'CLIENTE' },
+    { id: 7, username: 'cliente.colcafe', password: 'Funcional.EventApp.2026', fullName: 'Colcafe QA', phone: '3005550406', whatsappPhone: '3005550406', email: 'colcafe.qa@eventapp.local', role: 'CLIENTE' },
+    { id: 8, username: 'cliente.nutresa', password: 'Funcional.EventApp.2026', fullName: 'Nutresa QA', phone: '3005550407', whatsappPhone: '3005550407', email: 'nutresa.qa@eventapp.local', role: 'CLIENTE' },
   ],
   coordinators: [
     { id: 1, name: 'Isabella Barreiro J.', cedula: '31572804', address: 'Cra 28 No 72', phone: '3116833760', rating: 5, photo: 'https://i.pravatar.cc/150?u=isabella', city: 'Bogotá' },
     { id: 2, name: 'Alexander Barreiro H.', cedula: '12345678', address: 'Calle 10 No 5', phone: '3001234567', rating: 4, photo: 'https://i.pravatar.cc/150?u=alex', city: 'Bogotá' },
-    { id: 3, userId: 3, name: 'Lucia Mendez', cedula: '44556677', address: 'Av 5 No 12', phone: '3109998877', rating: 5, photo: 'https://i.pravatar.cc/150?u=lucia', city: 'Medellín' },
+    { id: 3, userId: 4, name: 'Lucia Mendez', cedula: '44556677', address: 'Av 5 No 12', phone: '3109998877', rating: 5, photo: 'https://i.pravatar.cc/150?u=lucia', city: 'Medellín' },
     { id: 4, name: 'Roberto Gomez', cedula: '77889900', address: 'Clle 100', phone: '3151112233', rating: 4, photo: 'https://i.pravatar.cc/150?u=robert', city: 'Medellín' },
   ],
   staff: [
