@@ -7,30 +7,41 @@ const normalizeExecutiveContact = (user) => {
     userId: Number(user.id),
     username: user.username || null,
     fullName: user.fullName || user.full_name || null,
-    phone: user.phone || null,
-    hasPhone: Boolean(user.phone),
+    phone: user.phone || user.phone_number || null,
+    whatsappPhone: user.whatsappPhone || user.whatsapp_phone || user.phone || user.phone_number || null,
+    email: user.email || null,
+    hasPhone: Boolean(user.phone || user.phone_number),
   };
 };
 
 const getAssignedCitiesForCoordinator = (event, coordinatorId) => {
   const normalizedCoordinatorId = Number(coordinatorId);
+  const groupedCities = new Map();
 
-  return (Array.isArray(event?.cities) ? event.cities : []).reduce((cities, city) => {
+  (Array.isArray(event?.cities) ? event.cities : []).forEach((city) => {
     const assignedPoints = (Array.isArray(city?.points) ? city.points : []).filter(
       (point) => Number(point?.coordinator?.id) === normalizedCoordinatorId,
     );
 
     if (assignedPoints.length === 0) {
-      return cities;
+      return;
     }
 
-    cities.push({
-      ...city,
-      points: assignedPoints,
-    });
+    const cityKey = String(city?.name || 'Sin ciudad').trim().toLowerCase();
+    const existingCity = groupedCities.get(cityKey);
 
-    return cities;
-  }, []);
+    if (existingCity) {
+      existingCity.points.push(...assignedPoints);
+      return;
+    }
+
+    groupedCities.set(cityKey, {
+      ...city,
+      points: [...assignedPoints],
+    });
+  });
+
+  return Array.from(groupedCities.values());
 };
 
 const mapCoordinatorEvent = ({ event, coordinatorProfile, executiveContact }) => {

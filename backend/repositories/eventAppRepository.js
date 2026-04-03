@@ -87,6 +87,9 @@ class EventAppRepository {
       id: user.id,
       username: user.username,
       fullName: user.fullName,
+      phone: user.phone || null,
+      whatsappPhone: user.whatsappPhone || user.whatsapp_phone || null,
+      email: user.email || null,
       role: user.role,
     };
   }
@@ -243,7 +246,7 @@ class EventAppRepository {
     return enrichEventLifecycle(this.db.events[eventIndex]);
   }
 
-  addCoordinatorPhoto(id, { authorUserId, uri }) {
+  addCoordinatorPhoto(id, { authorUserId, uri, mimeType, fileSize, fileName }) {
     const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
     if (eventIndex === -1) {
       return null;
@@ -267,6 +270,9 @@ class EventAppRepository {
 
     const photo = buildCoordinatorPhoto({
       uri,
+      mimeType,
+      fileSize,
+      fileName,
       coordinatorProfile,
       user: this.findUserById(authorUserId),
     });
@@ -277,7 +283,11 @@ class EventAppRepository {
     });
 
     this.save();
-    return enrichEventLifecycle(this.db.events[eventIndex]);
+    return mapCoordinatorEvent({
+      event: enrichEventLifecycle(this.db.events[eventIndex]),
+      coordinatorProfile,
+      executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+    });
   }
 
   addCoordinatorReport(id, payload) {
@@ -314,7 +324,11 @@ class EventAppRepository {
     });
 
     this.save();
-    return enrichEventLifecycle(this.db.events[eventIndex]);
+    return mapCoordinatorEvent({
+      event: enrichEventLifecycle(this.db.events[eventIndex]),
+      coordinatorProfile,
+      executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+    });
   }
 }
 

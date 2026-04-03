@@ -30,7 +30,7 @@ class PostgresEventAppRepository {
   async authenticateUser({ username, password }) {
     const result = await query(
       `
-        SELECT u.id, u.username, u.full_name, u.password_hash, r.code AS role
+        SELECT u.id, u.username, u.full_name, u.phone, u.whatsapp_phone, u.email, u.password_hash, r.code AS role
         FROM users u
         INNER JOIN roles r ON r.id = u.role_id
         WHERE LOWER(u.username) = LOWER($1) AND u.is_active = TRUE
@@ -48,6 +48,9 @@ class PostgresEventAppRepository {
       id: user.id,
       username: user.username,
       fullName: user.full_name,
+      phone: user.phone || null,
+      whatsappPhone: user.whatsapp_phone || null,
+      email: user.email || null,
       role: user.role,
     };
   }
@@ -55,7 +58,7 @@ class PostgresEventAppRepository {
   async findUserById(id) {
     const result = await query(
       `
-        SELECT id, username, full_name AS "fullName"
+        SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
         FROM users
         WHERE id = $1
         LIMIT 1
@@ -120,9 +123,9 @@ class PostgresEventAppRepository {
     const executiveContactsById = new Map();
 
     if (executiveIds.length > 0) {
-      const usersResult = await query(
-        `
-          SELECT id, username, full_name AS "fullName"
+        const usersResult = await query(
+          `
+          SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
           FROM users
           WHERE id = ANY($1::bigint[])
         `,
@@ -296,7 +299,11 @@ class PostgresEventAppRepository {
   }
 
   async getEventById(id) {
-    return this.#getEventById(Number(id));
+    return mapCoordinatorEvent({
+      event: await this.#getEventById(Number(id)),
+      coordinatorProfile,
+      executiveContact,
+    });
   }
 
   async inactivateEvent(id, { createdByUserId, comment }) {
@@ -317,7 +324,11 @@ class PostgresEventAppRepository {
       return null;
     }
 
-    return this.#getEventById(Number(id));
+    return mapCoordinatorEvent({
+      event: await this.#getEventById(Number(id)),
+      coordinatorProfile,
+      executiveContact,
+    });
   }
 
   async #getEventById(id) {
@@ -348,7 +359,7 @@ class PostgresEventAppRepository {
     return result.rows[0] ? enrichEventLifecycle(mapEventRow(result.rows[0])) : null;
   }
 
-  async addCoordinatorPhoto(id, { authorUserId, uri }) {
+  async addCoordinatorPhoto(id, { authorUserId, uri, mimeType, fileSize, fileName }) {
     const event = await this.#getEventById(Number(id));
     if (!event) {
       return null;
@@ -366,6 +377,9 @@ class PostgresEventAppRepository {
 
     const photo = buildCoordinatorPhoto({
       uri,
+      mimeType,
+      fileSize,
+      fileName,
       coordinatorProfile,
       user: await this.findUserById(authorUserId),
     });

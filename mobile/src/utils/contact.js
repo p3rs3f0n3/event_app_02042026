@@ -2,29 +2,53 @@ import { Alert, Linking } from 'react-native';
 
 const normalizePhone = (phone) => String(phone || '').replace(/\D/g, '');
 
-export const contactExecutive = async (executiveContact) => {
-  const phone = normalizePhone(executiveContact?.phone);
+const getContactLabel = (contact) => contact?.fullName || contact?.name || contact?.username || 'Contacto';
 
-  if (phone) {
-    const whatsappUrl = `whatsapp://send?phone=${phone}`;
-    const canOpenWhatsApp = await Linking.canOpenURL(whatsappUrl);
-
-    if (canOpenWhatsApp) {
-      await Linking.openURL(whatsappUrl);
-      return;
-    }
-
-    const phoneUrl = `tel:${phone}`;
-    const canCall = await Linking.canOpenURL(phoneUrl);
-
-    if (canCall) {
-      await Linking.openURL(phoneUrl);
-      return;
-    }
+const openUrlIfPossible = async (url) => {
+  const canOpen = await Linking.canOpenURL(url);
+  if (!canOpen) {
+    return false;
   }
 
-  const executiveName = executiveContact?.fullName || executiveContact?.username || 'Ejecutivo sin nombre';
-  const username = executiveContact?.username ? `Usuario: ${executiveContact.username}` : 'Sin username disponible';
-
-  Alert.alert('Contacto no disponible', `${executiveName}\n${username}\nTodavía no hay teléfono utilizable configurado para contacto directo.`);
+  await Linking.openURL(url);
+  return true;
 };
+
+const showUnavailableContactAlert = (contact) => {
+  Alert.alert(
+    'Contacto no disponible',
+    `${getContactLabel(contact)}\nTodavía no hay un teléfono utilizable para llamada o WhatsApp.`,
+  );
+};
+
+export const contactByPhoneCall = async (contact) => {
+  const phone = normalizePhone(contact?.phone);
+  if (!phone) {
+    showUnavailableContactAlert(contact);
+    return false;
+  }
+
+  const opened = await openUrlIfPossible(`tel:${phone}`);
+  if (!opened) {
+    Alert.alert('Llamada no disponible', 'No se pudo abrir la llamada en este dispositivo.');
+  }
+
+  return opened;
+};
+
+export const contactByWhatsApp = async (contact) => {
+  const phone = normalizePhone(contact?.phone);
+  if (!phone) {
+    showUnavailableContactAlert(contact);
+    return false;
+  }
+
+  const opened = await openUrlIfPossible(`whatsapp://send?phone=${phone}`);
+  if (!opened) {
+    Alert.alert('WhatsApp no disponible', 'No se pudo abrir WhatsApp en este dispositivo.');
+  }
+
+  return opened;
+};
+
+export const hasDirectContactPhone = (contact) => Boolean(normalizePhone(contact?.phone));

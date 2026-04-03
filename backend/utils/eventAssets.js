@@ -50,6 +50,9 @@ const normalizePhotoEntry = (photo, index = 0) => {
     uri,
     createdAt: photo.createdAt || photo.created_at || null,
     author: normalizeAuthor(photo.author),
+    mimeType: normalizeString(photo.mimeType || photo.mime_type || '') || null,
+    fileName: normalizeString(photo.fileName || photo.file_name || '') || null,
+    fileSize: Number.isFinite(Number(photo.fileSize)) ? Number(photo.fileSize) : null,
     source: normalizeString(photo.source) || 'coordinator',
   };
 };
@@ -103,11 +106,14 @@ const normalizeReportEntry = (report, index = 0) => {
   };
 };
 
-const buildCoordinatorPhoto = ({ uri, coordinatorProfile, user }) => ({
+const buildCoordinatorPhoto = ({ uri, mimeType, fileSize, fileName, coordinatorProfile, user }) => ({
   id: `photo-${Date.now()}`,
   uri,
   createdAt: new Date().toISOString(),
   source: 'coordinator',
+  mimeType: normalizeString(mimeType) || null,
+  fileName: normalizeString(fileName) || null,
+  fileSize: Number.isFinite(Number(fileSize)) ? Number(fileSize) : null,
   author: {
     userId: Number(user?.id || coordinatorProfile?.userId || 0) || null,
     fullName: normalizeString(user?.fullName || coordinatorProfile?.name || user?.username) || 'Coordinador',

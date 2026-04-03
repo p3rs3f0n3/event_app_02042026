@@ -17,8 +17,12 @@ import {
 import { addCoordinatorEventPhoto, addCoordinatorEventReport } from '../api/api';
 import { COLORS } from '../theme/colors';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
-import { contactExecutive } from '../utils/contact';
+import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { useResponsiveMetrics } from '../utils/responsive';
+
+const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_PHOTO_SIZE_MB = 10;
+const VALID_PHOTO_FORMATS_LABEL = 'JPG, PNG, WEBP y HEIC';
 
 const formatDate = (date) => {
   if (!date) return 'Sin fecha';
@@ -67,6 +71,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const metrics = useResponsiveMetrics();
   const theme = COLORS[roleConfig?.theme] || COLORS.brown;
   const [galleryVisible, setGalleryVisible] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState(null);
   const [currentEvent, setCurrentEvent] = useState(event);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
@@ -80,11 +85,34 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
     onEventUpdated?.(updatedEvent);
   };
 
-  const handleContactExecutive = async () => {
+  const handleContactExecutive = async (channel) => {
     try {
-      await contactExecutive(currentEvent?.executiveContact);
+      if (channel === 'whatsapp') {
+        await contactByWhatsApp(currentEvent?.executiveContact);
+        return;
+      }
+
+      await contactByPhoneCall(currentEvent?.executiveContact);
     } catch (error) {
       Alert.alert('Error', 'No se pudo abrir la acción de contacto.');
+    }
+  };
+
+  const handleContactPoint = async (point, channel) => {
+    try {
+      const pointContact = {
+        name: point?.contact || point?.establishment || 'Punto operativo',
+        phone: point?.phone,
+      };
+
+      if (channel === 'whatsapp') {
+        await contactByWhatsApp(pointContact);
+        return;
+      }
+
+      await contactByPhoneCall(pointContact);
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo abrir la acción de contacto del punto.');
     }
   };
 
@@ -109,12 +137,23 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
 
       const asset = result.assets[0];
       const mimeType = asset.mimeType || 'image/jpeg';
+      const fileSize = Number(asset.fileSize || 0) || null;
+      const fileName = asset.fileName || null;
+
+      if (fileSize && fileSize > MAX_PHOTO_SIZE_BYTES) {
+        Alert.alert('Archivo demasiado grande', `La foto supera el límite de ${MAX_PHOTO_SIZE_MB} MB.`);
+        return;
+      }
+
       const uri = asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri;
 
       setUploadingPhoto(true);
       const updatedEvent = await addCoordinatorEventPhoto(currentEvent.id, {
         authorUserId: user?.id,
         uri,
+        mimeType,
+        fileSize,
+        fileName,
       });
       updateEventState(updatedEvent);
       Alert.alert('Éxito', 'La foto quedó guardada en el evento.');
@@ -191,17 +230,16 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           {(currentEvent?.cities || []).map((city, cityIndex) => (
             <View key={`${city?.name || 'city'}-${cityIndex}`} style={styles.cityCard}>
               <Text style={styles.cityName}>{city?.name}</Text>
+              <Text style={styles.cityMeta}>{(city?.points || []).length} punto(s) asignado(s)</Text>
               {(city?.points || []).map((point, pointIndex) => (
                 <View key={`${point?.establishment || 'point'}-${pointIndex}`} style={styles.pointCard}>
                   <Text style={styles.pointTitle}>{point?.establishment || 'Punto sin nombre'}</Text>
                   <Text style={styles.pointText}>Dirección: {point?.address || 'Sin dato'}</Text>
-                  <Text style={styles.pointText}>Contacto local: {point?.contact || 'Sin dato'}</Text>
-                  <Text style={styles.pointText}>Teléfono local: {point?.phone || 'Sin dato'}</Text>
                   <Text style={styles.pointText}>Horario: {formatTimeLabel(point?.startTime)} - {formatTimeLabel(point?.endTime)}</Text>
                   <Text style={styles.pointText}>Equipo asignado: {point?.assignedStaff?.length || 0}</Text>
-                  {(point?.assignedStaff || []).map((staffMember) => (
-                    <Text key={staffMember.id} style={styles.staffItem}>• {staffMember.name} · {staffMember.category}</Text>
-                  ))}
+                  <TouchableOpacity style={styles.pointDetailButton} onPress={() => setSelectedPoint({ ...point, cityName: city?.name })}>
+                    <Text style={styles.pointDetailButtonText}>VER DETALLE DEL PUNTO</Text>
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -211,7 +249,9 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
         <View style={styles.sectionRow}>
           <View style={styles.assetBox}>
             <Text style={styles.reportTitle}>Fotos del evento ({photos.length})</Text>
-            <Text style={styles.helperText}>Cargá evidencia visual. Queda persistida para que el ejecutivo la vea después.</Text>
+            <Text style={styles.helperText}>Cargá evidencia visual. Queda persistida en backend/base de datos para que el ejecutivo la vea después.</Text>
+            <Text style={styles.helperHint}>Formatos válidos: {VALID_PHOTO_FORMATS_LABEL}.</Text>
+            <Text style={styles.helperHint}>Tamaño máximo por foto: {MAX_PHOTO_SIZE_MB} MB.</Text>
             {photos.length > 0 ? (
               <Image source={{ uri: photos[photos.length - 1].uri }} style={styles.latestPhoto} />
             ) : (
@@ -229,7 +269,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
 
           <View style={styles.reportBox}>
             <Text style={styles.reportTitle}>Informes del coordinador ({reports.length})</Text>
-            <Text style={styles.helperText}>Registrá el cierre operativo del evento. Podés cargar más de un informe.</Text>
+            <Text style={styles.helperText}>Registrá el cierre operativo del evento. Podés cargar más de un informe y queda persistido para consulta del ejecutivo.</Text>
 
             <Field label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
             <View style={styles.doubleColumn}>
@@ -285,9 +325,26 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           </View>
         </View>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleContactExecutive}>
-          <Text style={styles.primaryButtonText}>CONTACTAR AL EJECUTIVO</Text>
-        </TouchableOpacity>
+        <View style={styles.contactSection}>
+          <Text style={styles.sectionTitle}>Contactar al ejecutivo</Text>
+          <Text style={styles.helperText}>Evento creado por: {currentEvent?.executiveContact?.fullName || currentEvent?.executiveContact?.username || 'No disponible'}</Text>
+          <View style={styles.rowButtons}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, !hasDirectContactPhone(currentEvent?.executiveContact) && styles.disabledButton]}
+              onPress={() => handleContactExecutive('call')}
+              disabled={!hasDirectContactPhone(currentEvent?.executiveContact)}
+            >
+              <Text style={styles.secondaryButtonText}>LLAMAR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, !hasDirectContactPhone(currentEvent?.executiveContact) && styles.disabledButton]}
+              onPress={() => handleContactExecutive('whatsapp')}
+              disabled={!hasDirectContactPhone(currentEvent?.executiveContact)}
+            >
+              <Text style={styles.secondaryButtonText}>WHATSAPP</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>REGRESAR A EVENTOS</Text>
@@ -317,6 +374,46 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           </View>
         </View>
       </Modal>
+
+      <Modal visible={Boolean(selectedPoint)} transparent animationType="fade" onRequestClose={() => setSelectedPoint(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{selectedPoint?.establishment || 'Detalle del punto'}</Text>
+            <View style={styles.pointDetailContent}>
+              <Text style={styles.modalInfoText}>Ciudad: {selectedPoint?.cityName || 'Sin dato'}</Text>
+              <Text style={styles.modalInfoText}>Dirección: {selectedPoint?.address || 'Sin dato'}</Text>
+              <Text style={styles.modalInfoText}>Contacto local: {selectedPoint?.contact || 'Sin dato'}</Text>
+              <Text style={styles.modalInfoText}>Teléfono local: {selectedPoint?.phone || 'Sin dato'}</Text>
+              <Text style={styles.modalInfoText}>Horario: {formatTimeLabel(selectedPoint?.startTime)} - {formatTimeLabel(selectedPoint?.endTime)}</Text>
+              <Text style={styles.modalInfoText}>Equipo asignado: {selectedPoint?.assignedStaff?.length || 0}</Text>
+              {(selectedPoint?.assignedStaff || []).map((staffMember) => (
+                <Text key={staffMember.id} style={styles.staffItemDark}>• {staffMember.name} · {staffMember.category}</Text>
+              ))}
+            </View>
+
+            <View style={styles.rowButtons}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, !hasDirectContactPhone(selectedPoint) && styles.disabledButton]}
+                onPress={() => handleContactPoint(selectedPoint, 'call')}
+                disabled={!hasDirectContactPhone(selectedPoint)}
+              >
+                <Text style={styles.secondaryButtonText}>LLAMAR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, !hasDirectContactPhone(selectedPoint) && styles.disabledButton]}
+                onPress={() => handleContactPoint(selectedPoint, 'whatsapp')}
+                disabled={!hasDirectContactPhone(selectedPoint)}
+              >
+                <Text style={styles.secondaryButtonText}>WHATSAPP</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.primaryButton} onPress={() => setSelectedPoint(null)}>
+              <Text style={styles.primaryButtonText}>CERRAR</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -333,16 +430,22 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
   cityCard: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14, gap: 10 },
   cityName: { color: '#FFCC80', fontSize: 18, fontWeight: 'bold' },
+  cityMeta: { color: '#EFEBE9', fontSize: 12 },
   pointCard: { backgroundColor: 'rgba(0,0,0,0.14)', borderRadius: 14, padding: 12, gap: 5 },
   pointTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   pointText: { color: '#F3F4F6', fontSize: 13 },
   staffItem: { color: '#FDE68A', fontSize: 12, marginLeft: 6 },
+  staffItemDark: { color: '#6D4C41', fontSize: 12, marginLeft: 6 },
+  pointDetailButton: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#FFCC80', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  pointDetailButtonText: { color: '#4E342E', fontSize: 12, fontWeight: 'bold' },
   sectionRow: { gap: 14 },
   assetBox: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, gap: 10 },
   latestPhoto: { width: '100%', height: 180, borderRadius: 14, resizeMode: 'cover' },
   helperText: { color: '#EFEBE9', fontSize: 13, lineHeight: 18 },
+  helperHint: { color: '#FDE68A', fontSize: 12, lineHeight: 16 },
   rowButtons: { flexDirection: 'row', gap: 10 },
   secondaryButton: { flex: 1, backgroundColor: '#D7CCC8', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  disabledButton: { opacity: 0.55 },
   secondaryButtonText: { color: '#3E2723', fontWeight: 'bold' },
   reportBox: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, gap: 10 },
   reportTitle: { color: '#FFF', fontSize: 17, fontWeight: 'bold' },
@@ -362,11 +465,14 @@ const styles = StyleSheet.create({
   reportCardContent: { color: '#F3F4F6', fontSize: 13 },
   primaryButton: { backgroundColor: '#FFCC80', borderRadius: 28, paddingVertical: 15, alignItems: 'center' },
   primaryButtonText: { color: '#4E342E', fontWeight: 'bold' },
+  contactSection: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, gap: 10 },
   backButton: { backgroundColor: '#D1D5DB', borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
   backButtonText: { color: '#333', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
   modalCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, maxHeight: '80%' },
   modalTitle: { color: '#4E342E', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
+  modalInfoText: { color: '#4B5563', fontSize: 14 },
+  pointDetailContent: { gap: 8, marginBottom: 18 },
   galleryContent: { gap: 12 },
   modalEmptyText: { color: '#6B7280', textAlign: 'center' },
   galleryCard: { gap: 6 },

@@ -251,6 +251,9 @@ app.post('/api/events/:id/photos', asyncHandler(async (req, res) => {
   const updatedEvent = await req.app.locals.repository.addCoordinatorPhoto(req.params.id, {
     authorUserId: Number(req.body.authorUserId),
     uri: normalizeString(req.body.uri),
+    mimeType: normalizeString(req.body.mimeType),
+    fileName: normalizeString(req.body.fileName),
+    fileSize: req.body.fileSize == null ? null : Number(req.body.fileSize),
   });
 
   if (updatedEvent === false) {

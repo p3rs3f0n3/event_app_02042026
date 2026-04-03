@@ -1,9 +1,9 @@
 const INITIAL_DB = {
   users: [
-    { id: 1, username: 'admin', password: 'ChangeMe.Admin.123', fullName: 'Administrador Base', role: 'ADMIN' },
-    { id: 2, username: 'ejecutivo', password: 'ChangeMe.Ejecutivo.123', fullName: 'Ejecutivo Base', role: 'EJECUTIVO' },
-    { id: 3, username: 'coord', password: 'ChangeMe.Coordinador.123', fullName: 'Coordinador Base', role: 'COORDINADOR' },
-    { id: 4, username: 'cliente', password: 'ChangeMe.Cliente.123', fullName: 'Cliente Base', role: 'CLIENTE' },
+    { id: 1, username: 'admin', password: 'ChangeMe.Admin.123', fullName: 'Administrador Base', phone: '3005550101', whatsappPhone: '3005550101', email: 'admin@eventapp.local', role: 'ADMIN' },
+    { id: 2, username: 'ejecutivo', password: 'ChangeMe.Ejecutivo.123', fullName: 'Ejecutivo Base', phone: '3005550202', whatsappPhone: '3005550202', email: 'ejecutivo@eventapp.local', role: 'EJECUTIVO' },
+    { id: 3, username: 'coord', password: 'ChangeMe.Coordinador.123', fullName: 'Coordinador Base', phone: '3005550303', whatsappPhone: '3005550303', email: 'coord@eventapp.local', role: 'COORDINADOR' },
+    { id: 4, username: 'cliente', password: 'ChangeMe.Cliente.123', fullName: 'Cliente Base', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente@eventapp.local', role: 'CLIENTE' },
   ],
   coordinators: [
     { id: 1, name: 'Isabella Barreiro J.', cedula: '31572804', address: 'Cra 28 No 72', phone: '3116833760', rating: 5, photo: 'https://i.pravatar.cc/150?u=isabella', city: 'Bogotá' },

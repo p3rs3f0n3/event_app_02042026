@@ -2,6 +2,15 @@ const isNonEmptyString = (value) => typeof value === 'string' && value.trim().le
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
+const MAX_COORDINATOR_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_COORDINATOR_PHOTO_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
 
 const validateLoginPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -92,6 +101,22 @@ const validateCoordinatorPhotoPayload = (payload) => {
     return 'La foto debe ser una URL válida o una imagen en base64';
   }
 
+   const normalizedMimeType = normalizeString(payload.mimeType).toLowerCase();
+   if (normalizedMimeType && !ALLOWED_COORDINATOR_PHOTO_MIME_TYPES.has(normalizedMimeType)) {
+    return 'Formato de foto no soportado. Usá JPG, PNG, WEBP o HEIC';
+   }
+
+   if (payload.fileSize != null) {
+    const fileSize = Number(payload.fileSize);
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return 'El tamaño de la foto es inválido';
+    }
+
+    if (fileSize > MAX_COORDINATOR_PHOTO_SIZE_BYTES) {
+      return 'La foto supera el límite de 10 MB';
+    }
+   }
+
   return null;
 };
 
@@ -124,6 +149,8 @@ const validateCoordinatorReportPayload = (payload) => {
 };
 
 module.exports = {
+  ALLOWED_COORDINATOR_PHOTO_MIME_TYPES,
+  MAX_COORDINATOR_PHOTO_SIZE_BYTES,
   badRequest: (res, message) => res.status(400).json({ message }),
   normalizeString,
   validateCoordinatorPhotoPayload,
