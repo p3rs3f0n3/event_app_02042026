@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useEffect } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LockKeyhole, ShieldCheck, UserRound, Wifi } from 'lucide-react-native';
 
@@ -17,6 +18,8 @@ const LoginScreen = ({ onLogin, appConfig }) => {
   const [showConfig, setShowConfig] = useState(false);
   const [newIp, setNewIp] = useState(getBaseUrl());
   const [brandTapCount, setBrandTapCount] = useState(0);
+  const [healthStatus, setHealthStatus] = useState('pendiente');
+  const diagnosticMode = process.env.EXPO_PUBLIC_DIAGNOSTIC === 'true';
   const metrics = useResponsiveMetrics();
   const palette = getAppPalette();
   const styles = useMemo(() => createStyles(palette, metrics), [palette, metrics]);
@@ -38,7 +41,9 @@ const LoginScreen = ({ onLogin, appConfig }) => {
       const user = await login(username, password);
       onLogin(user);
     } catch (err) {
-      setError(typeof err === 'string' ? err : 'No pudimos iniciar sesión. Revisá tus credenciales e intentá de nuevo.');
+      const message = typeof err === 'string' ? err : 'No pudimos iniciar sesión. Revisá tus credenciales e intentá de nuevo.';
+      const diagnosticSuffix = diagnosticMode ? ` [baseURL=${getBaseUrl()}]` : '';
+      setError(`${message}${diagnosticSuffix}`);
     } finally {
       setLoading(false);
     }
@@ -67,6 +72,33 @@ const LoginScreen = ({ onLogin, appConfig }) => {
     }
     setBrandTapCount(nextCount);
   };
+
+  useEffect(() => {
+    if (!diagnosticMode) {
+      return;
+    }
+
+    let active = true;
+
+    const runHealthCheck = async () => {
+      try {
+        const response = await fetch(`${getBaseUrl()}/health`);
+        const text = await response.text();
+
+        if (!active) return;
+        setHealthStatus(`GET /health -> ${response.status} ${text}`);
+      } catch (error) {
+        if (!active) return;
+        setHealthStatus(`GET /health error -> ${error?.message || 'desconocido'}`);
+      }
+    };
+
+    runHealthCheck();
+
+    return () => {
+      active = false;
+    };
+  }, [diagnosticMode]);
 
   return (
     <View style={styles.container}>
@@ -112,6 +144,14 @@ const LoginScreen = ({ onLogin, appConfig }) => {
             </View>
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            {diagnosticMode ? (
+              <View style={styles.diagnosticBox}>
+                <Text style={styles.diagnosticTitle}>Modo diagnóstico</Text>
+                <Text style={styles.diagnosticText}>Base URL: {getBaseUrl()}</Text>
+                <Text style={styles.diagnosticText}>{healthStatus}</Text>
+              </View>
+            ) : null}
 
             <AppButton title={loading ? 'INGRESANDO...' : 'INGRESAR'} onPress={handleLogin} disabled={loading} />
             {loading ? <ActivityIndicator color={palette.hero} style={styles.loader} /> : null}
@@ -187,6 +227,9 @@ const createStyles = (palette, metrics) => StyleSheet.create({
   inputShell: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: palette.inputBorder, paddingHorizontal: 14, marginBottom: 15 },
   input: { flex: 1, paddingVertical: 15, fontSize: 16, color: COLORS.brand.body },
   errorText: { color: palette.errorText, marginBottom: 15, fontWeight: '700' },
+  diagnosticBox: { backgroundColor: '#F8FAFC', borderRadius: 14, borderWidth: 1, borderColor: palette.inputBorder, padding: 12, marginBottom: 15 },
+  diagnosticTitle: { color: COLORS.brand.body, fontWeight: '800', marginBottom: 6 },
+  diagnosticText: { color: palette.textMuted, fontSize: 12 },
   loader: { marginTop: SPACING.sm },
   secondaryCopy: { color: palette.textMuted, fontSize: 12, lineHeight: 18, marginTop: 16, textAlign: 'center' },
   footer: { alignItems: 'center', marginTop: 24 },

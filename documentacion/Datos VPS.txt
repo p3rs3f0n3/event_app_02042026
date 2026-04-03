@@ -43,6 +43,7 @@ Contenedores
 
 API pública
 http://66.94.101.47:3001/api
+http://66.94.101.47:3001/api/health
 Verificación real
 Respondió bien:
 {"status":"ok","repositoryDriver":"postgres"}

@@ -2,8 +2,21 @@ import axios from 'axios';
 
 // Singleton for API URL Management
 let apiInstance = null;
-const DEFAULT_API_URL = 'http://localhost:3001/api';
+const DEFAULT_API_URL = 'https://66.94.101.47.sslip.io/api';
 let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+
+const extractApiErrorMessage = (error) => {
+  const responseMessage = error?.response?.data?.message;
+  if (responseMessage) {
+    return responseMessage;
+  }
+
+  if (error?.message) {
+    return error.message;
+  }
+
+  return 'No se pudo conectar con el servicio';
+};
 
 const getAPI = () => {
   if (!apiInstance) {
@@ -29,7 +42,7 @@ export const login = async (username, password) => {
       username: res.data?.username || username,
     };
   } catch (error) {
-    throw error.response?.data?.message || 'No se pudo conectar con el servicio';
+    throw extractApiErrorMessage(error);
   }
 };
 
