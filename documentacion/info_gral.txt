@@ -1,4 +1,5 @@
-
+Figma
+https://www.figma.com/design/7dqUtG6GXKzrUKnPkukQ1z/EventApp?node-id=0-1&p=f&t=agAsXlA9Bbf350yC-0
 
 Directorio instalación
 C:\Program Files\PostgreSQL\18
@@ -66,3 +67,11 @@ Clientes
 Admin
 - admin / Admin.EventApp.2026
 
+
+para poder desplegar, me tocó crear cuenta
+https://expo.dev/signup
+nrodan@gmail.com
+L2@4VECx&K^q
+
+
+se despliega el back en la vps

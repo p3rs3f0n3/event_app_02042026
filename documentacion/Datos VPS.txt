@@ -1,0 +1,57 @@
+Customer ID at Contabo is: 14378626.
+
+ssh maquina
+root
+hLhlT2x2zv6qUl3mU9
+
+You can add SSH keys later in the Control Panel.
+Your password won’t be emailed.
+Keep it safe for Windows access. If lost, a reinstall is required.
+
+the Customer Control Panel (CCP)
+You can log in at https://my.contabo.com using your credentials below:
+Login: njordancastillo@hotmail.com
+Password: PFD9EVf5GvYbemuM  cambia por esta : tCUhL6Pyau!V6Cq
+
+doble factor de autenticación
+Secret: 3HBC5U75DH7AN2AE
+Recovery Code: bf25243449279ebc
+
+Cloud VPS 10 SSD (no setup)
+IP: 66.94.101.47
+IPv6: 2605:a142:2291:1181::1
+Location: New York
+VNC: 66.94.104.43:63051
+Host system: 19043
+OS: Ubuntu 24.04
+ssh root@66.94.101.47  --> hLhlT2x2zv6qUl3mU9
+
+mail
+http://mojarrastudio.com/webmail
+Username:	agent_mojarra@mojarrastudio.com
+Password:	SuperNelly2025
+POP/IMAP Server:	mail.mojarrastudio.com
+SMTP Server:	mail.mojarrastudio.com port 587
+
+Monté EventApp como un stack Docker aislado en:
+
+/root/projects/eventapp
+
+Contenedores
+- eventapp-postgres
+- eventapp-backend
+
+API pública
+http://66.94.101.47:3001/api
+Verificación real
+Respondió bien:
+{"status":"ok","repositoryDriver":"postgres"}
+
+# Dónde quedó el despliegue
+### Archivos importantes creados
+- `backend/Dockerfile`
+- `deploy/docker-compose.vps.yml`
+- `deploy/eventapp.vps.env.example`
+### En la VPS
+- `/root/projects/eventapp`
+

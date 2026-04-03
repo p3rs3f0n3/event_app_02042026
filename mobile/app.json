@@ -1,8 +1,10 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "EventApp",
+    "slug": "eventapp",
+    "owner": "mojarras",
     "version": "1.0.0",
+    "scheme": "eventapp",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,6 +18,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.eventapp.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -24,6 +27,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9b5ef2b5-01a3-44ef-b8d3-db9adf3cf8d2"
+      }
     }
   }
 }

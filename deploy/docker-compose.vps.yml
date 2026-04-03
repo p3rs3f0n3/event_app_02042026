@@ -1,0 +1,40 @@
+services:
+  eventapp-postgres:
+    image: postgres:16-alpine
+    container_name: eventapp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - eventapp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  eventapp-backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: eventapp-backend
+    restart: unless-stopped
+    depends_on:
+      eventapp-postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      REPOSITORY_DRIVER: postgres
+      POSTGRES_HOST: eventapp-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${EVENTAPP_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_SSL: false
+    ports:
+      - "3001:3001"
+
+volumes:
+  eventapp_postgres_data:
