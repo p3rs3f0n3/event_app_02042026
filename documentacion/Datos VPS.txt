@@ -56,3 +56,4 @@ Respondió bien:
 ### En la VPS
 - `/root/projects/eventapp`
 
+https://66.94.101.47.sslip.io/api
