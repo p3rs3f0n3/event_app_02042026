@@ -1,5 +1,4 @@
 const DEFAULT_PROFILE_PHOTO = 'https://i.pravatar.cc/150?u=eventapp';
-const STAFF_CATEGORIES = ['BARISTAS', 'IMPULSADORES', 'LOGISTICOS'];
 
 const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '');
@@ -110,7 +109,6 @@ const sanitizeStaffAdminRecord = (staffMember) => ({
 
 module.exports = {
   DEFAULT_PROFILE_PHOTO,
-  STAFF_CATEGORIES,
   isDocumentEquivalent,
   normalizeComparableValue,
   normalizeDocumentValue,

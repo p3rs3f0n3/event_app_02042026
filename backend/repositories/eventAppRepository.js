@@ -17,6 +17,12 @@ const {
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
 } = require('../utils/adminRecords');
+const {
+  isStaffCategoryMatch,
+  mergeStaffCategoryCatalog,
+  normalizeStaffCategoryName,
+  sanitizeStaffCategoryRecord,
+} = require('../utils/staffCategories');
 
 const DEFAULT_EXECUTIVE_USER_ID = 2;
 
@@ -136,6 +142,7 @@ const normalizeDb = (db, initialDb) => ({
   clients: buildClientsDb({ db, initialDb }),
   coordinators: Array.isArray(db?.coordinators) && db.coordinators.length > 0 ? db.coordinators.map(normalizeCoordinator) : clone(initialDb.coordinators).map(normalizeCoordinator),
   staff: Array.isArray(db?.staff) && db.staff.length > 0 ? db.staff.map(normalizeStaffMember) : clone(initialDb.staff).map(normalizeStaffMember),
+  staffCategories: buildStaffCategoriesDb({ db, initialDb }),
   cities: Array.isArray(db?.cities) && db.cities.length > 0 ? db.cities.map(normalizeCity) : clone(initialDb.cities),
   auditLogs: Array.isArray(db?.auditLogs) ? db.auditLogs.map((auditLog) => sanitizeAuditLogRecord({ auditLog })) : [],
   events: Array.isArray(db?.events) ? db.events : [],
@@ -196,6 +203,13 @@ function buildClientsDb({ db, initialDb }) {
         isActive: user.isActive !== false,
       };
     });
+}
+
+function buildStaffCategoriesDb({ db, initialDb }) {
+  return mergeStaffCategoryCatalog({
+    categories: Array.isArray(db?.staffCategories) ? db.staffCategories : (Array.isArray(initialDb?.staffCategories) ? clone(initialDb.staffCategories) : []),
+    staff: Array.isArray(db?.staff) ? db.staff : (Array.isArray(initialDb?.staff) ? clone(initialDb.staff) : []),
+  });
 }
 
 class EventAppRepository {
@@ -399,6 +413,44 @@ class EventAppRepository {
     }
 
     return result;
+  }
+
+  getStaffCategories({ search } = {}) {
+    return this.db.staffCategories.filter((category) => isStaffCategoryMatch(category, search));
+  }
+
+  findStaffCategoryByName(name) {
+    const normalizedName = normalizeStaffCategoryName(name);
+    if (!normalizedName) {
+      return null;
+    }
+
+    const category = this.db.staffCategories.find((item) => normalizeStaffCategoryName(item.name) === normalizedName) || null;
+    return category ? sanitizeStaffCategoryRecord(category) : null;
+  }
+
+  createStaffCategory(name) {
+    const normalizedName = normalizeStaffCategoryName(name);
+    if (!normalizedName) {
+      return { errorCode: 'INVALID_PAYLOAD', message: 'El nombre de la categoría es obligatorio.' };
+    }
+
+    const existingCategory = this.findStaffCategoryByName(normalizedName);
+    if (existingCategory) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'La categoría de staff ya existe.' };
+    }
+
+    const newCategory = sanitizeStaffCategoryRecord({
+      id: this.#nextId(this.db.staffCategories),
+      name: normalizedName,
+      createdAt: new Date().toISOString(),
+    });
+
+    this.db.staffCategories.push(newCategory);
+    this.db.staffCategories.sort((left, right) => left.name.localeCompare(right.name, 'es'));
+    this.save();
+
+    return newCategory;
   }
 
   createClient(payload) {
@@ -700,12 +752,13 @@ class EventAppRepository {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
     }
 
+    const categoryRecord = this.#ensureStaffCategory(payload.category);
     const newStaffMember = normalizeStaffMember({
       id: this.#nextId(this.db.staff),
       name: payload.fullName,
       cedula: payload.cedula,
       city: city.name,
-      category: payload.category,
+      category: categoryRecord.name,
       photo: DEFAULT_PROFILE_PHOTO,
       clothingSize: payload.clothingSize || null,
       shoeSize: payload.shoeSize || null,
@@ -757,12 +810,13 @@ class EventAppRepository {
     }
 
     const previousRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
+    const categoryRecord = this.#ensureStaffCategory(payload.category);
     this.db.staff[staffIndex] = normalizeStaffMember({
       ...this.db.staff[staffIndex],
       name: payload.fullName,
       cedula: payload.cedula,
       city: city.name,
-      category: payload.category,
+      category: categoryRecord.name,
       clothingSize: payload.clothingSize || null,
       shoeSize: payload.shoeSize || null,
       measurements: payload.measurements || null,
@@ -1032,6 +1086,26 @@ class EventAppRepository {
       },
       actor: actorUserId ? this.findUserById(actorUserId) : null,
     }));
+  }
+
+  #ensureStaffCategory(name) {
+    const normalizedName = normalizeStaffCategoryName(name);
+    const existingCategory = this.findStaffCategoryByName(normalizedName);
+
+    if (existingCategory) {
+      return existingCategory;
+    }
+
+    const newCategory = sanitizeStaffCategoryRecord({
+      id: this.#nextId(this.db.staffCategories),
+      name: normalizedName,
+      createdAt: new Date().toISOString(),
+    });
+
+    this.db.staffCategories.push(newCategory);
+    this.db.staffCategories.sort((left, right) => left.name.localeCompare(right.name, 'es'));
+
+    return newCategory;
   }
 }
 

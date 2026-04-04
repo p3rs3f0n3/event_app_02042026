@@ -17,6 +17,12 @@ const {
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
 } = require('../utils/adminRecords');
+const {
+  isStaffCategoryMatch,
+  normalizeStaffCategoryCode,
+  normalizeStaffCategoryName,
+  sanitizeStaffCategoryRecord,
+} = require('../utils/staffCategories');
 
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
@@ -100,7 +106,70 @@ const mapEventRow = (row, clients = []) => ({
   manualInactivatedByUserId: row.manual_inactivated_by_user_id,
 });
 
+const executeQuery = (client, text, params = []) => (client ? client.query(text, params) : query(text, params));
+
 class PostgresEventAppRepository {
+  async #syncStaffCategories(client = null) {
+    const staffResult = await executeQuery(
+      client,
+      `
+        SELECT DISTINCT category
+        FROM staff
+        WHERE TRIM(COALESCE(category, '')) <> ''
+      `,
+    );
+
+    for (const row of staffResult.rows) {
+      await this.#ensureStaffCategory(row.category, client);
+    }
+  }
+
+  async #findStaffCategoryByName(name, client = null) {
+    const normalizedName = normalizeStaffCategoryName(name);
+    if (!normalizedName) {
+      return null;
+    }
+
+    const result = await executeQuery(
+      client,
+      `
+        SELECT id, name, code, is_active AS "isActive", created_at AS "createdAt"
+        FROM staff_categories
+        WHERE LOWER(name) = LOWER($1)
+           OR LOWER(code) = LOWER($2)
+        LIMIT 1
+      `,
+      [normalizedName, normalizeStaffCategoryCode(normalizedName)],
+    );
+
+    return result.rows[0] ? sanitizeStaffCategoryRecord(result.rows[0]) : null;
+  }
+
+  async #ensureStaffCategory(name, client = null) {
+    const normalizedName = normalizeStaffCategoryName(name);
+    const existingCategory = await this.#findStaffCategoryByName(normalizedName, client);
+    if (existingCategory) {
+      return existingCategory;
+    }
+
+    const createdCategory = await executeQuery(
+      client,
+      `
+        INSERT INTO staff_categories (name, code, is_active)
+        VALUES ($1, $2, TRUE)
+        ON CONFLICT DO NOTHING
+        RETURNING id, name, code, is_active AS "isActive", created_at AS "createdAt"
+      `,
+      [normalizedName, normalizeStaffCategoryCode(normalizedName)],
+    );
+
+    if (createdCategory.rowCount === 0) {
+      return this.#findStaffCategoryByName(normalizedName, client);
+    }
+
+    return sanitizeStaffCategoryRecord(createdCategory.rows[0]);
+  }
+
   async ping() {
     await query('SELECT 1');
   }
@@ -396,6 +465,8 @@ class PostgresEventAppRepository {
   }
 
   async getStaff({ city, category } = {}) {
+    await this.#syncStaffCategories();
+
     const result = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo,
@@ -410,6 +481,43 @@ class PostgresEventAppRepository {
     );
 
     return result.rows;
+  }
+
+  async getStaffCategories({ search } = {}) {
+    await this.#syncStaffCategories();
+
+    const result = await query(
+      `
+        SELECT id, name, code, is_active AS "isActive", created_at AS "createdAt"
+        FROM staff_categories
+        WHERE ($1::text IS NULL OR LOWER(name) LIKE LOWER($2) OR LOWER(code) LIKE LOWER($2))
+        ORDER BY name ASC
+      `,
+      [normalizeString(search) || null, `%${normalizeString(search || '').toLowerCase()}%`],
+    );
+
+    return result.rows.filter((category) => isStaffCategoryMatch(category, search)).map(sanitizeStaffCategoryRecord);
+  }
+
+  async findStaffCategoryByName(name) {
+    await this.#syncStaffCategories();
+    return this.#findStaffCategoryByName(name);
+  }
+
+  async createStaffCategory(name) {
+    await this.#syncStaffCategories();
+
+    const normalizedName = normalizeStaffCategoryName(name);
+    if (!normalizedName) {
+      return { errorCode: 'INVALID_PAYLOAD', message: 'El nombre de la categoría es obligatorio.' };
+    }
+
+    const existingCategory = await this.#findStaffCategoryByName(normalizedName);
+    if (existingCategory) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'La categoría de staff ya existe.' };
+    }
+
+    return this.#ensureStaffCategory(normalizedName);
   }
 
   async createClient(payload) {
@@ -871,6 +979,7 @@ class PostgresEventAppRepository {
 
     try {
       await client.query('BEGIN');
+      const categoryRecord = await this.#ensureStaffCategory(payload.category, client);
 
       const result = await client.query(
         `
@@ -878,7 +987,7 @@ class PostgresEventAppRepository {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [payload.fullName, payload.cedula, cityResult.rows[0].id, payload.category, DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
       );
 
       const createdRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
@@ -955,6 +1064,7 @@ class PostgresEventAppRepository {
 
     try {
       await client.query('BEGIN');
+      const categoryRecord = await this.#ensureStaffCategory(payload.category, client);
 
       const result = await client.query(
         `
@@ -970,7 +1080,7 @@ class PostgresEventAppRepository {
           WHERE id = $1
           RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, payload.category, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
       );
 
       const updatedRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });

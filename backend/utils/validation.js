@@ -5,7 +5,6 @@ const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 const isValidEmail = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const MAX_COORDINATOR_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_STAFF_CATEGORIES = new Set(['BARISTAS', 'IMPULSADORES', 'LOGISTICOS']);
 const ALLOWED_COORDINATOR_PHOTO_MIME_TYPES = new Set([
   'image/jpeg',
   'image/jpg',
@@ -286,7 +285,6 @@ const validateAdminStaffPayload = (payload) => {
   if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
   if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
-  if (!ALLOWED_STAFF_CATEGORIES.has(normalizeString(payload.category).toUpperCase())) return 'La categoría de staff no es válida';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
   return null;
@@ -301,7 +299,6 @@ const validateAdminStaffUpdatePayload = (payload) => {
   if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
   if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
-  if (!ALLOWED_STAFF_CATEGORIES.has(normalizeString(payload.category).toUpperCase())) return 'La categoría de staff no es válida';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
   return null;

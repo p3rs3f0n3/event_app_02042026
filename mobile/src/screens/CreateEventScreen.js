@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert, Platform, Image, ActivityIndicator, Modal } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { createEvent, updateEvent, getClients, getCoordinators, getStaff, getColombiaCities, addColombiaCity } from '../api/api';
+import { createEvent, updateEvent, getClients, getCoordinators, getStaff, getStaffCategories, getColombiaCities, addColombiaCity } from '../api/api';
 import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const isOtherCityOption = (city) => Boolean(city?.isOther || String(city?.name || '').trim().toUpperCase() === 'OTRO');
@@ -96,7 +96,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [staffInDetail, setStaffInDetail] = useState(null);
-  const categories = ['BARISTAS', 'IMPULSADORES', 'LOGISTICOS'];
+  const [categories, setCategories] = useState([]);
 
   const [currentPoint, setCurrentPoint] = useState(createEmptyPoint());
   const selectedClient = useMemo(
@@ -165,8 +165,9 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   useEffect(() => {
     const fetchInitial = async () => {
       try {
-        const [cities, clients] = await Promise.all([getColombiaCities(), getClients()]);
+        const [cities, clients, staffCategories] = await Promise.all([getColombiaCities(), getClients(), getStaffCategories()]);
         setApiLists(prev => ({ ...prev, cities, clients }));
+        setCategories(Array.isArray(staffCategories) ? staffCategories.map((category) => category.name) : []);
       } catch (error) { Alert.alert('Error', 'No se cargaron ciudades'); } finally { setLoading(false); }
     };
     fetchInitial();
@@ -427,6 +428,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           <View style={styles.form}>
             <Text style={styles.stepTitle}>Apoyo - {currentPoint.coordinator?.name}</Text>
             <View style={styles.catWrap}>{categories.map(cat => (<TouchableOpacity key={cat} style={[styles.catItem, selectedCategory === cat && {backgroundColor: '#FFB300'}]} onPress={() => fetchStaffByCategory(cat)}><Text style={styles.catTxt}>{cat}</Text></TouchableOpacity>))}</View>
+            {!categories.length ? <Text style={styles.helperText}>No hay categorías disponibles para esta ciudad todavía.</Text> : null}
             <View style={styles.staffList}>
               {selectedCategory && apiLists.staff.map(item => {
                 const exists = currentPoint.assignedStaff.find(p => p.id === item.id);

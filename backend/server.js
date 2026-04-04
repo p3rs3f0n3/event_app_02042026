@@ -21,6 +21,7 @@ const {
   validateLoginPayload,
   validateManualInactivationPayload,
 } = require('./utils/validation');
+const { normalizeStaffCategoryName } = require('./utils/staffCategories');
 
 const app = express();
 
@@ -235,6 +236,10 @@ app.get('/api/staff', asyncHandler(async (req, res) => {
   }));
 }));
 
+app.get('/api/staff-categories', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getStaffCategories({ search: normalizeString(req.query?.q) }));
+}));
+
 app.get('/api/admin/coordinators', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getAdminCoordinators());
 }));
@@ -337,6 +342,30 @@ app.get('/api/admin/staff/by-cedula', asyncHandler(async (req, res) => {
   });
 }));
 
+app.get('/api/admin/staff-categories', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getStaffCategories({ search: normalizeString(req.query?.q) }));
+}));
+
+app.post('/api/admin/staff-categories', asyncHandler(async (req, res) => {
+  const name = normalizeStaffCategoryName(req.body?.name);
+
+  if (!name) {
+    return badRequest(res, 'El nombre de la categoría es obligatorio');
+  }
+
+  const result = await req.app.locals.repository.createStaffCategory(name);
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_PAYLOAD') {
+    return badRequest(res, result.message);
+  }
+
+  return res.status(201).json(result);
+}));
+
 app.post('/api/admin/staff', asyncHandler(async (req, res) => {
   const validationError = validateAdminStaffPayload(req.body);
   if (validationError) {
@@ -348,7 +377,7 @@ app.post('/api/admin/staff', asyncHandler(async (req, res) => {
     fullName: normalizeString(req.body.fullName),
     cedula: normalizeString(req.body.cedula),
     city: normalizeString(req.body.city),
-    category: normalizeString(req.body.category).toUpperCase(),
+    category: normalizeStaffCategoryName(req.body.category),
     clothingSize: normalizeString(req.body.clothingSize),
     shoeSize: normalizeString(req.body.shoeSize),
     measurements: normalizeString(req.body.measurements),
@@ -376,7 +405,7 @@ app.put('/api/admin/staff/:id', asyncHandler(async (req, res) => {
     fullName: normalizeString(req.body.fullName),
     cedula: normalizeString(req.body.cedula),
     city: normalizeString(req.body.city),
-    category: normalizeString(req.body.category).toUpperCase(),
+    category: normalizeStaffCategoryName(req.body.category),
     clothingSize: normalizeString(req.body.clothingSize),
     shoeSize: normalizeString(req.body.shoeSize),
     measurements: normalizeString(req.body.measurements),

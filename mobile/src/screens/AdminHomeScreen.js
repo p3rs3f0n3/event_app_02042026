@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
+  createAdminStaffCategory,
   createAdminClient,
   createAdminCoordinator,
   createAdminStaff,
   findAdminClientByNit,
   findAdminCoordinatorByCedula,
   findAdminStaffByCedula,
+  getAdminStaffCategories,
   getAdminClients,
   getAdminCoordinators,
   getAdminStaff,
@@ -21,7 +23,6 @@ import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '
 import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
 import { getUserDisplayName } from '../utils/user';
 
-const STAFF_CATEGORIES = ['BARISTAS', 'IMPULSADORES', 'LOGISTICOS'];
 const LOOKUP_INITIAL_STATE = {
   status: 'idle',
   message: '',
@@ -58,7 +59,7 @@ const INITIAL_STAFF_FORM = {
   fullName: '',
   cedula: '',
   city: '',
-  category: STAFF_CATEGORIES[0],
+  category: '',
   clothingSize: '',
   shoeSize: '',
   measurements: '',
@@ -93,6 +94,7 @@ const InputRow = ({ label, value, onChangeText, placeholder, multiline = false, 
 
 const normalizeNitSearchValue = (value) => String(value || '').trim();
 const normalizeDocumentSearchValue = (value) => String(value || '').trim();
+const normalizeCategoryValue = (value) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
 
 const buildClientFormFromRecord = (client) => ({
   username: client?.username || '',
@@ -122,7 +124,7 @@ const buildStaffFormFromRecord = (staffMember) => ({
   fullName: staffMember?.fullName || '',
   cedula: staffMember?.cedula || '',
   city: staffMember?.city || '',
-  category: staffMember?.category || STAFF_CATEGORIES[0],
+  category: staffMember?.category || '',
   clothingSize: staffMember?.clothingSize || '',
   shoeSize: staffMember?.shoeSize || '',
   measurements: staffMember?.measurements || '',
@@ -174,6 +176,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [activeTab, setActiveTab] = useState('clients');
   const [cities, setCities] = useState([]);
+  const [staffCategories, setStaffCategories] = useState([]);
   const [lists, setLists] = useState({ clients: [], coordinators: [], staff: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,7 +185,10 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [checkingStaffCedula, setCheckingStaffCedula] = useState(false);
   const [feedback, setFeedback] = useState({ tone: 'muted', message: '' });
   const [showCityModal, setShowCityModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [cityTarget, setCityTarget] = useState(null);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const [clientForm, setClientForm] = useState(INITIAL_CLIENT_FORM);
   const [clientLookup, setClientLookup] = useState(LOOKUP_INITIAL_STATE);
   const [coordinatorForm, setCoordinatorForm] = useState(INITIAL_COORDINATOR_FORM);
@@ -209,13 +215,19 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     setStaffLookup(LOOKUP_INITIAL_STATE);
   }, []);
 
+  const isEditingClient = clientLookup.status === 'exists' && Boolean(clientLookup.result?.clientId);
+  const isEditingCoordinator = coordinatorLookup.status === 'exists' && Boolean(coordinatorLookup.result?.id);
+  const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
+  const canEditCoordinatorUserFields = !isEditingCoordinator || Boolean(coordinatorLookup.result?.userId);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [clientList, coordinatorList, staffList, cityList] = await Promise.all([
+      const [clientList, coordinatorList, staffList, categoryList, cityList] = await Promise.all([
         getAdminClients(),
         getAdminCoordinators(),
         getAdminStaff(),
+        getAdminStaffCategories(),
         getColombiaCities(),
       ]);
 
@@ -224,6 +236,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         coordinators: Array.isArray(coordinatorList) ? coordinatorList : [],
         staff: Array.isArray(staffList) ? staffList : [],
       });
+      setStaffCategories(Array.isArray(categoryList) ? categoryList : []);
       setCities(Array.isArray(cityList) ? cityList.filter((city) => !city?.isOther) : []);
     } catch (error) {
       applyFeedback('error', 'No pudimos cargar el módulo administrativo.');
@@ -252,6 +265,53 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
     setShowCityModal(false);
     setCityTarget(null);
+  };
+
+  const filteredStaffCategories = useMemo(() => {
+    if (!categorySearch.trim()) {
+      return staffCategories;
+    }
+
+    const search = normalizeCategoryValue(categorySearch);
+    return staffCategories.filter((category) => normalizeCategoryValue(category.name).includes(search) || normalizeCategoryValue(category.code).includes(search));
+  }, [categorySearch, staffCategories]);
+
+  const hasExactCategoryMatch = useMemo(() => staffCategories.some((category) => normalizeCategoryValue(category.name) === normalizeCategoryValue(categorySearch)), [categorySearch, staffCategories]);
+
+  const openCategoryPicker = () => {
+    setCategorySearch(staffForm.category || '');
+    setShowCategoryModal(true);
+  };
+
+  const handleCategorySelection = (categoryName) => {
+    setStaffForm((current) => ({ ...current, category: categoryName }));
+    setCategorySearch(categoryName);
+    setShowCategoryModal(false);
+  };
+
+  const handleCreateStaffCategory = async () => {
+    const nextCategoryName = normalizeCategoryValue(categorySearch);
+    if (!nextCategoryName) {
+      applyFeedback('error', 'Primero escribí el nombre de la categoría.');
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      const createdCategory = await createAdminStaffCategory(nextCategoryName);
+      setStaffCategories((current) => {
+        const nextItems = [...current, createdCategory];
+        return nextItems.sort((left, right) => left.name.localeCompare(right.name, 'es'));
+      });
+      setStaffForm((current) => ({ ...current, category: createdCategory.name }));
+      setCategorySearch(createdCategory.name);
+      setShowCategoryModal(false);
+      applyFeedback('success', `Categoría ${createdCategory.name} creada y seleccionada.`);
+    } catch (error) {
+      applyFeedback('error', typeof error === 'string' ? error : 'No se pudo crear la categoría.');
+    } finally {
+      setCreatingCategory(false);
+    }
   };
 
   const submitClient = async () => {
@@ -361,11 +421,6 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       setCheckingNit(false);
     }
   };
-
-  const isEditingClient = clientLookup.status === 'exists' && Boolean(clientLookup.result?.clientId);
-  const isEditingCoordinator = coordinatorLookup.status === 'exists' && Boolean(coordinatorLookup.result?.id);
-  const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
-  const canEditCoordinatorUserFields = !isEditingCoordinator || Boolean(coordinatorLookup.result?.userId);
 
   const handleCoordinatorCedulaChange = (value) => {
     setCoordinatorForm((current) => ({ ...current, cedula: value }));
@@ -814,16 +869,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         ) : null}
         <InputRow label="Nombre completo" value={staffForm.fullName} onChangeText={(value) => setStaffForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
         <InputRow label="Ciudad" value={staffForm.city} onPress={() => openCityPicker('staff')} placeholder="Seleccionar ciudad" />
-        <View style={stylesShared.fieldWrap}>
-          <Text style={stylesShared.fieldLabel}>Categoría</Text>
-          <View style={styles.categoryRow}>
-            {STAFF_CATEGORIES.map((category) => (
-              <Pressable key={category} style={[styles.categoryChip, staffForm.category === category && styles.categoryChipActive]} onPress={() => setStaffForm((current) => ({ ...current, category }))}>
-                <Text style={[styles.categoryChipText, staffForm.category === category && styles.categoryChipTextActive]}>{category}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        <InputRow label="Categoría" value={staffForm.category} onPress={openCategoryPicker} placeholder="Buscar o crear categoría" />
+        <Text style={styles.categoryHelperText}>Usamos catálogo administrable: buscás la categoría y, si no existe, la creás desde el mismo flujo.</Text>
         <InputRow label="Talla de ropa" value={staffForm.clothingSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, clothingSize: value }))} placeholder="S, M, L..." />
         <InputRow label="Talla de calzado" value={staffForm.shoeSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, shoeSize: value }))} placeholder="36, 37, 38..." />
         <InputRow label="Medidas" value={staffForm.measurements} onChangeText={(value) => setStaffForm((current) => ({ ...current, measurements: value }))} placeholder="Opcional" />
@@ -948,6 +995,34 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           </SurfaceCard>
         </View>
       </Modal>
+
+      <Modal visible={showCategoryModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <SurfaceCard style={styles.modalCard}>
+            <Text style={styles.cardTitle}>Buscar categoría de staff</Text>
+            <TextInput
+              style={[stylesShared.inputShell, stylesShared.textInput]}
+              value={categorySearch}
+              onChangeText={setCategorySearch}
+              placeholder="Ej: PROTOCOLO, MERCADERISTAS..."
+              placeholderTextColor="#94A3B8"
+            />
+            <ScrollView contentContainerStyle={styles.cityList}>
+              {filteredStaffCategories.map((category) => (
+                <Pressable key={category.id || category.code || category.name} style={[styles.categoryOption, staffForm.category === category.name && styles.categoryOptionActive]} onPress={() => handleCategorySelection(category.name)}>
+                  <Text style={[styles.categoryOptionText, staffForm.category === category.name && styles.categoryOptionTextActive]}>{category.name}</Text>
+                  <Text style={styles.categoryOptionCode}>{category.code}</Text>
+                </Pressable>
+              ))}
+              {!filteredStaffCategories.length ? <Text style={styles.lookupMessage}>No encontramos categorías con ese criterio.</Text> : null}
+            </ScrollView>
+            {normalizeCategoryValue(categorySearch) && !hasExactCategoryMatch ? (
+              <AppButton title={creatingCategory ? 'CREANDO...' : `CREAR ${normalizeCategoryValue(categorySearch)}`} onPress={handleCreateStaffCategory} disabled={creatingCategory} />
+            ) : null}
+            <AppButton title="CERRAR" variant="secondary" onPress={() => setShowCategoryModal(false)} />
+          </SurfaceCard>
+        </View>
+      </Modal>
     </ScreenShell>
   );
 };
@@ -1022,18 +1097,20 @@ const createStyles = (palette) => StyleSheet.create({
   listTitle: { color: palette.text, fontSize: 16, fontWeight: '800' },
   listMeta: { color: palette.textMuted },
   searchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.sm },
-  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  categoryChip: {
-    borderRadius: RADII.pill,
+  categoryHelperText: { color: palette.textMuted, marginTop: -SPACING.xs, lineHeight: 18 },
+  categoryOption: {
+    borderRadius: RADII.md,
     borderWidth: 1,
     borderColor: palette.border,
     backgroundColor: palette.surfaceMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    gap: 4,
   },
-  categoryChipActive: { backgroundColor: '#FFB300', borderColor: '#FFB300' },
-  categoryChipText: { color: palette.text, fontWeight: '700' },
-  categoryChipTextActive: { color: '#1F2937' },
+  categoryOptionActive: { backgroundColor: '#FFF7ED', borderColor: '#FFB300' },
+  categoryOptionText: { color: palette.text, fontWeight: '800' },
+  categoryOptionTextActive: { color: '#1F2937' },
+  categoryOptionCode: { color: palette.textMuted, fontSize: 12 },
   formActionsRow: { flexDirection: 'row', gap: SPACING.sm },
   formActionButton: { flex: 1 },
   inlineNotice: {

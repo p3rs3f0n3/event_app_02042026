@@ -1,4 +1,16 @@
 const INITIAL_DB = {
+  staffCategories: [
+    { id: 1, name: 'ANFITRIONES', code: 'ANFITRIONES' },
+    { id: 2, name: 'BARISTAS', code: 'BARISTAS' },
+    { id: 3, name: 'DEGUSTADORES', code: 'DEGUSTADORES' },
+    { id: 4, name: 'DEMOSTRADORAS', code: 'DEMOSTRADORAS' },
+    { id: 5, name: 'IMPULSADORES', code: 'IMPULSADORES' },
+    { id: 6, name: 'LOGISTICOS', code: 'LOGISTICOS' },
+    { id: 7, name: 'MERCADERISTAS', code: 'MERCADERISTAS' },
+    { id: 8, name: 'MODELOS', code: 'MODELOS' },
+    { id: 9, name: 'PROTOCOLO', code: 'PROTOCOLO' },
+    { id: 10, name: 'SUPERVISORES', code: 'SUPERVISORES' },
+  ],
   users: [
     { id: 1, username: 'admin', password: 'Admin.EventApp.2026', fullName: 'Administrador Base', phone: '3005550101', whatsappPhone: '3005550101', email: 'admin@eventapp.local', role: 'ADMIN' },
     { id: 2, username: 'ejecutivo.ana', password: 'Funcional.EventApp.2026', fullName: 'Ana Torres', phone: '3005550202', whatsappPhone: '3005550202', email: 'ana.torres@eventapp.local', role: 'EJECUTIVO' },

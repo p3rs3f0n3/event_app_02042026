@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS staff (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS staff_categories (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  code VARCHAR(80) NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BIGSERIAL PRIMARY KEY,
   actor_user_id BIGINT REFERENCES users(id),
@@ -132,5 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_cities_name_lower ON cities (LOWER(name));
 CREATE INDEX IF NOT EXISTS idx_coordinators_city_id ON coordinators (city_id);
 CREATE INDEX IF NOT EXISTS idx_staff_city_id ON staff (city_id);
 CREATE INDEX IF NOT EXISTS idx_staff_category ON staff (category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_categories_name_lower ON staff_categories (LOWER(name));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_categories_code_lower ON staff_categories (LOWER(code));
 CREATE INDEX IF NOT EXISTS idx_event_cities_event_id ON event_cities (event_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity_type, entity_id, created_at DESC);
