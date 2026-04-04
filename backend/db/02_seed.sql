@@ -1,11 +1,11 @@
 -- Usuarios base para pruebas funcionales:
--- admin / Admin.EventApp.2026
--- ejecutivo.ana / Funcional.EventApp.2026
--- ejecutivo.bruno / Funcional.EventApp.2026
--- coord / Funcional.EventApp.2026
--- cliente, cliente.alpina, cliente.colcafe, cliente.nutresa / Funcional.EventApp.2026
+-- admin / 123
+-- ejecutivo.ana / 123
+-- ejecutivo.bruno / 123
+-- coord / 123
+-- cliente, cliente.alpina, cliente.colcafe, cliente.nutresa / 123
 
-TRUNCATE TABLE event_cities, events RESTART IDENTITY CASCADE;
+TRUNCATE TABLE audit_logs, event_cities, events, clients RESTART IDENTITY CASCADE;
 
 INSERT INTO roles (code, description)
 VALUES
@@ -17,14 +17,14 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id)
 VALUES
-  ('admin', 'Administrador Base', '3005550101', '3005550101', 'admin@eventapp.local', 'c34c4006901ce07458681f7fe14c4ea3:6c040633789a8fe1c01e3035aaa16c79d31ea8ecf1d89139b9984303d27a2a5722f51d62c90ccc5d940b65e5e51bff9565cb6e91f5a532f17b5f91d2eaa6ce76', (SELECT id FROM roles WHERE code = 'ADMIN')),
-  ('ejecutivo.ana', 'Ana Torres', '3005550202', '3005550202', 'ana.torres@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'EJECUTIVO')),
-  ('ejecutivo.bruno', 'Bruno Diaz', '3005550203', '3005550203', 'bruno.diaz@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'EJECUTIVO')),
-  ('coord', 'Lucia Mendez', '3005550303', '3005550303', 'lucia.mendez@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'COORDINADOR')),
-  ('cliente', 'Cliente Base QA', '3005550404', '3005550404', 'cliente.base@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'CLIENTE')),
-  ('cliente.alpina', 'Alpina QA', '3005550405', '3005550405', 'alpina.qa@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'CLIENTE')),
-  ('cliente.colcafe', 'Colcafe QA', '3005550406', '3005550406', 'colcafe.qa@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'CLIENTE')),
-  ('cliente.nutresa', 'Nutresa QA', '3005550407', '3005550407', 'nutresa.qa@eventapp.local', 'e02469dc87840ce2afc5a478ac8588ca:5ad8c10ab98ed9e458c91a84a411eeb1c803f13b0434e14e6229ea04f33ecbc9467a172ecece29a415370cfec8bdfacca6e05df13c523d5b54a19a75fe00f22c', (SELECT id FROM roles WHERE code = 'CLIENTE'))
+  ('admin', 'Administrador Base', '3005550101', '3005550101', 'admin@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'ADMIN')),
+  ('ejecutivo.ana', 'Ana Torres', '3005550202', '3005550202', 'ana.torres@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'EJECUTIVO')),
+  ('ejecutivo.bruno', 'Bruno Diaz', '3005550203', '3005550203', 'bruno.diaz@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'EJECUTIVO')),
+  ('coord', 'Lucia Mendez', '3005550303', '3005550303', 'lucia.mendez@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'COORDINADOR')),
+  ('cliente', 'Laura Gómez', '3005550404', '3005550404', 'cliente.base@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'CLIENTE')),
+  ('cliente.alpina', 'Mariana Vélez', '3005550405', '3005550405', 'alpina.qa@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'CLIENTE')),
+  ('cliente.colcafe', 'Santiago Ruiz', '3005550406', '3005550406', 'colcafe.qa@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'CLIENTE')),
+  ('cliente.nutresa', 'Valentina Pérez', '3005550407', '3005550407', 'nutresa.qa@eventapp.local', 'fe519609843f3fdfe71bb95f5f4fc453:74113be106ac017037c0795f8d027776f2554662d93b1f6d8105ecfe0387d0e5c990cd364824f7ccf44a62b6d46956ff0897c87a258d040b8b477e509bf28f84', (SELECT id FROM roles WHERE code = 'CLIENTE'))
 ON CONFLICT (username) DO UPDATE SET
   full_name = EXCLUDED.full_name,
   phone = EXCLUDED.phone,
@@ -32,6 +32,23 @@ ON CONFLICT (username) DO UPDATE SET
   email = EXCLUDED.email,
   password_hash = EXCLUDED.password_hash,
   role_id = EXCLUDED.role_id,
+  is_active = TRUE,
+  updated_at = NOW();
+
+INSERT INTO clients (user_id, razon_social, nit, contact_full_name, contact_role, phone, whatsapp_phone, email, is_active)
+VALUES
+  ((SELECT id FROM users WHERE username = 'cliente'), 'Cliente Base QA SAS', '900100001-1', 'Laura Gómez', 'Brand Manager', '3005550404', '3005550404', 'cliente.base@eventapp.local', TRUE),
+  ((SELECT id FROM users WHERE username = 'cliente.alpina'), 'Alpina QA SAS', '900100002-2', 'Mariana Vélez', 'Trade Marketing Lead', '3005550405', '3005550405', 'alpina.qa@eventapp.local', TRUE),
+  ((SELECT id FROM users WHERE username = 'cliente.colcafe'), 'Colcafé QA SAS', '900100003-3', 'Santiago Ruiz', 'Coordinador de Marca', '3005550406', '3005550406', 'colcafe.qa@eventapp.local', TRUE),
+  ((SELECT id FROM users WHERE username = 'cliente.nutresa'), 'Nutresa QA SAS', '900100004-4', 'Valentina Pérez', 'Jefe de Cuenta', '3005550407', '3005550407', 'nutresa.qa@eventapp.local', TRUE)
+ON CONFLICT (user_id) DO UPDATE SET
+  razon_social = EXCLUDED.razon_social,
+  nit = EXCLUDED.nit,
+  contact_full_name = EXCLUDED.contact_full_name,
+  contact_role = EXCLUDED.contact_role,
+  phone = EXCLUDED.phone,
+  whatsapp_phone = EXCLUDED.whatsapp_phone,
+  email = EXCLUDED.email,
   is_active = TRUE,
   updated_at = NOW();
 

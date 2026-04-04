@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { getClientEvents } from '../api/api';
+import ChangePasswordCard from '../components/ChangePasswordCard';
 import { normalizeExecutiveReport } from '../utils/executiveReport';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { getUserDisplayName } from '../utils/user';
@@ -64,6 +65,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <Text style={styles.cardText}>Los borradores siguen ocultos. Solo ves información validada y publicada.</Text>
       </SurfaceCard>
 
+      <ChangePasswordCard user={user} palette={palette} />
       <AppButton title="VER MIS EVENTOS" onPress={() => setCurrentView('events')} />
       <AppButton title="SALIR" variant="secondary" onPress={onLogout} />
     </ScreenShell>

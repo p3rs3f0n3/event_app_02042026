@@ -46,19 +46,33 @@ export const login = async (username, password) => {
   }
 };
 
+export const changePassword = async ({ userId, currentPassword, newPassword }) => {
+  try {
+    return (await getAPI().post('/change-password', { userId, currentPassword, newPassword })).data;
+  } catch (error) {
+    throw extractApiErrorMessage(error);
+  }
+};
+
 export const getAppConfig = async () => (await getAPI().get('/app-config')).data;
 export const getEvents = async (createdByUserId) => (await getAPI().get('/events', { params: { createdByUserId } })).data;
 export const getCoordinatorEvents = async (userId) => (await getAPI().get('/coordinator/events', { params: { userId } })).data;
 export const getClientEvents = async (userId) => (await getAPI().get('/client/events', { params: { userId } })).data;
 export const getClients = async () => (await getAPI().get('/clients')).data;
 export const getAdminClients = async () => (await getAPI().get('/admin/clients')).data;
+export const findAdminClientByNit = async (nit) => (await getAPI().get('/admin/clients/by-nit', { params: { nit } })).data;
 export const createAdminClient = async (data) => (await getAPI().post('/admin/clients', data)).data;
+export const updateAdminClient = async (id, data) => (await getAPI().put(`/admin/clients/${id}`, data)).data;
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
 export const getAdminCoordinators = async () => (await getAPI().get('/admin/coordinators')).data;
+export const findAdminCoordinatorByCedula = async (cedula) => (await getAPI().get('/admin/coordinators/by-cedula', { params: { cedula } })).data;
 export const createAdminCoordinator = async (data) => (await getAPI().post('/admin/coordinators', data)).data;
+export const updateAdminCoordinator = async (id, data) => (await getAPI().put(`/admin/coordinators/${id}`, data)).data;
 export const getStaff = async (params = {}) => (await getAPI().get('/staff', { params })).data;
 export const getAdminStaff = async () => (await getAPI().get('/admin/staff')).data;
+export const findAdminStaffByCedula = async (cedula) => (await getAPI().get('/admin/staff/by-cedula', { params: { cedula } })).data;
 export const createAdminStaff = async (data) => (await getAPI().post('/admin/staff', data)).data;
+export const updateAdminStaff = async (id, data) => (await getAPI().put(`/admin/staff/${id}`, data)).data;
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
 export const addColombiaCity = async (name) => (await getAPI().post('/colombia-cities', { name })).data;
 export const createEvent = async (data) => (await getAPI().post('/events', data)).data;

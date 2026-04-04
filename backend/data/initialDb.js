@@ -4,10 +4,16 @@ const INITIAL_DB = {
     { id: 2, username: 'ejecutivo.ana', password: 'Funcional.EventApp.2026', fullName: 'Ana Torres', phone: '3005550202', whatsappPhone: '3005550202', email: 'ana.torres@eventapp.local', role: 'EJECUTIVO' },
     { id: 3, username: 'ejecutivo.bruno', password: 'Funcional.EventApp.2026', fullName: 'Bruno Diaz', phone: '3005550203', whatsappPhone: '3005550203', email: 'bruno.diaz@eventapp.local', role: 'EJECUTIVO' },
     { id: 4, username: 'coord', password: 'Funcional.EventApp.2026', fullName: 'Lucia Mendez', phone: '3005550303', whatsappPhone: '3005550303', email: 'lucia.mendez@eventapp.local', role: 'COORDINADOR' },
-    { id: 5, username: 'cliente', password: 'Funcional.EventApp.2026', fullName: 'Cliente Base QA', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente.base@eventapp.local', role: 'CLIENTE' },
-    { id: 6, username: 'cliente.alpina', password: 'Funcional.EventApp.2026', fullName: 'Alpina QA', phone: '3005550405', whatsappPhone: '3005550405', email: 'alpina.qa@eventapp.local', role: 'CLIENTE' },
-    { id: 7, username: 'cliente.colcafe', password: 'Funcional.EventApp.2026', fullName: 'Colcafe QA', phone: '3005550406', whatsappPhone: '3005550406', email: 'colcafe.qa@eventapp.local', role: 'CLIENTE' },
-    { id: 8, username: 'cliente.nutresa', password: 'Funcional.EventApp.2026', fullName: 'Nutresa QA', phone: '3005550407', whatsappPhone: '3005550407', email: 'nutresa.qa@eventapp.local', role: 'CLIENTE' },
+    { id: 5, username: 'cliente', password: 'Funcional.EventApp.2026', fullName: 'Laura Gómez', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente.base@eventapp.local', role: 'CLIENTE' },
+    { id: 6, username: 'cliente.alpina', password: 'Funcional.EventApp.2026', fullName: 'Mariana Vélez', phone: '3005550405', whatsappPhone: '3005550405', email: 'alpina.qa@eventapp.local', role: 'CLIENTE' },
+    { id: 7, username: 'cliente.colcafe', password: 'Funcional.EventApp.2026', fullName: 'Santiago Ruiz', phone: '3005550406', whatsappPhone: '3005550406', email: 'colcafe.qa@eventapp.local', role: 'CLIENTE' },
+    { id: 8, username: 'cliente.nutresa', password: 'Funcional.EventApp.2026', fullName: 'Valentina Pérez', phone: '3005550407', whatsappPhone: '3005550407', email: 'nutresa.qa@eventapp.local', role: 'CLIENTE' },
+  ],
+  clients: [
+    { id: 1, userId: 5, razonSocial: 'Cliente Base QA SAS', nit: '900100001-1', contactFullName: 'Laura Gómez', contactRole: 'Brand Manager', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente.base@eventapp.local', isActive: true },
+    { id: 2, userId: 6, razonSocial: 'Alpina QA SAS', nit: '900100002-2', contactFullName: 'Mariana Vélez', contactRole: 'Trade Marketing Lead', phone: '3005550405', whatsappPhone: '3005550405', email: 'alpina.qa@eventapp.local', isActive: true },
+    { id: 3, userId: 7, razonSocial: 'Colcafé QA SAS', nit: '900100003-3', contactFullName: 'Santiago Ruiz', contactRole: 'Coordinador de Marca', phone: '3005550406', whatsappPhone: '3005550406', email: 'colcafe.qa@eventapp.local', isActive: true },
+    { id: 4, userId: 8, razonSocial: 'Nutresa QA SAS', nit: '900100004-4', contactFullName: 'Valentina Pérez', contactRole: 'Jefe de Cuenta', phone: '3005550407', whatsappPhone: '3005550407', email: 'nutresa.qa@eventapp.local', isActive: true },
   ],
   coordinators: [
     { id: 1, name: 'Isabella Barreiro J.', cedula: '31572804', address: 'Cra 28 No 72', phone: '3116833760', rating: 5, photo: 'https://i.pravatar.cc/150?u=isabella', city: 'Bogotá' },
@@ -36,6 +42,7 @@ const INITIAL_DB = {
     { id: 28, name: 'Sincelejo', isOther: false }, { id: 29, name: 'Tunja', isOther: false }, { id: 30, name: 'Valledupar', isOther: false },
     { id: 31, name: 'Villavicencio', isOther: false }, { id: 32, name: 'Yopal', isOther: false }, { id: 33, name: 'OTRO', isOther: true }
   ],
+  auditLogs: [],
   events: []
 };
 

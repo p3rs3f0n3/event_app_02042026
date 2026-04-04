@@ -27,6 +27,26 @@ const validateLoginPayload = (payload) => {
   return null;
 };
 
+const validateChangePasswordPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de cambio de contraseña inválido';
+  }
+
+  if (!isValidIdValue(payload.userId)) {
+    return 'El usuario es requerido';
+  }
+
+  if (!isNonEmptyString(payload.currentPassword)) {
+    return 'La contraseña actual es obligatoria';
+  }
+
+  if (!isNonEmptyString(payload.newPassword)) {
+    return 'La nueva contraseña es obligatoria';
+  }
+
+  return null;
+};
+
 const validateEventPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de evento inválido';
@@ -196,15 +216,19 @@ const validateExecutiveReportPayload = (payload) => {
   return null;
 };
 
-const validateAdminClientPayload = (payload) => {
+const validateAdminClientBasePayload = (payload, { requirePassword }) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de cliente inválido';
   }
 
   if (!isNonEmptyString(payload.username)) return 'El usuario es obligatorio';
-  if (!isNonEmptyString(payload.password) || normalizeString(payload.password).length < 8) return 'La contraseña debe tener al menos 8 caracteres';
-  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (requirePassword && !isNonEmptyString(payload.password)) return 'La contraseña es obligatoria';
+  if (!isNonEmptyString(payload.razonSocial)) return 'La razón social es obligatoria';
+  if (!isNonEmptyString(payload.nit)) return 'El NIT es obligatorio';
+  if (!isNonEmptyString(payload.contactFullName)) return 'El nombre del contacto es obligatorio';
+  if (!isNonEmptyString(payload.contactRole)) return 'El cargo del contacto es obligatorio';
   if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
   const email = normalizeEmail(payload.email);
   if (email && !isValidEmail(email)) return 'El email no es válido';
@@ -212,18 +236,40 @@ const validateAdminClientPayload = (payload) => {
   return null;
 };
 
+const validateAdminClientPayload = (payload) => validateAdminClientBasePayload(payload, { requirePassword: true });
+const validateAdminClientUpdatePayload = (payload) => validateAdminClientBasePayload(payload, { requirePassword: false });
+
 const validateAdminCoordinatorPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de coordinador inválido';
   }
 
   if (!isNonEmptyString(payload.username)) return 'El usuario es obligatorio';
-  if (!isNonEmptyString(payload.password) || normalizeString(payload.password).length < 8) return 'La contraseña debe tener al menos 8 caracteres';
+  if (!isNonEmptyString(payload.password)) return 'La contraseña es obligatoria';
   if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
   if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
   if (!isNonEmptyString(payload.address)) return 'La dirección es obligatoria';
   if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
+
+  const email = normalizeEmail(payload.email);
+  if (email && !isValidEmail(email)) return 'El email no es válido';
+
+  return null;
+};
+
+const validateAdminCoordinatorUpdatePayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de coordinador inválido';
+  }
+
+  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
+  if (!isNonEmptyString(payload.address)) return 'La dirección es obligatoria';
+  if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
+  if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
   const email = normalizeEmail(payload.email);
   if (email && !isValidEmail(email)) return 'El email no es válido';
@@ -241,6 +287,22 @@ const validateAdminStaffPayload = (payload) => {
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
   if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
   if (!ALLOWED_STAFF_CATEGORIES.has(normalizeString(payload.category).toUpperCase())) return 'La categoría de staff no es válida';
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
+
+  return null;
+};
+
+const validateAdminStaffUpdatePayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de staff inválido';
+  }
+
+  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
+  if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
+  if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
+  if (!ALLOWED_STAFF_CATEGORIES.has(normalizeString(payload.category).toUpperCase())) return 'La categoría de staff no es válida';
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
   return null;
 };
@@ -251,10 +313,14 @@ module.exports = {
   badRequest: (res, message) => res.status(400).json({ message }),
   normalizeString,
   validateAdminClientPayload,
+  validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
+  validateAdminCoordinatorUpdatePayload,
   validateAdminStaffPayload,
+  validateAdminStaffUpdatePayload,
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
+  validateChangePasswordPayload,
   validateExecutiveReportPayload,
   validateLoginPayload,
   validateManualInactivationPayload,

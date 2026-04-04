@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import CoordinatorEventDetailScreen from './CoordinatorEventDetailScreen';
 import CoordinatorEventsScreen from './CoordinatorEventsScreen';
+import ChangePasswordCard from '../components/ChangePasswordCard';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, SPACING } from '../theme/tokens';
@@ -68,6 +69,7 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <AppButton title="VER EVENTOS ASIGNADOS" onPress={() => setCurrentView('events')} />
       </SurfaceCard>
 
+      <ChangePasswordCard user={user} palette={palette} />
       <AppButton title="REGRESAR / SALIR" variant="secondary" onPress={onLogout} />
     </ScreenShell>
   );

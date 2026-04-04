@@ -127,7 +127,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
               <Text style={styles.kickerMeta}>{activeAccounts.join(' · ')}</Text>
             </View>
             <Text style={styles.subtitle}>Ingresá a tu espacio de trabajo</Text>
-            <Text style={styles.helperText}>Usá las credenciales asignadas para tu rol y continuá con la operación.</Text>
+            <Text style={styles.helperText}>Usá las credenciales asignadas para tu rol y continuá con la operación. Para los usuarios base de prueba, la contraseña es 123.</Text>
 
             <View style={styles.formSection}>
               <Text style={styles.fieldLabel}>Usuario</Text>

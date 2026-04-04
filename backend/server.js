@@ -11,8 +11,12 @@ const {
   validateCoordinatorReportPayload,
   validateExecutiveReportPayload,
   validateAdminClientPayload,
+  validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
+  validateAdminCoordinatorUpdatePayload,
   validateAdminStaffPayload,
+  validateAdminStaffUpdatePayload,
+  validateChangePasswordPayload,
   validateEventPayload,
   validateLoginPayload,
   validateManualInactivationPayload,
@@ -59,6 +63,33 @@ app.post('/api/login', asyncHandler(async (req, res) => {
   });
 }));
 
+app.post('/api/change-password', asyncHandler(async (req, res) => {
+  const validationError = validateChangePasswordPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.changeUserPassword({
+    userId: Number(req.body.userId),
+    currentPassword: normalizeString(req.body.currentPassword),
+    newPassword: normalizeString(req.body.newPassword),
+  });
+
+  if (result?.errorCode === 'USER_NOT_FOUND') {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+
+  if (result?.errorCode === 'INVALID_CURRENT_PASSWORD') {
+    return res.status(401).json({ message: 'La contraseña actual es incorrecta' });
+  }
+
+  return res.json({
+    message: 'Contraseña actualizada correctamente',
+    userId: result.id,
+    username: result.username,
+  });
+}));
+
 app.get('/api/coordinators', asyncHandler(async (req, res) => {
   const { city, startTime, endTime, eventStartDate, eventEndDate, selectedCoordinatorId } = req.query;
   const repository = req.app.locals.repository;
@@ -97,6 +128,20 @@ app.get('/api/admin/clients', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getAdminClients());
 }));
 
+app.get('/api/admin/clients/by-nit', asyncHandler(async (req, res) => {
+  const nit = normalizeString(req.query?.nit);
+  if (!nit) {
+    return badRequest(res, 'El NIT es obligatorio');
+  }
+
+  const client = await req.app.locals.repository.findAdminClientByNit(nit);
+  return res.json({
+    exists: Boolean(client),
+    client: client || null,
+    auditLogs: client ? await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'client', entityId: client.clientId, limit: 10 }) : [],
+  });
+}));
+
 app.post('/api/admin/clients', asyncHandler(async (req, res) => {
   const validationError = validateAdminClientPayload(req.body);
   if (validationError) {
@@ -104,9 +149,13 @@ app.post('/api/admin/clients', asyncHandler(async (req, res) => {
   }
 
   const result = await req.app.locals.repository.createClient({
+    actorUserId: Number(req.body.actorUserId),
     username: normalizeString(req.body.username),
     password: normalizeString(req.body.password),
-    fullName: normalizeString(req.body.fullName),
+    razonSocial: normalizeString(req.body.razonSocial),
+    nit: normalizeString(req.body.nit),
+    contactFullName: normalizeString(req.body.contactFullName),
+    contactRole: normalizeString(req.body.contactRole),
     phone: normalizeString(req.body.phone),
     whatsappPhone: normalizeString(req.body.whatsappPhone),
     email: normalizeString(req.body.email).toLowerCase(),
@@ -117,6 +166,38 @@ app.post('/api/admin/clients', asyncHandler(async (req, res) => {
   }
 
   return res.status(201).json(result);
+}));
+
+app.put('/api/admin/clients/:id', asyncHandler(async (req, res) => {
+  const validationError = validateAdminClientUpdatePayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.updateClient(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+    username: normalizeString(req.body.username),
+    razonSocial: normalizeString(req.body.razonSocial),
+    nit: normalizeString(req.body.nit),
+    contactFullName: normalizeString(req.body.contactFullName),
+    contactRole: normalizeString(req.body.contactRole),
+    phone: normalizeString(req.body.phone),
+    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    email: normalizeString(req.body.email).toLowerCase(),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Cliente no encontrado' });
+  }
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'client', entityId: result.clientId, limit: 10 }),
+  });
 }));
 
 app.get('/api/staff', asyncHandler(async (req, res) => {
@@ -158,6 +239,20 @@ app.get('/api/admin/coordinators', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getAdminCoordinators());
 }));
 
+app.get('/api/admin/coordinators/by-cedula', asyncHandler(async (req, res) => {
+  const cedula = normalizeString(req.query?.cedula);
+  if (!cedula) {
+    return badRequest(res, 'La cédula es obligatoria');
+  }
+
+  const coordinator = await req.app.locals.repository.findAdminCoordinatorByCedula(cedula);
+  return res.json({
+    exists: Boolean(coordinator),
+    coordinator: coordinator || null,
+    auditLogs: coordinator ? await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'coordinator', entityId: coordinator.id, limit: 10 }) : [],
+  });
+}));
+
 app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
   const validationError = validateAdminCoordinatorPayload(req.body);
   if (validationError) {
@@ -165,6 +260,7 @@ app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
   }
 
   const result = await req.app.locals.repository.createCoordinator({
+    actorUserId: Number(req.body.actorUserId),
     username: normalizeString(req.body.username),
     password: normalizeString(req.body.password),
     fullName: normalizeString(req.body.fullName),
@@ -187,8 +283,58 @@ app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
   return res.status(201).json(result);
 }));
 
+app.put('/api/admin/coordinators/:id', asyncHandler(async (req, res) => {
+  const validationError = validateAdminCoordinatorUpdatePayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.updateCoordinator(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+    username: normalizeString(req.body.username),
+    fullName: normalizeString(req.body.fullName),
+    cedula: normalizeString(req.body.cedula),
+    address: normalizeString(req.body.address),
+    phone: normalizeString(req.body.phone),
+    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    email: normalizeString(req.body.email).toLowerCase(),
+    city: normalizeString(req.body.city),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Coordinador no encontrado' });
+  }
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_REFERENCE') {
+    return badRequest(res, result.message);
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'coordinator', entityId: result.id, limit: 10 }),
+  });
+}));
+
 app.get('/api/admin/staff', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getAdminStaff());
+}));
+
+app.get('/api/admin/staff/by-cedula', asyncHandler(async (req, res) => {
+  const cedula = normalizeString(req.query?.cedula);
+  if (!cedula) {
+    return badRequest(res, 'La cédula es obligatoria');
+  }
+
+  const staffMember = await req.app.locals.repository.findAdminStaffByCedula(cedula);
+  return res.json({
+    exists: Boolean(staffMember),
+    staff: staffMember || null,
+    auditLogs: staffMember ? await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'staff', entityId: staffMember.id, limit: 10 }) : [],
+  });
 }));
 
 app.post('/api/admin/staff', asyncHandler(async (req, res) => {
@@ -198,6 +344,7 @@ app.post('/api/admin/staff', asyncHandler(async (req, res) => {
   }
 
   const result = await req.app.locals.repository.createStaff({
+    actorUserId: Number(req.body.actorUserId),
     fullName: normalizeString(req.body.fullName),
     cedula: normalizeString(req.body.cedula),
     city: normalizeString(req.body.city),
@@ -216,6 +363,41 @@ app.post('/api/admin/staff', asyncHandler(async (req, res) => {
   }
 
   return res.status(201).json(result);
+}));
+
+app.put('/api/admin/staff/:id', asyncHandler(async (req, res) => {
+  const validationError = validateAdminStaffUpdatePayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.updateStaff(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+    fullName: normalizeString(req.body.fullName),
+    cedula: normalizeString(req.body.cedula),
+    city: normalizeString(req.body.city),
+    category: normalizeString(req.body.category).toUpperCase(),
+    clothingSize: normalizeString(req.body.clothingSize),
+    shoeSize: normalizeString(req.body.shoeSize),
+    measurements: normalizeString(req.body.measurements),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Staff no encontrado' });
+  }
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_REFERENCE') {
+    return badRequest(res, result.message);
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'staff', entityId: result.id, limit: 10 }),
+  });
 }));
 
 app.get('/api/colombia-cities', asyncHandler(async (req, res) => {

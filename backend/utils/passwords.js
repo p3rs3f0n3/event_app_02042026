@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const hashPassword = (password, salt) => crypto.scryptSync(password, salt, 64).toString('hex');
+const isPasswordHash = (value) => typeof value === 'string' && value.includes(':');
 
 const createPasswordHash = (password) => {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -28,7 +29,17 @@ const verifyPassword = (password, storedHash) => {
   return crypto.timingSafeEqual(hashBuffer, computedBuffer);
 };
 
+const comparePassword = (password, storedValue) => {
+  if (isPasswordHash(storedValue)) {
+    return verifyPassword(password, storedValue);
+  }
+
+  return typeof storedValue === 'string' && storedValue === password;
+};
+
 module.exports = {
+  comparePassword,
   createPasswordHash,
+  isPasswordHash,
   verifyPassword,
 };

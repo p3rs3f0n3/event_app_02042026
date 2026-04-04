@@ -1,12 +1,18 @@
 const fs = require('fs');
+const { comparePassword } = require('../utils/passwords');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
+const { matchesClientIdentityConflict, normalizeClientMutationPayload } = require('../utils/adminClientPayload');
+const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const {
   DEFAULT_PROFILE_PHOTO,
+  isDocumentEquivalent,
+  isNitEquivalent,
   normalizeComparableValue,
   normalizePhoneValue,
+  sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
@@ -19,7 +25,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
   if (Number.isInteger(normalizedRawClientUserId) && normalizedRawClientUserId > 0) {
-    const explicitClient = clients.find((candidate) => Number(candidate.id) === normalizedRawClientUserId) || null;
+    const explicitClient = clients.find((candidate) => Number(candidate.userId || candidate.id) === normalizedRawClientUserId) || null;
     const comparableClient = normalizeComparableValue(client);
 
     if (explicitClient && normalizeComparableValue(explicitClient.username) === 'cliente') {
@@ -39,11 +45,41 @@ const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
 
   const matches = clients.filter((candidate) => [
     candidate.fullName,
+    candidate.razonSocial,
+    candidate.contactFullName,
     candidate.username,
     candidate.email,
   ].some((value) => normalizeComparableValue(value) === comparableClient));
 
-  return matches.length === 1 ? Number(matches[0].id) : null;
+  return matches.length === 1 ? Number(matches[0].userId || matches[0].id) : null;
+};
+
+const resolveClientId = ({ rawClientId, rawClientUserId, client, clients }) => {
+  const normalizedRawClientId = Number(rawClientId);
+  if (Number.isInteger(normalizedRawClientId) && normalizedRawClientId > 0) {
+    return normalizedRawClientId;
+  }
+
+  const normalizedRawClientUserId = Number(rawClientUserId);
+  if (Number.isInteger(normalizedRawClientUserId) && normalizedRawClientUserId > 0) {
+    const explicitClient = clients.find((candidate) => Number(candidate.userId || candidate.id) === normalizedRawClientUserId) || null;
+    return explicitClient ? Number(explicitClient.clientId || explicitClient.id) : null;
+  }
+
+  const comparableClient = normalizeComparableValue(client);
+  if (!comparableClient) {
+    return null;
+  }
+
+  const matches = clients.filter((candidate) => [
+    candidate.fullName,
+    candidate.razonSocial,
+    candidate.contactFullName,
+    candidate.username,
+    candidate.email,
+  ].some((value) => normalizeComparableValue(value) === comparableClient));
+
+  return matches.length === 1 ? Number(matches[0].clientId || matches[0].id) : null;
 };
 
 const normalizeCity = (city) => ({
@@ -55,6 +91,12 @@ const normalizeCity = (city) => ({
 const normalizeEvent = (event, clients = []) => ({
   ...event,
   createdByUserId: Number(event.createdByUserId || event.created_by_user_id || DEFAULT_EXECUTIVE_USER_ID),
+  clientId: resolveClientId({
+    rawClientId: event.clientId || event.client_id,
+    rawClientUserId: event.clientUserId || event.client_user_id,
+    client: event.client,
+    clients,
+  }),
   clientUserId: resolveClientUserId({
     rawClientUserId: event.clientUserId || event.client_user_id,
     client: event.client,
@@ -91,11 +133,70 @@ const normalizeDb = (db, initialDb) => ({
   ...clone(initialDb),
   ...db,
   users: Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users),
+  clients: buildClientsDb({ db, initialDb }),
   coordinators: Array.isArray(db?.coordinators) && db.coordinators.length > 0 ? db.coordinators.map(normalizeCoordinator) : clone(initialDb.coordinators).map(normalizeCoordinator),
   staff: Array.isArray(db?.staff) && db.staff.length > 0 ? db.staff.map(normalizeStaffMember) : clone(initialDb.staff).map(normalizeStaffMember),
   cities: Array.isArray(db?.cities) && db.cities.length > 0 ? db.cities.map(normalizeCity) : clone(initialDb.cities),
+  auditLogs: Array.isArray(db?.auditLogs) ? db.auditLogs.map((auditLog) => sanitizeAuditLogRecord({ auditLog })) : [],
   events: Array.isArray(db?.events) ? db.events : [],
 });
+
+function buildClientsDb({ db, initialDb }) {
+  const users = Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users);
+  const sourceClients = Array.isArray(db?.clients) && db.clients.length > 0
+    ? db.clients
+    : (Array.isArray(initialDb?.clients) ? clone(initialDb.clients) : []);
+  const clientsByUserId = new Map(
+    sourceClients
+      .map((client) => ({
+        ...client,
+        id: Number(client.id),
+        userId: Number(client.userId || client.user_id || 0) || null,
+        razonSocial: client.razonSocial || client.razon_social || null,
+        nit: client.nit || null,
+        contactFullName: client.contactFullName || client.contact_full_name || null,
+        contactRole: client.contactRole || client.contact_role || null,
+        phone: client.phone || null,
+        whatsappPhone: client.whatsappPhone || client.whatsapp_phone || null,
+        email: client.email || null,
+        isActive: client.isActive ?? client.is_active ?? true,
+      }))
+      .filter((client) => Number.isInteger(client.userId) && client.userId > 0)
+      .map((client) => [client.userId, client]),
+  );
+  let nextId = sourceClients.reduce((max, client) => Math.max(max, Number(client.id) || 0), 0);
+
+  return users
+    .filter((user) => String(user.role || '').toUpperCase() === 'CLIENTE')
+    .map((user) => {
+      const existingClient = clientsByUserId.get(Number(user.id));
+      if (existingClient) {
+        return {
+          ...existingClient,
+          razonSocial: existingClient.razonSocial || user.fullName,
+          contactFullName: existingClient.contactFullName || user.fullName,
+          phone: existingClient.phone || user.phone || null,
+          whatsappPhone: existingClient.whatsappPhone || user.whatsappPhone || user.whatsapp_phone || user.phone || null,
+          email: existingClient.email || user.email || null,
+          isActive: existingClient.isActive ?? user.isActive !== false,
+        };
+      }
+
+      nextId += 1;
+      return {
+        id: nextId,
+        userId: Number(user.id),
+        razonSocial: user.fullName,
+        nit: null,
+        contactFullName: user.fullName,
+        contactRole: null,
+        phone: user.phone || null,
+        whatsappPhone: user.whatsappPhone || user.whatsapp_phone || user.phone || null,
+        email: user.email || null,
+        isActive: user.isActive !== false,
+      };
+    });
+}
 
 class EventAppRepository {
   constructor({ dbFile, initialDb }) {
@@ -133,7 +234,7 @@ class EventAppRepository {
   async authenticateUser({ username, password }) {
     const user = this.db.users.find((item) => item.username.toLowerCase() === username.toLowerCase());
 
-    if (!user || user.password !== password) {
+    if (!user || user.isActive === false || !comparePassword(password, user.password)) {
       return null;
     }
 
@@ -152,15 +253,79 @@ class EventAppRepository {
     return this.db.users.find((user) => Number(user.id) === Number(id)) || null;
   }
 
+  changeUserPassword({ userId, currentPassword, newPassword }) {
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(userId));
+
+    if (userIndex === -1) {
+      return { errorCode: 'USER_NOT_FOUND' };
+    }
+
+    if (!comparePassword(currentPassword, this.db.users[userIndex].password)) {
+      return { errorCode: 'INVALID_CURRENT_PASSWORD' };
+    }
+
+    this.db.users[userIndex] = {
+      ...this.db.users[userIndex],
+      password: newPassword,
+    };
+    this.save();
+
+    return {
+      id: this.db.users[userIndex].id,
+      username: this.db.users[userIndex].username,
+    };
+  }
+
   getClients() {
-    return this.db.users
-      .filter((user) => String(user.role || '').toUpperCase() === 'CLIENTE' && user.isActive !== false)
-      .map(sanitizeUserRecord)
+    return this.db.clients
+      .map((client) => sanitizeClientRecord({
+        client,
+        user: this.findUserById(client.userId),
+      }))
+      .filter((client) => client.userId && client.isActive !== false)
       .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
   }
 
   getAdminClients() {
     return this.getClients();
+  }
+
+  findAdminClientByNit(nit) {
+    const normalizedNit = String(nit || '').trim();
+    if (!normalizedNit) {
+      return null;
+    }
+
+    return this.getClients().find((client) => isNitEquivalent(client.nit, normalizedNit)) || null;
+  }
+
+  getAuditLogsForEntity({ entityType, entityId, limit = 10 }) {
+    return this.db.auditLogs
+      .filter((auditLog) => auditLog.entityType === entityType && Number(auditLog.entityId) === Number(entityId))
+      .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+      .slice(0, limit)
+      .map((auditLog) => sanitizeAuditLogRecord({
+        auditLog,
+        actor: auditLog.actorUserId ? this.findUserById(auditLog.actorUserId) : null,
+      }));
+  }
+
+  findAdminCoordinatorByCedula(cedula) {
+    const normalizedCedula = String(cedula || '').trim();
+    if (!normalizedCedula) {
+      return null;
+    }
+
+    return this.getAdminCoordinators().find((coordinator) => isDocumentEquivalent(coordinator.cedula, normalizedCedula)) || null;
+  }
+
+  findAdminStaffByCedula(cedula) {
+    const normalizedCedula = String(cedula || '').trim();
+    if (!normalizedCedula) {
+      return null;
+    }
+
+    return this.getAdminStaff().find((staffMember) => isDocumentEquivalent(staffMember.cedula, normalizedCedula)) || null;
   }
 
   getAdminCoordinators() {
@@ -237,21 +402,18 @@ class EventAppRepository {
   }
 
   createClient(payload) {
-    const username = normalizeComparableValue(payload.username);
-    const fullName = normalizeComparableValue(payload.fullName);
-    const phone = normalizePhoneValue(payload.phone);
-    const whatsappPhone = normalizePhoneValue(payload.whatsappPhone);
-    const email = normalizeComparableValue(payload.email);
+    const normalizedPayload = normalizeClientMutationPayload(payload);
 
     const duplicateUser = this.db.users.find((user) => {
-      if (normalizeComparableValue(user.username) === username) return true;
-      if (email && normalizeComparableValue(user.email) === email) return true;
-      if (phone && normalizePhoneValue(user.phone) === phone) return true;
-      if (whatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === whatsappPhone) return true;
-      return String(user.role || '').toUpperCase() === 'CLIENTE' && normalizeComparableValue(user.fullName) === fullName;
+      return matchesClientIdentityConflict({ user, normalizedPayload });
+    });
+    const duplicateClient = this.db.clients.find((client) => {
+      return matchesClientIdentityConflict({ client, normalizedPayload });
     });
 
-    if (duplicateUser) {
+    const duplicateNitClient = normalizedPayload.nit ? this.findAdminClientByNit(normalizedPayload.nit) : null;
+
+    if (duplicateUser || duplicateClient || duplicateNitClient) {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
     }
 
@@ -259,17 +421,108 @@ class EventAppRepository {
       id: this.#nextId(this.db.users),
       username: payload.username,
       password: payload.password,
-      fullName: payload.fullName,
+      fullName: payload.contactFullName,
       phone: payload.phone,
       whatsappPhone: payload.whatsappPhone || payload.phone,
       email: payload.email || null,
       role: 'CLIENTE',
       isActive: true,
     };
+    const newClient = {
+      id: this.#nextId(this.db.clients),
+      userId: newUser.id,
+      razonSocial: payload.razonSocial,
+      nit: payload.nit,
+      contactFullName: payload.contactFullName,
+      contactRole: payload.contactRole,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      isActive: true,
+    };
 
     this.db.users.push(newUser);
+    this.db.clients.push(newClient);
+    const createdRecord = sanitizeClientRecord({ client: newClient, user: newUser });
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'client',
+      entityId: newClient.id,
+      action: 'create',
+      previousValues: null,
+      newValues: createdRecord,
+    });
     this.save();
-    return sanitizeUserRecord(newUser);
+    return createdRecord;
+  }
+
+  updateClient(clientId, payload) {
+    const normalizedClientId = Number(clientId);
+    const clientIndex = this.db.clients.findIndex((client) => Number(client.id) === normalizedClientId);
+    if (clientIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentClient = this.db.clients[clientIndex];
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(currentClient.userId));
+    if (userIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const normalizedPayload = normalizeClientMutationPayload(payload);
+    const duplicateUser = this.db.users.find((user) => matchesClientIdentityConflict({
+      user,
+      normalizedPayload,
+      excludeUserId: currentClient.userId,
+    }));
+    const duplicateClient = this.db.clients.find((client) => matchesClientIdentityConflict({
+      client,
+      normalizedPayload,
+      excludeClientId: normalizedClientId,
+    }));
+    const duplicateNitClient = normalizedPayload.nit
+      ? this.getClients().find((client) => Number(client.clientId) !== normalizedClientId && isNitEquivalent(client.nit, normalizedPayload.nit)) || null
+      : null;
+
+    if (duplicateUser || duplicateClient || duplicateNitClient) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    }
+
+    const previousRecord = sanitizeClientRecord({ client: currentClient, user: this.db.users[userIndex] });
+
+    this.db.users[userIndex] = {
+      ...this.db.users[userIndex],
+      username: payload.username,
+      fullName: payload.contactFullName,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+    };
+
+    this.db.clients[clientIndex] = {
+      ...this.db.clients[clientIndex],
+      razonSocial: payload.razonSocial,
+      nit: payload.nit,
+      contactFullName: payload.contactFullName,
+      contactRole: payload.contactRole,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      isActive: true,
+    };
+
+    const updatedRecord = sanitizeClientRecord({ client: this.db.clients[clientIndex], user: this.db.users[userIndex] });
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'client',
+      entityId: this.db.clients[clientIndex].id,
+      action: 'update',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
   }
 
   createCoordinator(payload) {
@@ -283,7 +536,7 @@ class EventAppRepository {
     const phone = normalizePhoneValue(payload.phone);
     const whatsappPhone = normalizePhoneValue(payload.whatsappPhone);
     const fullName = normalizeComparableValue(payload.fullName);
-    const cedula = normalizeComparableValue(payload.cedula);
+    const cedula = String(payload.cedula || '').trim();
 
     const duplicateUser = this.db.users.find((user) => {
       if (normalizeComparableValue(user.username) === username) return true;
@@ -291,13 +544,14 @@ class EventAppRepository {
       if (phone && normalizePhoneValue(user.phone) === phone) return true;
       return whatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === whatsappPhone;
     });
+    const duplicateCedulaCoordinator = cedula ? this.findAdminCoordinatorByCedula(cedula) : null;
     const duplicateCoordinator = this.db.coordinators.find((coordinator) => (
-      normalizeComparableValue(coordinator.cedula) === cedula
+      isDocumentEquivalent(coordinator.cedula, cedula)
       || normalizeComparableValue(coordinator.name) === fullName
       || normalizePhoneValue(coordinator.phone) === phone
     ));
 
-    if (duplicateUser || duplicateCoordinator) {
+    if (duplicateUser || duplicateCoordinator || duplicateCedulaCoordinator) {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
     }
 
@@ -326,9 +580,99 @@ class EventAppRepository {
 
     this.db.users.push(newUser);
     this.db.coordinators.push(newCoordinator);
+    const createdRecord = sanitizeCoordinatorAdminRecord({ coordinator: newCoordinator, user: newUser });
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'coordinator',
+      entityId: newCoordinator.id,
+      action: 'create',
+      previousValues: null,
+      newValues: createdRecord,
+    });
     this.save();
 
-    return sanitizeCoordinatorAdminRecord({ coordinator: newCoordinator, user: newUser });
+    return createdRecord;
+  }
+
+  updateCoordinator(coordinatorId, payload) {
+    const normalizedCoordinatorId = Number(coordinatorId);
+    const coordinatorIndex = this.db.coordinators.findIndex((coordinator) => Number(coordinator.id) === normalizedCoordinatorId);
+    if (coordinatorIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentCoordinator = this.db.coordinators[coordinatorIndex];
+    const city = this.findCityByName(payload.city);
+    if (!city) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const linkedUser = currentCoordinator.userId ? this.findUserById(currentCoordinator.userId) : null;
+    const normalizedUsername = normalizeComparableValue(payload.username || linkedUser?.username);
+    const normalizedEmail = normalizeComparableValue(payload.email);
+    const normalizedPhone = normalizePhoneValue(payload.phone);
+    const normalizedWhatsappPhone = normalizePhoneValue(payload.whatsappPhone || payload.phone);
+    const normalizedFullName = normalizeComparableValue(payload.fullName);
+    const normalizedCedula = String(payload.cedula || '').trim();
+
+    const duplicateUser = linkedUser ? this.db.users.find((user) => {
+      if (Number(user.id) === Number(linkedUser.id)) return false;
+      if (normalizedUsername && normalizeComparableValue(user.username) === normalizedUsername) return true;
+      if (normalizedEmail && normalizeComparableValue(user.email) === normalizedEmail) return true;
+      if (normalizedPhone && normalizePhoneValue(user.phone) === normalizedPhone) return true;
+      return normalizedWhatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === normalizedWhatsappPhone;
+    }) : null;
+    const duplicateCoordinator = this.db.coordinators.find((coordinator) => {
+      if (Number(coordinator.id) === normalizedCoordinatorId) return false;
+      return isDocumentEquivalent(coordinator.cedula, normalizedCedula)
+        || normalizeComparableValue(coordinator.name) === normalizedFullName
+        || normalizePhoneValue(coordinator.phone) === normalizedPhone;
+    });
+
+    if (duplicateUser || duplicateCoordinator) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    }
+
+    const previousRecord = sanitizeCoordinatorAdminRecord({ coordinator: currentCoordinator, user: linkedUser });
+
+    if (linkedUser) {
+      const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(linkedUser.id));
+      if (userIndex !== -1) {
+        this.db.users[userIndex] = {
+          ...this.db.users[userIndex],
+          username: payload.username || this.db.users[userIndex].username,
+          fullName: payload.fullName,
+          phone: payload.phone,
+          whatsappPhone: payload.whatsappPhone || payload.phone,
+          email: payload.email || null,
+        };
+      }
+    }
+
+    this.db.coordinators[coordinatorIndex] = normalizeCoordinator({
+      ...currentCoordinator,
+      name: payload.fullName,
+      cedula: payload.cedula,
+      address: payload.address,
+      phone: payload.phone,
+      city: city.name,
+    });
+
+    const updatedRecord = sanitizeCoordinatorAdminRecord({
+      coordinator: this.db.coordinators[coordinatorIndex],
+      user: currentCoordinator.userId ? this.findUserById(currentCoordinator.userId) : null,
+    });
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'coordinator',
+      entityId: normalizedCoordinatorId,
+      action: 'update',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
   }
 
   createStaff(payload) {
@@ -338,12 +682,13 @@ class EventAppRepository {
     }
 
     const fullName = normalizeComparableValue(payload.fullName);
-    const cedula = normalizeComparableValue(payload.cedula);
+    const cedula = String(payload.cedula || '').trim();
     const category = normalizeComparableValue(payload.category);
     const cityName = normalizeComparableValue(city.name);
+    const duplicateCedulaStaff = cedula ? this.findAdminStaffByCedula(cedula) : null;
 
     const duplicateStaff = this.db.staff.find((staffMember) => (
-      normalizeComparableValue(staffMember.cedula) === cedula
+      isDocumentEquivalent(staffMember.cedula, cedula)
       || (
         normalizeComparableValue(staffMember.name) === fullName
         && normalizeComparableValue(staffMember.city) === cityName
@@ -351,7 +696,7 @@ class EventAppRepository {
       )
     ));
 
-    if (duplicateStaff) {
+    if (duplicateStaff || duplicateCedulaStaff) {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
     }
 
@@ -368,8 +713,73 @@ class EventAppRepository {
     });
 
     this.db.staff.push(newStaffMember);
+    const createdRecord = sanitizeStaffAdminRecord(newStaffMember);
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'staff',
+      entityId: newStaffMember.id,
+      action: 'create',
+      previousValues: null,
+      newValues: createdRecord,
+    });
     this.save();
-    return sanitizeStaffAdminRecord(newStaffMember);
+    return createdRecord;
+  }
+
+  updateStaff(staffId, payload) {
+    const normalizedStaffId = Number(staffId);
+    const staffIndex = this.db.staff.findIndex((staffMember) => Number(staffMember.id) === normalizedStaffId);
+    if (staffIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const city = this.findCityByName(payload.city);
+    if (!city) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const normalizedFullName = normalizeComparableValue(payload.fullName);
+    const normalizedCedula = String(payload.cedula || '').trim();
+    const normalizedCategory = normalizeComparableValue(payload.category);
+    const normalizedCityName = normalizeComparableValue(city.name);
+    const duplicateStaff = this.db.staff.find((staffMember) => {
+      if (Number(staffMember.id) === normalizedStaffId) return false;
+      return isDocumentEquivalent(staffMember.cedula, normalizedCedula)
+        || (
+          normalizeComparableValue(staffMember.name) === normalizedFullName
+          && normalizeComparableValue(staffMember.city) === normalizedCityName
+          && normalizeComparableValue(staffMember.category) === normalizedCategory
+        );
+    });
+
+    if (duplicateStaff) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    }
+
+    const previousRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
+    this.db.staff[staffIndex] = normalizeStaffMember({
+      ...this.db.staff[staffIndex],
+      name: payload.fullName,
+      cedula: payload.cedula,
+      city: city.name,
+      category: payload.category,
+      clothingSize: payload.clothingSize || null,
+      shoeSize: payload.shoeSize || null,
+      measurements: payload.measurements || null,
+    });
+
+    const updatedRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'staff',
+      entityId: normalizedStaffId,
+      action: 'update',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
   }
 
   getCities() {
@@ -417,8 +827,10 @@ class EventAppRepository {
       return [];
     }
 
+    const clientProfile = this.db.clients.find((client) => Number(client.userId) === normalizedUserId) || null;
+
     return this.getEvents()
-      .filter((event) => Number(event.clientUserId) === normalizedUserId)
+      .filter((event) => Number(event.clientUserId) === normalizedUserId || (clientProfile && Number(event.clientId) === Number(clientProfile.id)))
       .map((event) => sanitizeEventForClient({
         event,
         executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
@@ -427,9 +839,14 @@ class EventAppRepository {
 
   createEvent(eventData) {
     const clients = this.getClients();
+    const matchedClient = clients.find((client) => Number(client.userId || client.id) === Number(eventData.clientUserId))
+      || clients.find((client) => Number(client.clientId) === Number(eventData.clientId))
+      || null;
     const newEvent = normalizeEvent({
       id: Date.now(),
       ...eventData,
+      clientId: Number(eventData.clientId) || matchedClient?.clientId || null,
+      clientUserId: Number(eventData.clientUserId) || matchedClient?.userId || null,
       status: 'Pendiente',
       reports: [],
       photos: [],
@@ -599,6 +1016,22 @@ class EventAppRepository {
 
   #nextId(collection) {
     return collection.reduce((maxValue, item) => Math.max(maxValue, Number(item.id) || 0), 0) + 1;
+  }
+
+  #recordAuditLog({ actorUserId, entityType, entityId, action, previousValues, newValues }) {
+    this.db.auditLogs.unshift(sanitizeAuditLogRecord({
+      auditLog: {
+        id: this.#nextId(this.db.auditLogs),
+        actorUserId: Number(actorUserId) || null,
+        entityType,
+        entityId,
+        action,
+        previousValues: cloneAuditPayload(previousValues),
+        newValues: cloneAuditPayload(newValues),
+        timestamp: new Date().toISOString(),
+      },
+      actor: actorUserId ? this.findUserById(actorUserId) : null,
+    }));
   }
 }
 

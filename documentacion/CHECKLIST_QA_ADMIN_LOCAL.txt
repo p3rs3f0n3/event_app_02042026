@@ -1,0 +1,90 @@
+CHECKLIST QA RAPIDA - MODULO ADMIN
+
+Precondicion
+- backend local arriba
+- mobile apuntando a local
+- login con usuario admin y contraseña valida
+
+1. Cliente nuevo
+[ ] Ingresar un NIT que no exista
+[ ] Tocar Verificar NIT
+[ ] Confirmar que permite continuar el alta
+[ ] Completar formulario
+[ ] Crear cliente
+[ ] Confirmar mensaje de exito
+
+2. Cliente existente
+[ ] Ingresar un NIT existente
+[ ] Tocar Verificar NIT
+[ ] Confirmar que autocompleta datos
+[ ] Confirmar que boton cambia a ACTUALIZAR
+[ ] Confirmar que aparece CANCELAR
+
+3. Actualizacion de cliente
+[ ] Modificar un campo del cliente existente
+[ ] Guardar con ACTUALIZAR
+[ ] Confirmar mensaje de exito
+[ ] Confirmar que aparece trazabilidad/historial
+
+4. Cancelar edicion cliente
+[ ] Recuperar cliente existente
+[ ] Tocar CANCELAR
+[ ] Confirmar que sale del modo edicion
+[ ] Confirmar que vuelve al modo alta normal
+
+5. Coordinador nuevo
+[ ] Ingresar cedula que no exista
+[ ] Verificar cedula
+[ ] Confirmar que deja continuar
+[ ] Completar datos
+[ ] Crear coordinador
+
+6. Coordinador existente
+[ ] Ingresar cedula existente
+[ ] Verificar cedula
+[ ] Confirmar autocompletado
+[ ] Confirmar modo ACTUALIZAR
+[ ] Confirmar boton CANCELAR
+
+7. Actualizacion de coordinador
+[ ] Cambiar un dato operativo
+[ ] Guardar
+[ ] Confirmar trazabilidad
+
+8. Staff nuevo
+[ ] Ingresar cedula que no exista
+[ ] Verificar cedula
+[ ] Completar datos
+[ ] Crear staff
+
+9. Staff existente
+[ ] Ingresar cedula existente
+[ ] Verificar cedula
+[ ] Confirmar autocompletado
+[ ] Confirmar modo ACTUALIZAR
+[ ] Confirmar boton CANCELAR
+
+10. Actualizacion de staff
+[ ] Cambiar un dato
+[ ] Guardar
+[ ] Confirmar trazabilidad
+
+11. Cambio de contraseña del admin
+[ ] Ubicar el bloque de cambio de contraseña
+[ ] Confirmar que se entiende que corresponde al usuario admin autenticado
+[ ] Cambiar contraseña
+[ ] Cerrar sesion
+[ ] Volver a entrar con la nueva contraseña
+
+12. Validaciones
+[ ] Cliente duplicado no se crea de nuevo
+[ ] Coordinador duplicado no se crea de nuevo
+[ ] Staff duplicado no se crea de nuevo
+[ ] Mensajes de error son claros y no tecnicos
+
+Resultado esperado
+[ ] Flujo homogeneo en los 3 formularios
+[ ] Alta + edicion funcionando
+[ ] Cancelacion funcionando
+[ ] Auditoria visible/coherente
+[ ] Sin romper login ni resto de modulos

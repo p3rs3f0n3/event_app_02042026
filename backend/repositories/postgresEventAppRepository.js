@@ -3,12 +3,16 @@ const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coo
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
+const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const { normalizeString } = require('../utils/validation');
-const { createPasswordHash, verifyPassword } = require('../utils/passwords');
+const { comparePassword, createPasswordHash } = require('../utils/passwords');
 const {
   DEFAULT_PROFILE_PHOTO,
+  isDocumentEquivalent,
+  isNitEquivalent,
   normalizeComparableValue,
   normalizePhoneValue,
+  sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
@@ -17,7 +21,7 @@ const {
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
   if (Number.isInteger(normalizedRawClientUserId) && normalizedRawClientUserId > 0) {
-    const explicitClient = clients.find((candidate) => Number(candidate.id) === normalizedRawClientUserId) || null;
+    const explicitClient = clients.find((candidate) => Number(candidate.userId || candidate.id) === normalizedRawClientUserId) || null;
     const comparableClient = normalizeComparableValue(client);
 
     if (explicitClient && normalizeComparableValue(explicitClient.username) === 'cliente') {
@@ -37,17 +41,48 @@ const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
 
   const matches = clients.filter((candidate) => [
     candidate.fullName,
+    candidate.razonSocial,
+    candidate.contactFullName,
     candidate.username,
     candidate.email,
   ].some((value) => normalizeComparableValue(value) === comparableClient));
 
-  return matches.length === 1 ? Number(matches[0].id) : null;
+  return matches.length === 1 ? Number(matches[0].userId || matches[0].id) : null;
+};
+
+const resolveClientId = ({ rawClientId, rawClientUserId, client, clients }) => {
+  const normalizedRawClientId = Number(rawClientId);
+  if (Number.isInteger(normalizedRawClientId) && normalizedRawClientId > 0) {
+    return normalizedRawClientId;
+  }
+
+  const normalizedRawClientUserId = Number(rawClientUserId);
+  if (Number.isInteger(normalizedRawClientUserId) && normalizedRawClientUserId > 0) {
+    const explicitClient = clients.find((candidate) => Number(candidate.userId || candidate.id) === normalizedRawClientUserId) || null;
+    return explicitClient ? Number(explicitClient.clientId || explicitClient.id) : null;
+  }
+
+  const comparableClient = normalizeComparableValue(client);
+  if (!comparableClient) {
+    return null;
+  }
+
+  const matches = clients.filter((candidate) => [
+    candidate.fullName,
+    candidate.razonSocial,
+    candidate.contactFullName,
+    candidate.username,
+    candidate.email,
+  ].some((value) => normalizeComparableValue(value) === comparableClient));
+
+  return matches.length === 1 ? Number(matches[0].clientId || matches[0].id) : null;
 };
 
 const mapEventRow = (row, clients = []) => ({
   id: row.id,
   name: row.name,
   client: row.client,
+  clientId: resolveClientId({ rawClientId: row.client_id, rawClientUserId: row.client_user_id, client: row.client, clients }),
   clientUserId: resolveClientUserId({ rawClientUserId: row.client_user_id, client: row.client, clients }),
   image: row.image,
   startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
@@ -83,7 +118,7 @@ class PostgresEventAppRepository {
     );
 
     const user = result.rows[0];
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user || !comparePassword(password, user.password_hash)) {
       return null;
     }
 
@@ -112,22 +147,138 @@ class PostgresEventAppRepository {
     return result.rows[0] || null;
   }
 
+  async changeUserPassword({ userId, currentPassword, newPassword }) {
+    const result = await query(
+      `
+        SELECT id, username, password_hash
+        FROM users
+        WHERE id = $1 AND is_active = TRUE
+        LIMIT 1
+      `,
+      [Number(userId)],
+    );
+
+    const user = result.rows[0];
+
+    if (!user) {
+      return { errorCode: 'USER_NOT_FOUND' };
+    }
+
+    if (!comparePassword(currentPassword, user.password_hash)) {
+      return { errorCode: 'INVALID_CURRENT_PASSWORD' };
+    }
+
+    await query(
+      `
+        UPDATE users
+        SET password_hash = $2,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [user.id, createPasswordHash(newPassword)],
+    );
+
+    return {
+      id: user.id,
+      username: user.username,
+    };
+  }
+
   async getClients() {
     const result = await query(
       `
-        SELECT u.id, u.username, u.full_name AS "fullName", u.phone, u.whatsapp_phone AS "whatsappPhone", u.email, r.code AS role
+        SELECT c.id AS "clientId", u.id AS "userId", COALESCE(c.razon_social, u.full_name) AS "razonSocial", c.nit,
+               COALESCE(c.contact_full_name, u.full_name) AS "contactFullName", c.contact_role AS "contactRole",
+               COALESCE(c.phone, u.phone) AS phone,
+               COALESCE(c.whatsapp_phone, u.whatsapp_phone, u.phone) AS "whatsappPhone",
+               COALESCE(c.email, u.email) AS email,
+               COALESCE(c.is_active, u.is_active) AS "isActive",
+               u.id, u.username, u.full_name AS "userFullName", u.phone AS "userPhone",
+               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
         FROM users u
         INNER JOIN roles r ON r.id = u.role_id
-        WHERE r.code = 'CLIENTE' AND u.is_active = TRUE
-        ORDER BY u.full_name ASC, u.id ASC
+        LEFT JOIN clients c ON c.user_id = u.id
+        WHERE r.code = 'CLIENTE' AND u.is_active = TRUE AND COALESCE(c.is_active, TRUE) = TRUE
+        ORDER BY COALESCE(c.razon_social, u.full_name) ASC, COALESCE(c.id, u.id) ASC
       `,
     );
 
-    return result.rows.map(sanitizeUserRecord);
+    return result.rows.map((row) => sanitizeClientRecord({
+      client: {
+        id: row.clientId,
+        userId: row.userId,
+        razonSocial: row.razonSocial,
+        nit: row.nit,
+        contactFullName: row.contactFullName,
+        contactRole: row.contactRole,
+        phone: row.phone,
+        whatsappPhone: row.whatsappPhone,
+        email: row.email,
+        isActive: row.isActive,
+      },
+      user: {
+        id: row.id,
+        username: row.username,
+        fullName: row.userFullName,
+        phone: row.userPhone,
+        whatsappPhone: row.userWhatsappPhone,
+        email: row.userEmail,
+        isActive: row.isActive,
+      },
+    }));
   }
 
   async getAdminClients() {
     return this.getClients();
+  }
+
+  async findAdminClientByNit(nit) {
+    const normalizedNit = String(nit || '').trim();
+    if (!normalizedNit) {
+      return null;
+    }
+
+    const clients = await this.getClients();
+    return clients.find((client) => isNitEquivalent(client.nit, normalizedNit)) || null;
+  }
+
+  async getAuditLogsForEntity({ entityType, entityId, limit = 10 }) {
+    const result = await query(
+      `
+        SELECT a.id, a.entity_type AS "entityType", a.entity_id AS "entityId", a.action,
+               a.actor_user_id AS "actorUserId", a.previous_values AS "previousValues", a.new_values AS "newValues",
+               a.created_at AS timestamp,
+               u.username AS "actorUsername", u.full_name AS "actorFullName"
+        FROM audit_logs a
+        LEFT JOIN users u ON u.id = a.actor_user_id
+        WHERE a.entity_type = $1 AND a.entity_id = $2
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT $3
+      `,
+      [entityType, Number(entityId), Number(limit)],
+    );
+
+    return result.rows.map((row) => sanitizeAuditLogRecord({ auditLog: row }));
+  }
+
+  async findAdminCoordinatorByCedula(cedula) {
+    const normalizedCedula = String(cedula || '').trim();
+    if (!normalizedCedula) {
+      return null;
+    }
+
+    const coordinators = await this.getAdminCoordinators();
+    return coordinators.find((coordinator) => isDocumentEquivalent(coordinator.cedula, normalizedCedula)) || null;
+  }
+
+  async findAdminStaffByCedula(cedula) {
+    const normalizedCedula = String(cedula || '').trim();
+    if (!normalizedCedula) {
+      return null;
+    }
+
+    const staff = await this.getAdminStaff();
+    return staff.find((staffMember) => isDocumentEquivalent(staffMember.cedula, normalizedCedula)) || null;
   }
 
   async getAdminCoordinators() {
@@ -262,35 +413,211 @@ class PostgresEventAppRepository {
   }
 
   async createClient(payload) {
+    const duplicateNitClient = payload.nit ? await this.findAdminClientByNit(payload.nit) : null;
+    if (duplicateNitClient) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    }
+
     const duplicateResult = await query(
       `
         SELECT u.id
         FROM users u
-        INNER JOIN roles r ON r.id = u.role_id
+        LEFT JOIN clients c ON c.user_id = u.id
         WHERE LOWER(u.username) = LOWER($1)
            OR ($2::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($2))
            OR ($3::text IS NOT NULL AND COALESCE(u.phone, '') = $3)
            OR ($4::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $4)
-           OR (r.code = 'CLIENTE' AND LOWER(u.full_name) = LOWER($5))
-        LIMIT 1
+           OR ($5::text IS NOT NULL AND LOWER(COALESCE(c.nit, '')) = LOWER($5))
+           OR ($6::text IS NOT NULL AND LOWER(COALESCE(c.razon_social, '')) = LOWER($6))
+           OR ($7::text IS NOT NULL AND LOWER(COALESCE(c.contact_full_name, '')) = LOWER($7))
+          LIMIT 1
       `,
-      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.fullName],
+      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.nit, payload.razonSocial, payload.contactFullName],
     );
 
     if (duplicateResult.rowCount > 0) {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
     }
 
-    const result = await query(
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM roles WHERE code = 'CLIENTE'), TRUE)
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, TRUE AS "isActive"
+        `,
+        [payload.username, payload.contactFullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, createPasswordHash(payload.password)],
+      );
+
+      const clientResult = await client.query(
+        `
+          INSERT INTO clients (user_id, razon_social, nit, contact_full_name, contact_role, phone, whatsapp_phone, email, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+          RETURNING id, user_id AS "userId", razon_social AS "razonSocial", nit,
+                    contact_full_name AS "contactFullName", contact_role AS "contactRole",
+                    phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [userResult.rows[0].id, payload.razonSocial, payload.nit, payload.contactFullName, payload.contactRole, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
+      );
+
+      const createdRecord = sanitizeClientRecord({ client: clientResult.rows[0], user: userResult.rows[0] });
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'client',
+        entityId: clientResult.rows[0].id,
+        action: 'create',
+        previousValues: null,
+        newValues: createdRecord,
+      });
+
+      await client.query('COMMIT');
+      return createdRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateClient(clientId, payload) {
+    const normalizedClientId = Number(clientId);
+    const currentClientResult = await query(
       `
-        INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM roles WHERE code = 'CLIENTE'), TRUE)
-        RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, 'CLIENTE' AS role
+        SELECT c.id AS "clientId", c.user_id AS "userId", c.razon_social AS "razonSocial", c.nit,
+               c.contact_full_name AS "contactFullName", c.contact_role AS "contactRole",
+               c.phone, c.whatsapp_phone AS "whatsappPhone", c.email, c.is_active AS "isActive",
+               u.id, u.username, u.full_name AS "fullName", u.phone AS "userPhone",
+               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
+        FROM clients c
+        INNER JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1
+        LIMIT 1
       `,
-      [payload.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, createPasswordHash(payload.password)],
+      [normalizedClientId],
     );
 
-    return sanitizeUserRecord(result.rows[0]);
+    if (currentClientResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentRow = currentClientResult.rows[0];
+    const duplicateNitClient = payload.nit ? await this.findAdminClientByNit(payload.nit) : null;
+    if (duplicateNitClient && Number(duplicateNitClient.clientId) !== normalizedClientId) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    }
+
+    const duplicateResult = await query(
+      `
+        SELECT u.id
+        FROM users u
+        LEFT JOIN clients c ON c.user_id = u.id
+        WHERE u.id <> $1
+          AND COALESCE(c.id, 0) <> $2
+          AND (
+            LOWER(u.username) = LOWER($3)
+            OR ($4::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($4))
+            OR ($5::text IS NOT NULL AND COALESCE(u.phone, '') = $5)
+            OR ($6::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $6)
+            OR ($7::text IS NOT NULL AND LOWER(COALESCE(c.nit, '')) = LOWER($7))
+            OR ($8::text IS NOT NULL AND LOWER(COALESCE(c.razon_social, '')) = LOWER($8))
+            OR ($9::text IS NOT NULL AND LOWER(COALESCE(c.contact_full_name, '')) = LOWER($9))
+          )
+        LIMIT 1
+      `,
+      [currentRow.userId, normalizedClientId, payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.nit, payload.razonSocial, payload.contactFullName],
+    );
+
+    if (duplicateResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    }
+
+    const previousRecord = sanitizeClientRecord({
+      client: {
+        id: currentRow.clientId,
+        userId: currentRow.userId,
+        razonSocial: currentRow.razonSocial,
+        nit: currentRow.nit,
+        contactFullName: currentRow.contactFullName,
+        contactRole: currentRow.contactRole,
+        phone: currentRow.phone,
+        whatsappPhone: currentRow.whatsappPhone,
+        email: currentRow.email,
+        isActive: currentRow.isActive,
+      },
+      user: {
+        id: currentRow.id,
+        username: currentRow.username,
+        fullName: currentRow.fullName,
+        phone: currentRow.userPhone,
+        whatsappPhone: currentRow.userWhatsappPhone,
+        email: currentRow.userEmail,
+        isActive: currentRow.isActive,
+      },
+    });
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          UPDATE users
+          SET username = $2,
+              full_name = $3,
+              phone = $4,
+              whatsapp_phone = $5,
+              email = $6,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+        `,
+        [currentRow.userId, payload.username, payload.contactFullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
+      );
+
+      const clientResult = await client.query(
+        `
+          UPDATE clients
+          SET razon_social = $2,
+              nit = $3,
+              contact_full_name = $4,
+              contact_role = $5,
+              phone = $6,
+              whatsapp_phone = $7,
+              email = $8,
+              is_active = TRUE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, user_id AS "userId", razon_social AS "razonSocial", nit,
+                    contact_full_name AS "contactFullName", contact_role AS "contactRole",
+                    phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [normalizedClientId, payload.razonSocial, payload.nit, payload.contactFullName, payload.contactRole, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
+      );
+
+      const updatedRecord = sanitizeClientRecord({ client: clientResult.rows[0], user: userResult.rows[0] });
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'client',
+        entityId: normalizedClientId,
+        action: 'update',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async createCoordinator(payload) {
@@ -298,6 +625,8 @@ class PostgresEventAppRepository {
     if (cityResult.rowCount === 0) {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
+
+    const duplicateCedulaCoordinator = payload.cedula ? await this.findAdminCoordinatorByCedula(payload.cedula) : null;
 
     const duplicateUserResult = await query(
       `
@@ -315,15 +644,14 @@ class PostgresEventAppRepository {
       `
         SELECT id
         FROM coordinators
-        WHERE LOWER(cedula) = LOWER($1)
-           OR LOWER(full_name) = LOWER($2)
-           OR phone = $3
+        WHERE LOWER(full_name) = LOWER($1)
+           OR phone = $2
         LIMIT 1
       `,
-      [payload.cedula, payload.fullName, payload.phone],
+      [payload.fullName, payload.phone],
     );
 
-    if (duplicateUserResult.rowCount > 0 || duplicateCoordinatorResult.rowCount > 0) {
+    if (duplicateCedulaCoordinator || duplicateUserResult.rowCount > 0 || duplicateCoordinatorResult.rowCount > 0) {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
     }
 
@@ -350,11 +678,160 @@ class PostgresEventAppRepository {
         [userResult.rows[0].id, payload.fullName, payload.cedula, payload.address, payload.phone, DEFAULT_PROFILE_PHOTO, cityResult.rows[0].id],
       );
 
-      await client.query('COMMIT');
-      return sanitizeCoordinatorAdminRecord({
+      const createdRecord = sanitizeCoordinatorAdminRecord({
         coordinator: { ...coordinatorResult.rows[0], city: cityResult.rows[0].name },
         user: userResult.rows[0],
       });
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'coordinator',
+        entityId: coordinatorResult.rows[0].id,
+        action: 'create',
+        previousValues: null,
+        newValues: createdRecord,
+      });
+
+      await client.query('COMMIT');
+      return createdRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateCoordinator(coordinatorId, payload) {
+    const normalizedCoordinatorId = Number(coordinatorId);
+    const currentCoordinatorResult = await query(
+      `
+        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.id AS "cityId", ci.name AS city,
+               u.id AS "linkedUserId", u.username, u.full_name AS "userFullName", u.phone AS "userPhone",
+               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
+        FROM coordinators c
+        INNER JOIN cities ci ON ci.id = c.city_id
+        LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [normalizedCoordinatorId],
+    );
+
+    if (currentCoordinatorResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentRow = currentCoordinatorResult.rows[0];
+    const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
+    if (cityResult.rowCount === 0) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const duplicateCoordinatorByCedula = payload.cedula ? await this.findAdminCoordinatorByCedula(payload.cedula) : null;
+    if (duplicateCoordinatorByCedula && Number(duplicateCoordinatorByCedula.id) !== normalizedCoordinatorId) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    }
+
+    const duplicateUserResult = currentRow.linkedUserId ? await query(
+      `
+        SELECT id
+        FROM users
+        WHERE id <> $1
+          AND (
+            ($2::text IS NOT NULL AND LOWER(username) = LOWER($2))
+            OR ($3::text IS NOT NULL AND LOWER(COALESCE(email, '')) = LOWER($3))
+            OR ($4::text IS NOT NULL AND COALESCE(phone, '') = $4)
+            OR ($5::text IS NOT NULL AND COALESCE(whatsapp_phone, '') = $5)
+          )
+        LIMIT 1
+      `,
+      [currentRow.linkedUserId, payload.username || currentRow.username || null, payload.email || null, payload.phone || null, payload.whatsappPhone || payload.phone || null],
+    ) : { rowCount: 0 };
+
+    const duplicateCoordinatorResult = await query(
+      `
+        SELECT id
+        FROM coordinators
+        WHERE id <> $1
+          AND (
+            LOWER(full_name) = LOWER($2)
+            OR phone = $3
+          )
+        LIMIT 1
+      `,
+      [normalizedCoordinatorId, payload.fullName, payload.phone],
+    );
+
+    if (duplicateUserResult.rowCount > 0 || duplicateCoordinatorResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    }
+
+    const previousRecord = sanitizeCoordinatorAdminRecord({
+      coordinator: currentRow,
+      user: currentRow.linkedUserId ? {
+        id: currentRow.linkedUserId,
+        username: currentRow.username,
+        fullName: currentRow.userFullName,
+        phone: currentRow.userPhone,
+        whatsappPhone: currentRow.userWhatsappPhone,
+        email: currentRow.userEmail,
+      } : null,
+    });
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      let updatedUser = null;
+      if (currentRow.linkedUserId) {
+        const userResult = await client.query(
+          `
+            UPDATE users
+            SET username = $2,
+                full_name = $3,
+                phone = $4,
+                whatsapp_phone = $5,
+                email = $6,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+          `,
+          [currentRow.linkedUserId, payload.username || currentRow.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
+        );
+        updatedUser = userResult.rows[0] || null;
+      }
+
+      const coordinatorResult = await client.query(
+        `
+          UPDATE coordinators
+          SET full_name = $2,
+              cedula = $3,
+              address = $4,
+              phone = $5,
+              city_id = $6,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo
+        `,
+        [normalizedCoordinatorId, payload.fullName, payload.cedula, payload.address, payload.phone, cityResult.rows[0].id],
+      );
+
+      const updatedRecord = sanitizeCoordinatorAdminRecord({
+        coordinator: { ...coordinatorResult.rows[0], city: cityResult.rows[0].name },
+        user: updatedUser,
+      });
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'coordinator',
+        entityId: normalizedCoordinatorId,
+        action: 'update',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -369,36 +846,151 @@ class PostgresEventAppRepository {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
 
+    const duplicateCedulaStaff = payload.cedula ? await this.findAdminStaffByCedula(payload.cedula) : null;
+
     const duplicateResult = await query(
       `
         SELECT id
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
-        WHERE LOWER(s.cedula) = LOWER($1)
-           OR (
-             LOWER(s.full_name) = LOWER($2)
-             AND LOWER(ci.name) = LOWER($3)
-             AND UPPER(s.category) = UPPER($4)
+        WHERE (
+             LOWER(s.full_name) = LOWER($1)
+             AND LOWER(ci.name) = LOWER($2)
+             AND UPPER(s.category) = UPPER($3)
            )
         LIMIT 1
       `,
-      [payload.cedula, payload.fullName, payload.city, payload.category],
+      [payload.fullName, payload.city, payload.category],
+    );
+
+    if (duplicateCedulaStaff || duplicateResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `
+          INSERT INTO staff (full_name, cedula, city_id, category, photo, clothing_size, shoe_size, measurements)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+        `,
+        [payload.fullName, payload.cedula, cityResult.rows[0].id, payload.category, DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+      );
+
+      const createdRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'staff',
+        entityId: result.rows[0].id,
+        action: 'create',
+        previousValues: null,
+        newValues: createdRecord,
+      });
+
+      await client.query('COMMIT');
+      return createdRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateStaff(staffId, payload) {
+    const normalizedStaffId = Number(staffId);
+    const currentStaffResult = await query(
+      `
+        SELECT s.id, s.full_name AS name, s.cedula, ci.id AS "cityId", ci.name AS city, s.category, s.photo,
+               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+        FROM staff s
+        INNER JOIN cities ci ON ci.id = s.city_id
+        WHERE s.id = $1
+        LIMIT 1
+      `,
+      [normalizedStaffId],
+    );
+
+    if (currentStaffResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentRow = currentStaffResult.rows[0];
+    const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
+    if (cityResult.rowCount === 0) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const duplicateStaffByCedula = payload.cedula ? await this.findAdminStaffByCedula(payload.cedula) : null;
+    if (duplicateStaffByCedula && Number(duplicateStaffByCedula.id) !== normalizedStaffId) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    }
+
+    const duplicateResult = await query(
+      `
+        SELECT s.id
+        FROM staff s
+        INNER JOIN cities ci ON ci.id = s.city_id
+        WHERE s.id <> $1
+          AND (
+            LOWER(s.full_name) = LOWER($2)
+            AND LOWER(ci.name) = LOWER($3)
+            AND UPPER(s.category) = UPPER($4)
+          )
+        LIMIT 1
+      `,
+      [normalizedStaffId, payload.fullName, payload.city, payload.category],
     );
 
     if (duplicateResult.rowCount > 0) {
       return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
     }
 
-    const result = await query(
-      `
-        INSERT INTO staff (full_name, cedula, city_id, category, photo, clothing_size, shoe_size, measurements)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
-      `,
-      [payload.fullName, payload.cedula, cityResult.rows[0].id, payload.category, DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
-    );
+    const previousRecord = sanitizeStaffAdminRecord(currentRow);
+    const client = await pool.connect();
 
-    return sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `
+          UPDATE staff
+          SET full_name = $2,
+              cedula = $3,
+              city_id = $4,
+              category = $5,
+              clothing_size = $6,
+              shoe_size = $7,
+              measurements = $8,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+        `,
+        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, payload.category, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+      );
+
+      const updatedRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'staff',
+        entityId: normalizedStaffId,
+        action: 'update',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async getCities() {
@@ -440,7 +1032,7 @@ class PostgresEventAppRepository {
     const clients = await this.getClients();
     const result = await query(
       `
-        SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
+        SELECT e.id, e.name, e.client, e.client_id, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
                e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
                COALESCE(
                   json_agg(
@@ -474,6 +1066,7 @@ class PostgresEventAppRepository {
     }
 
     const events = await this.getEvents();
+    const clientProfile = await this.findClientByUserId(normalizedUserId);
     const executiveIds = [...new Set(events.map((event) => Number(event.createdByUserId)).filter((id) => Number.isInteger(id) && id > 0))];
     const executiveContactsById = new Map();
 
@@ -493,7 +1086,7 @@ class PostgresEventAppRepository {
     }
 
     return events
-      .filter((event) => Number(event.clientUserId) === normalizedUserId)
+      .filter((event) => Number(event.clientUserId) === normalizedUserId || (clientProfile && Number(event.clientId) === Number(clientProfile.clientId)))
       .map((event) => sanitizeEventForClient({
         event,
         executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
@@ -505,14 +1098,15 @@ class PostgresEventAppRepository {
 
     try {
       await client.query('BEGIN');
+      const matchedClient = await this.findClientByIdentifiers({ clientId: eventData.clientId, clientUserId: eventData.clientUserId });
 
         const eventResult = await client.query(
           `
-          INSERT INTO events (name, client, client_user_id, image, start_date, end_date, status, reports, photos, executive_report, created_by_user_id)
-          VALUES ($1, $2, $3, $4, $5, $6, 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $7)
+          INSERT INTO events (name, client, client_id, client_user_id, image, start_date, end_date, status, reports, photos, executive_report, created_by_user_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
           RETURNING id
         `,
-        [eventData.name, eventData.client, Number.isInteger(Number(eventData.clientUserId)) && Number(eventData.clientUserId) > 0 ? Number(eventData.clientUserId) : null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       const event = eventResult.rows[0];
@@ -534,17 +1128,19 @@ class PostgresEventAppRepository {
 
     try {
       await client.query('BEGIN');
+      const matchedClient = await this.findClientByIdentifiers({ clientId: eventData.clientId, clientUserId: eventData.clientUserId });
 
       const eventResult = await client.query(
         `
           UPDATE events
           SET name = $2,
               client = $3,
-              client_user_id = $4,
-              image = $5,
-              start_date = $6,
-              end_date = $7,
-              created_by_user_id = COALESCE(created_by_user_id, $8),
+              client_id = $4,
+              client_user_id = $5,
+              image = $6,
+              start_date = $7,
+              end_date = $8,
+              created_by_user_id = COALESCE(created_by_user_id, $9),
               manual_inactivated_at = NULL,
               manual_inactivation_comment = NULL,
               manual_inactivated_by_user_id = NULL,
@@ -552,7 +1148,7 @@ class PostgresEventAppRepository {
           WHERE id = $1
           RETURNING id
         `,
-        [id, eventData.name, eventData.client, Number.isInteger(Number(eventData.clientUserId)) && Number(eventData.clientUserId) > 0 ? Number(eventData.clientUserId) : null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [id, eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       if (eventResult.rowCount === 0) {
@@ -601,6 +1197,7 @@ class PostgresEventAppRepository {
     const result = await query(
       `
         SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
+               e.client_id,
                e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
                COALESCE(
                   json_agg(
@@ -627,6 +1224,40 @@ class PostgresEventAppRepository {
     }
 
     return enrichEventLifecycle(mapEventRow(result.rows[0], await this.getClients()));
+  }
+
+  async findClientByUserId(userId) {
+    const normalizedUserId = Number(userId);
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return null;
+    }
+
+    const result = await query(
+      `
+        SELECT c.id AS "clientId", c.user_id AS "userId"
+        FROM clients c
+        WHERE c.user_id = $1 AND c.is_active = TRUE
+        LIMIT 1
+      `,
+      [normalizedUserId],
+    );
+
+    return result.rows[0] || null;
+  }
+
+  async findClientByIdentifiers({ clientId, clientUserId }) {
+    const normalizedClientId = Number(clientId);
+    if (Number.isInteger(normalizedClientId) && normalizedClientId > 0) {
+      const result = await query(
+        'SELECT id AS "clientId", user_id AS "userId" FROM clients WHERE id = $1 AND is_active = TRUE LIMIT 1',
+        [normalizedClientId],
+      );
+      if (result.rows[0]) {
+        return result.rows[0];
+      }
+    }
+
+    return this.findClientByUserId(clientUserId);
   }
 
   async addCoordinatorPhoto(id, { authorUserId, uri, mimeType, fileSize, fileName }) {
@@ -753,6 +1384,16 @@ class PostgresEventAppRepository {
         [eventId, cityRow?.id || null, cityRow?.name || cityName, JSON.stringify(city.points || [])],
       );
     }
+  }
+
+  async #insertAuditLog(client, { actorUserId, entityType, entityId, action, previousValues, newValues }) {
+    await client.query(
+      `
+        INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, previous_values, new_values)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+      `,
+      [Number(actorUserId) || null, entityType, Number(entityId), action, JSON.stringify(cloneAuditPayload(previousValues)), JSON.stringify(cloneAuditPayload(newValues))],
+    );
   }
 }
 

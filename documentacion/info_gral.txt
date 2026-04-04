@@ -75,3 +75,25 @@ L2@4VECx&K^q
 
 
 se despliega el back en la vps
+
+Usuarios de prueba
+Administrador
+- usuario: admin
+- contraseña: 123
+Ejecutivos
+- usuario: ejecutivo.ana
+- contraseña: 123
+- usuario: ejecutivo.bruno
+- contraseña: 123
+Coordinador
+- usuario: coord
+- contraseña: 123
+Clientes
+- usuario: cliente
+- contraseña: 123
+- usuario: cliente.alpina
+- contraseña: 123
+- usuario: cliente.colcafe
+- contraseña: 123
+- usuario: cliente.nutresa
+- contraseña: 123

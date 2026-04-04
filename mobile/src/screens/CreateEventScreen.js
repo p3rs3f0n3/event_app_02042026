@@ -9,12 +9,19 @@ const isOtherCityOption = (city) => Boolean(city?.isOther || String(city?.name |
 const normalizeCityName = (value) => String(value || '').trim().toLowerCase();
 const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 
-const getClientDescription = (client) => [client?.username ? `@${client.username}` : null, client?.email || null].filter(Boolean).join(' · ');
+const getClientDescription = (client) => [client?.username ? `@${client.username}` : null, client?.contactFullName || null, client?.email || null].filter(Boolean).join(' · ');
+
+const getClientLabel = (client) => client?.razonSocial || client?.fullName || client?.contactFullName || '';
 
 const findMatchingClient = (clients, eventLike) => {
   const explicitClientId = Number(eventLike?.clientUserId);
   if (Number.isInteger(explicitClientId) && explicitClientId > 0) {
-    return clients.find((client) => Number(client.id) === explicitClientId) || null;
+    return clients.find((client) => Number(client.userId || client.id) === explicitClientId) || null;
+  }
+
+  const explicitMasterClientId = Number(eventLike?.clientId);
+  if (Number.isInteger(explicitMasterClientId) && explicitMasterClientId > 0) {
+    return clients.find((client) => Number(client.clientId) === explicitMasterClientId) || null;
   }
 
   const comparableClient = normalizeComparableValue(eventLike?.client);
@@ -22,7 +29,7 @@ const findMatchingClient = (clients, eventLike) => {
     return null;
   }
 
-  const matches = clients.filter((client) => [client.fullName, client.username, client.email].some((value) => normalizeComparableValue(value) === comparableClient));
+  const matches = clients.filter((client) => [client.fullName, client.razonSocial, client.contactFullName, client.username, client.email].some((value) => normalizeComparableValue(value) === comparableClient));
   return matches.length === 1 ? matches[0] : null;
 };
 
@@ -72,7 +79,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [apiLists, setApiLists] = useState({ coordinators: [], staff: [], cities: [], clients: [] });
   const [loading, setLoading] = useState(true);
   const [eventData, setEventData] = useState({
-    name: eventToEdit?.name || '', client: eventToEdit?.client || '', clientUserId: eventToEdit?.clientUserId || null,
+    name: eventToEdit?.name || '', client: eventToEdit?.client || '', clientId: eventToEdit?.clientId || null, clientUserId: eventToEdit?.clientUserId || null,
     startDate: eventToEdit?.startDate ? new Date(eventToEdit.startDate) : null,
     endDate: eventToEdit?.endDate ? new Date(eventToEdit.endDate) : null,
     image: eventToEdit?.image || null, cities: eventToEdit?.cities || []
@@ -93,8 +100,10 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
 
   const [currentPoint, setCurrentPoint] = useState(createEmptyPoint());
   const selectedClient = useMemo(
-    () => apiLists.clients.find((client) => Number(client.id) === Number(eventData.clientUserId)) || null,
-    [apiLists.clients, eventData.clientUserId],
+    () => apiLists.clients.find((client) => Number(client.clientId) === Number(eventData.clientId))
+      || apiLists.clients.find((client) => Number(client.userId || client.id) === Number(eventData.clientUserId))
+      || null,
+    [apiLists.clients, eventData.clientId, eventData.clientUserId],
   );
 
   const resolvedCityName = (isNewCity ? manualCityName : currentCityName).trim();
@@ -173,14 +182,16 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       return;
     }
 
-    if (Number(eventData.clientUserId) === Number(matchedClient.id) && eventData.client === matchedClient.fullName) {
+    const nextClientLabel = getClientLabel(matchedClient);
+    if (Number(eventData.clientUserId) === Number(matchedClient.userId || matchedClient.id) && Number(eventData.clientId) === Number(matchedClient.clientId) && eventData.client === nextClientLabel) {
       return;
     }
 
     setEventData((prev) => ({
       ...prev,
-      client: matchedClient.fullName,
-      clientUserId: matchedClient.id,
+      client: nextClientLabel,
+      clientId: matchedClient.clientId || null,
+      clientUserId: matchedClient.userId || matchedClient.id,
     }));
   }, [apiLists.clients, eventData]);
 
@@ -464,7 +475,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           {apiLists.cities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(i => (<TouchableOpacity key={i.id} style={styles.cityItem} onPress={() => { setCurrentPoint((prev) => ({ ...prev, coordinator: null, assignedStaff: [] })); if (isOtherCityOption(i)) { setIsNewCity(true); setCurrentCityName(''); setManualCityName(''); } else { setIsNewCity(false); setCurrentCityName(i.name); setManualCityName(''); } setShowCitySearch(false); setSearchQuery(''); }}><Text style={styles.cityItemText}>{i.name}</Text></TouchableOpacity>))}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => setShowCitySearch(false)}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
         <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar cliente..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><ScrollView style={{maxHeight: 400}}>
-          {apiLists.clients.filter((client) => [client.fullName, client.username, client.email].some((value) => normalizeComparableValue(value).includes(normalizeComparableValue(clientSearchQuery)))).map((client) => (<TouchableOpacity key={client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: client.fullName, clientUserId: client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{client.fullName}</Text><Text style={styles.clientItemMeta}>{getClientDescription(client)}</Text></TouchableOpacity>))}
+          {apiLists.clients.filter((client) => [client.fullName, client.razonSocial, client.contactFullName, client.username, client.email].some((value) => normalizeComparableValue(value).includes(normalizeComparableValue(clientSearchQuery)))).map((client) => (<TouchableOpacity key={client.clientId || client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: getClientLabel(client), clientId: client.clientId || null, clientUserId: client.userId || client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{getClientLabel(client)}</Text><Text style={styles.clientItemMeta}>{getClientDescription(client)}</Text></TouchableOpacity>))}
           {apiLists.clients.length === 0 ? <Text style={styles.emptyModalText}>No hay clientes disponibles.</Text> : null}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => { setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
         {showPicker && <DateTimePicker value={(showPicker === 'start_time' ? currentPoint.startTime : showPicker === 'end_time' ? currentPoint.endTime : showPicker === 'start_date' ? eventData.startDate : eventData.endDate) || new Date()} mode={showPicker.includes('date') ? 'date' : 'time'} is24Hour={false} display="default" onChange={onPickerChange} />}

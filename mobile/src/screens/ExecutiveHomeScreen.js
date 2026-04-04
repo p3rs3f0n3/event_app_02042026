@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import CreateEventScreen from './CreateEventScreen';
 import ReviewEventsScreen from './ReviewEventsScreen';
 import ReportsScreen from './ReportsScreen';
+import ChangePasswordCard from '../components/ChangePasswordCard';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
@@ -74,6 +75,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         </SurfaceCard>
       </View>
 
+      <ChangePasswordCard user={user} palette={palette} />
       <AppButton title="REGRESAR / SALIR" variant="secondary" onPress={onLogout} />
     </ScreenShell>
   );
