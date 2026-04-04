@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import CoordinatorEventDetailScreen from './CoordinatorEventDetailScreen';
 import CoordinatorEventsScreen from './CoordinatorEventsScreen';
-import ChangePasswordCard from '../components/ChangePasswordCard';
+import UserProfileCard from '../components/UserProfileCard';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, SPACING } from '../theme/tokens';
@@ -69,7 +69,15 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <AppButton title="VER EVENTOS ASIGNADOS" onPress={() => setCurrentView('events')} />
       </SurfaceCard>
 
-      <ChangePasswordCard user={user} palette={palette} />
+      <UserProfileCard
+        user={user}
+        palette={palette}
+        title="Perfil coordinador"
+        description={`Sesión activa como @${user?.username}. El cambio de contraseña quedó asociado a tu usuario y fuera de los flujos de campo para evitar confusión operativa.`}
+        buttonLabel="MI CONTRASEÑA"
+        buttonVariant="primary"
+      />
+
       <AppButton title="REGRESAR / SALIR" variant="secondary" onPress={onLogout} />
     </ScreenShell>
   );

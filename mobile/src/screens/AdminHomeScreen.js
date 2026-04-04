@@ -18,7 +18,7 @@ import {
   updateAdminCoordinator,
   updateAdminStaff,
 } from '../api/api';
-import ChangePasswordCard from '../components/ChangePasswordCard';
+import UserProfileCard from '../components/UserProfileCard';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
 import { getUserDisplayName } from '../utils/user';
@@ -942,15 +942,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         subtitle={`Hola, ${getUserDisplayName(user)}. Desde acá podés gestionar altas administrativas, actualizar clientes existentes y mantener trazabilidad sin tocar los flujos operativos existentes.`}
       />
 
-      <SurfaceCard style={styles.profileCard}>
-        <View style={styles.profileHeader}>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileTitle}>Perfil administrativo</Text>
-            <Text style={styles.profileText}>Sesión activa como @{user?.username}. El cambio de contraseña quedó separado del trabajo operativo para evitar confusiones en los formularios.</Text>
-          </View>
-          <ChangePasswordCard user={user} palette={palette} buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />
-        </View>
-      </SurfaceCard>
+      <UserProfileCard user={user} palette={palette} title="Perfil administrativo" buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />
 
       <SurfaceCard style={styles.heroCard}>
         <View style={styles.heroBadges}>
@@ -1120,11 +1112,6 @@ const createStyles = (palette) => StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   inlineNoticeText: { color: palette.textMuted, lineHeight: 20 },
-  profileCard: { backgroundColor: '#FFFFFF' },
-  profileHeader: { gap: SPACING.md },
-  profileInfo: { gap: SPACING.xs },
-  profileTitle: { color: palette.text, fontSize: 18, fontWeight: '800' },
-  profileText: { color: palette.textMuted, lineHeight: 20 },
   auditSection: { marginTop: SPACING.md, gap: SPACING.sm },
   auditTitle: { color: palette.text, fontSize: 16, fontWeight: '800' },
   auditItem: {

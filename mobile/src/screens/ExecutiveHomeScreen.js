@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import CreateEventScreen from './CreateEventScreen';
 import ReviewEventsScreen from './ReviewEventsScreen';
 import ReportsScreen from './ReportsScreen';
-import ChangePasswordCard from '../components/ChangePasswordCard';
+import UserProfileCard from '../components/UserProfileCard';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
@@ -55,6 +55,15 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <Text style={styles.heroText}>Accedé rápido a la creación, revisión y publicación final de cada evento.</Text>
       </SurfaceCard>
 
+      <UserProfileCard
+        user={user}
+        palette={palette}
+        title="Perfil ejecutivo"
+        description={`Sesión activa como @${user?.username}. El cambio de contraseña quedó asociado a tu usuario y separado del trabajo comercial para no mezclarlo con la operación.`}
+        buttonLabel="MI CONTRASEÑA"
+        buttonVariant="primary"
+      />
+
       <View style={styles.menuContainer}>
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Crear evento</Text>
@@ -75,7 +84,6 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         </SurfaceCard>
       </View>
 
-      <ChangePasswordCard user={user} palette={palette} />
       <AppButton title="REGRESAR / SALIR" variant="secondary" onPress={onLogout} />
     </ScreenShell>
   );
