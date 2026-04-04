@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert, Platform, Image, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert, Platform, Image, ActivityIndicator, Modal, Linking } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { createEvent, updateEvent, getClients, getCoordinators, getStaff, getStaffCategories, getColombiaCities, addColombiaCity } from '../api/api';
@@ -8,6 +8,7 @@ import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 const isOtherCityOption = (city) => Boolean(city?.isOther || String(city?.name || '').trim().toUpperCase() === 'OTRO');
 const normalizeCityName = (value) => String(value || '').trim().toLowerCase();
 const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
+const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '').slice(0, 10);
 
 const getClientDescription = (client) => [client?.username ? `@${client.username}` : null, client?.contactFullName || null, client?.email || null].filter(Boolean).join(' · ');
 
@@ -35,6 +36,27 @@ const findMatchingClient = (clients, eventLike) => {
 
 const createEmptyPoint = () => ({ establishment: '', address: '', contact: '', phone: '', startTime: null, endTime: null, coordinator: null, assignedStaff: [] });
 
+const formatPointTime = (value) => {
+  if (!value) {
+    return 'Sin dato';
+  }
+
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Sin dato';
+  }
+
+  return parsedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const getAssignedStaffLabel = (point) => {
+  const staffNames = Array.isArray(point?.assignedStaff)
+    ? point.assignedStaff.map((staffMember) => staffMember?.name || staffMember?.fullName).filter(Boolean)
+    : [];
+
+  return staffNames.length ? staffNames.join(', ') : 'Sin staff asignado';
+};
+
 const getUtcMinutes = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -57,7 +79,7 @@ const hasTimeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
   return leftStartMinutes < rightEndMinutes && rightStartMinutes < leftEndMinutes;
 };
 
-const InputField = ({ styles, label, value, onChangeText, placeholder, editable = true, onPress }) => (
+const InputField = ({ styles, label, value, onChangeText, placeholder, editable = true, onPress, keyboardType = 'default', maxLength, autoCapitalize = 'sentences' }) => (
   <View style={styles.inputContainer}>
     <Text style={styles.label}>{label}</Text>
     {onPress ? (
@@ -65,7 +87,7 @@ const InputField = ({ styles, label, value, onChangeText, placeholder, editable 
         <Text style={[styles.input, !value && { color: 'rgba(255,255,255,0.5)' }]}>{value || placeholder}</Text>
       </TouchableOpacity>
     ) : (
-      <TextInput style={styles.input} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="rgba(255,255,255,0.5)" editable={editable} />
+      <TextInput style={styles.input} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="rgba(255,255,255,0.5)" editable={editable} keyboardType={keyboardType} maxLength={maxLength} autoCapitalize={autoCapitalize} />
     )}
     <View style={styles.divider} />
   </View>
@@ -94,8 +116,14 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [showClientSearch, setShowClientSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [clientSearchLoading, setClientSearchLoading] = useState(false);
+  const [showImageActions, setShowImageActions] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const [staffInDetail, setStaffInDetail] = useState(null);
+  const [pointInDetail, setPointInDetail] = useState(null);
+  const [expandedStaffPhoto, setExpandedStaffPhoto] = useState(null);
   const [categories, setCategories] = useState([]);
 
   const [currentPoint, setCurrentPoint] = useState(createEmptyPoint());
@@ -107,6 +135,77 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   );
 
   const resolvedCityName = (isNewCity ? manualCityName : currentCityName).trim();
+  const filteredCategories = useMemo(() => {
+    const normalizedQuery = normalizeComparableValue(categorySearchQuery);
+
+    if (!normalizedQuery) {
+      return categories;
+    }
+
+    return categories.filter((category) => normalizeComparableValue(category).includes(normalizedQuery));
+  }, [categories, categorySearchQuery]);
+
+  const openGoogleMapsSearch = async () => {
+    const query = currentPoint.address?.trim() || resolvedCityName || 'Colombia';
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      Alert.alert('Google Maps', 'No se pudo abrir la búsqueda externa en este dispositivo.');
+    }
+  };
+
+  const launchEventImagePicker = async ({ allowsEditing = false } = {}) => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Necesitás habilitar la galería para cargar la foto del evento.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing,
+        quality: 1,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return;
+      }
+
+      setEventData((prev) => ({ ...prev, image: result.assets[0].uri }));
+      setShowImageActions(true);
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo abrir la galería en este dispositivo.');
+    }
+  };
+
+  const handlePickEventImage = () => launchEventImagePicker({ allowsEditing: false });
+
+  const handleEditEventImage = () => launchEventImagePicker({ allowsEditing: true });
+
+  const handleUseEventImageAsIs = () => {
+    setShowImageActions(false);
+  };
+
+  const handleRemoveEventImage = () => {
+    setEventData((prev) => ({ ...prev, image: null }));
+    setShowImageActions(false);
+  };
+
+  const searchClientsFromApi = async (query = '') => {
+    setClientSearchLoading(true);
+    try {
+      const clients = await getClients(query ? { q: query } : {});
+      setClientSearchResults(Array.isArray(clients) ? clients : []);
+    } catch (error) {
+      setClientSearchResults([]);
+      Alert.alert('Error', 'No se pudo buscar clientes en la base de datos');
+    } finally {
+      setClientSearchLoading(false);
+    }
+  };
 
   const buildDraftCities = () => {
     const draftCities = [...eventData.cities];
@@ -167,6 +266,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       try {
         const [cities, clients, staffCategories] = await Promise.all([getColombiaCities(), getClients(), getStaffCategories()]);
         setApiLists(prev => ({ ...prev, cities, clients }));
+        setClientSearchResults(Array.isArray(clients) ? clients : []);
         setCategories(Array.isArray(staffCategories) ? staffCategories.map((category) => category.name) : []);
       } catch (error) { Alert.alert('Error', 'No se cargaron ciudades'); } finally { setLoading(false); }
     };
@@ -197,6 +297,18 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   }, [apiLists.clients, eventData]);
 
   useEffect(() => {
+    if (!showClientSearch) {
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => {
+      searchClientsFromApi(clientSearchQuery.trim());
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [clientSearchQuery, showClientSearch]);
+
+  useEffect(() => {
     if (eventToEdit?.isInactive) {
       Alert.alert('Evento inactivo', 'Este evento ya no admite edición', [{ text: 'OK', onPress: onBack }]);
     }
@@ -215,6 +327,9 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const handleAddPoint = () => {
     if (!currentPoint.establishment || !currentPoint.address || !currentPoint.contact || !currentPoint.phone || !currentPoint.coordinator || !currentPoint.startTime || !currentPoint.endTime) {
       return Alert.alert('Error', 'Complete establecimiento, dirección, contacto, teléfono, horarios y coordinador');
+    }
+    if (currentPoint.phone.length > 10) {
+      return Alert.alert('Error', 'El teléfono de contacto no puede superar 10 dígitos');
     }
     if (new Date(currentPoint.endTime).getTime() <= new Date(currentPoint.startTime).getTime()) {
       return Alert.alert('Error', 'Hora fin debe ser posterior a inicio');
@@ -237,7 +352,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       if (editingCityIndex !== null) updated[editingCityIndex] = { name: cityName, points: cityPoints };
       else updated.push({ name: cityName, points: cityPoints });
       setEventData({ ...eventData, cities: updated });
-      setCurrentCityName(''); setCityPoints([]); setEditingCityIndex(null); setIsNewCity(false); setManualCityName(''); setCurrentPoint(createEmptyPoint()); setSelectedCategory(null);
+      setCurrentCityName(''); setCityPoints([]); setEditingCityIndex(null); setIsNewCity(false); setManualCityName(''); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection();
     } catch (error) {
       Alert.alert('Error', error?.message || 'No se pudo registrar la ciudad');
     }
@@ -355,7 +470,21 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const onPickerChange = (event, selectedDate) => {
     const type = showPicker; setShowPicker(null); if (!selectedDate) return;
     if (type.includes('date')) setEventData({ ...eventData, [type === 'start_date' ? 'startDate' : 'endDate']: selectedDate });
-    else setCurrentPoint({ ...currentPoint, [type === 'start_time' ? 'startTime' : 'endTime']: selectedDate, coordinator: null, assignedStaff: [] });
+    else {
+      setCurrentPoint({ ...currentPoint, [type === 'start_time' ? 'startTime' : 'endTime']: selectedDate, coordinator: null, assignedStaff: [] });
+      handleClearCategorySelection();
+    }
+  };
+
+  const handleSelectCategory = (category) => {
+    setCategorySearchQuery(category);
+    fetchStaffByCategory(category);
+  };
+
+  const handleClearCategorySelection = () => {
+    setSelectedCategory(null);
+    setCategorySearchQuery('');
+    setApiLists((prev) => ({ ...prev, staff: [] }));
   };
 
   if (loading && step === 1) return <View style={styles.loading}><ActivityIndicator size="large" color="#FFF" /></View>;
@@ -367,13 +496,46 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         
         {step === 1 && (
           <View style={styles.form}>
-            <TouchableOpacity style={styles.imageSelector} onPress={async () => {
-              let res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 1 });
-              if (!res.canceled) setEventData({ ...eventData, image: res.assets[0].uri });
-            }}>{eventData.image ? <Image source={{ uri: eventData.image }} style={styles.selectedImage} /> : <View style={styles.photoPlaceholder}><Text style={styles.photoText}>FOTO EVENTO *</Text></View>}</TouchableOpacity>
-            <InputField styles={styles} label="Evento *" value={eventData.name} onChangeText={(t) => setEventData({...eventData, name: t})} />
-             <InputField styles={styles} label="Cliente *" value={selectedClient?.fullName || eventData.client} placeholder="Seleccionar cliente..." editable={false} onPress={() => setShowClientSearch(true)} />
-             {selectedClient ? <Text style={styles.helperText}>{getClientDescription(selectedClient)}</Text> : null}
+            <View style={styles.imageCard}>
+              <TouchableOpacity style={styles.imageSelector} onPress={handlePickEventImage}>
+                {eventData.image ? <Image source={{ uri: eventData.image }} style={styles.selectedImage} /> : <View style={styles.photoPlaceholder}><Text style={styles.photoText}>FOTO EVENTO *</Text></View>}
+              </TouchableOpacity>
+              <Text style={styles.helperText}>{eventData.image ? 'Vista previa lista. Podés usar la foto tal cual, volver a abrir la galería para editar/recortar o quitarla.' : 'Elegí una foto desde la galería para seguir con la carga.'}</Text>
+              {eventData.image ? (
+                <>
+                  {showImageActions ? (
+                    <View style={styles.imageActionsCard}>
+                      <Text style={styles.imageActionsTitle}>¿Qué querés hacer con esta foto?</Text>
+                      <TouchableOpacity style={styles.secondaryActionButton} onPress={handleUseEventImageAsIs}>
+                        <Text style={styles.secondaryActionText}>USAR FOTO TAL CUAL</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.secondaryActionButton} onPress={handleEditEventImage}>
+                        <Text style={styles.secondaryActionText}>EDITAR / RECORTAR</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.imageRemoveLink} onPress={handleRemoveEventImage}>
+                        <Text style={styles.imageRemoveText}>Cancelar / quitar foto</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.helperText}>Si elegís editar, el sistema vuelve a abrir la galería con recorte habilitado.</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.imageActionsInline}>
+                      <TouchableOpacity style={styles.secondaryActionButton} onPress={handlePickEventImage}>
+                        <Text style={styles.secondaryActionText}>CAMBIAR FOTO</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.secondaryActionButton} onPress={handleEditEventImage}>
+                        <Text style={styles.secondaryActionText}>EDITAR / RECORTAR</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.imageRemoveLink} onPress={handleRemoveEventImage}>
+                        <Text style={styles.imageRemoveText}>Quitar foto</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              ) : null}
+            </View>
+             <InputField styles={styles} label="Cliente *" value={selectedClient?.fullName || eventData.client} placeholder="Buscar por NIT o nombre..." editable={false} onPress={() => setShowClientSearch(true)} />
+             {selectedClient ? <Text style={styles.helperText}>{getClientDescription(selectedClient)}{selectedClient?.nit ? ` · NIT ${selectedClient.nit}` : ''}</Text> : <Text style={styles.helperText}>Buscá clientes desde la base por NIT o nombre.</Text>}
+            <InputField styles={styles} label="Nombre de evento *" value={eventData.name} onChangeText={(t) => setEventData({...eventData, name: t})} />
             <TouchableOpacity onPress={() => setShowPicker('start_date')}><InputField styles={styles} label="Inicio *" value={eventData.startDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
             <TouchableOpacity onPress={() => setShowPicker('end_date')}><InputField styles={styles} label="Fin *" value={eventData.endDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
             <TouchableOpacity style={styles.actionButton} onPress={() => { if (validateEventMetadata()) setStep(2); }}><Text style={styles.actionText}>SIGUIENTE</Text></TouchableOpacity>
@@ -387,19 +549,22 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
             <TouchableOpacity style={styles.secondaryActionButton} onPress={() => setShowCitySearch(true)}>
               <Text style={styles.secondaryActionText}>{isNewCity ? 'CAMBIAR / BUSCAR CIUDAD' : 'BUSCAR CIUDAD'}</Text>
             </TouchableOpacity>
-             <View style={styles.pointFrame}>
-               <Text style={styles.pointTitle}>DATOS DEL PUNTO</Text>
-               <InputField styles={styles} label="Nombre establecimiento *" value={currentPoint.establishment} onChangeText={(t) => setCurrentPoint({...currentPoint, establishment: t})} />
-               <InputField styles={styles} label="Dirección *" value={currentPoint.address} onChangeText={(t) => setCurrentPoint({...currentPoint, address: t})} />
-               <InputField styles={styles} label="Contacto *" value={currentPoint.contact} onChangeText={(t) => setCurrentPoint({...currentPoint, contact: t})} />
-               <InputField styles={styles} label="Teléfono *" value={currentPoint.phone} onChangeText={(t) => setCurrentPoint({...currentPoint, phone: t})} />
-               <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
-               <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
-                <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{currentPoint.coordinator?.name ? `Coord: ${currentPoint.coordinator.name}` : 'ASIGNAR COORDINADOR *'}</Text></TouchableOpacity>
+              <View style={styles.pointFrame}>
+                <Text style={styles.pointTitle}>DATOS DEL PUNTO</Text>
+                <InputField styles={styles} label="Nombre establecimiento *" value={currentPoint.establishment} onChangeText={(t) => setCurrentPoint({...currentPoint, establishment: t})} />
+                <InputField styles={styles} label="Dirección *" value={currentPoint.address} onChangeText={(t) => setCurrentPoint({...currentPoint, address: t})} />
+                <Text style={styles.helperText}>Podés escribir la dirección manualmente, pegar un link o abrir una búsqueda externa en Google Maps.</Text>
+                <TouchableOpacity style={styles.secondaryActionButton} onPress={openGoogleMapsSearch}><Text style={styles.secondaryActionText}>BUSCAR EN GOOGLE MAPS</Text></TouchableOpacity>
+                <InputField styles={styles} label="Contacto Punto de Venta *" value={currentPoint.contact} onChangeText={(t) => setCurrentPoint({...currentPoint, contact: t})} />
+                <InputField styles={styles} label="Telefono Contacto *" value={currentPoint.phone} onChangeText={(t) => setCurrentPoint({...currentPoint, phone: normalizePhoneValue(t)})} keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'} maxLength={10} autoCapitalize="none" />
+                <Text style={styles.helperText}>Solo números, máximo 10 dígitos.</Text>
+                <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
+                 <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{currentPoint.coordinator?.name ? `Coord: ${currentPoint.coordinator.name}` : 'ASIGNAR COORDINADOR *'}</Text></TouchableOpacity>
               <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>AÑADIR PUNTO</Text></TouchableOpacity>
             </View>
-            <View style={styles.listPreview}>{cityPoints.map((p, i) => <View key={i} style={styles.previewRow}><Text style={styles.previewTxt}>✅ {p.establishment}</Text></View>)}
-              {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => { setIsNewCity(false); setManualCityName(''); setCurrentCityName(c.name); setCityPoints(c.points); setEditingCityIndex(i); setCurrentPoint(createEmptyPoint()); setSelectedCategory(null); }}><Text style={styles.previewTxt}>🌆 {c.name}</Text></TouchableOpacity>)}</View>
+            <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => setPointInDetail({ point: p, cityName: resolvedCityName })}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewHint}>Tocá para ver el detalle del punto</Text></TouchableOpacity>)}
+              {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => { setIsNewCity(false); setManualCityName(''); setCurrentCityName(c.name); setCityPoints(c.points); setEditingCityIndex(i); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection(); }}><Text style={styles.previewTxt}>🌆 {c.name}</Text></TouchableOpacity>)}</View>
             <View style={styles.footerButtons}><TouchableOpacity style={styles.footerBtn} onPress={() => setStep(1)}><Text style={styles.actionText}>ATRAS</Text></TouchableOpacity><TouchableOpacity style={styles.footerBtn} onPress={handleAddCity}><Text style={styles.actionText}>AGR CIUDAD</Text></TouchableOpacity></View>
             <TouchableOpacity style={styles.finalSaveBtn} onPress={handleFinalSave}><Text style={styles.finalSaveText}>{eventToEdit ? 'GUARDAR EVENTO' : 'CREAR EVENTO'}</Text></TouchableOpacity>
           </View>
@@ -420,15 +585,45 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 </TouchableOpacity>
               );
             })}
-            <TouchableOpacity style={styles.actionButton} onPress={() => setStep(2)}><Text style={styles.actionText}>REINTENTAR</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={() => setStep(2)}><Text style={styles.actionText}>REGRESAR</Text></TouchableOpacity>
           </View>
         )}
 
         {step === 4 && (
           <View style={styles.form}>
             <Text style={styles.stepTitle}>Apoyo - {currentPoint.coordinator?.name}</Text>
-            <View style={styles.catWrap}>{categories.map(cat => (<TouchableOpacity key={cat} style={[styles.catItem, selectedCategory === cat && {backgroundColor: '#FFB300'}]} onPress={() => fetchStaffByCategory(cat)}><Text style={styles.catTxt}>{cat}</Text></TouchableOpacity>))}</View>
-            {!categories.length ? <Text style={styles.helperText}>No hay categorías disponibles para esta ciudad todavía.</Text> : null}
+            <View style={styles.categoryPanel}>
+              <Text style={styles.sectionLabel}>1. Elegí una categoría</Text>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Buscar categoría..."
+                placeholderTextColor={palette.textMuted}
+                value={categorySearchQuery}
+                onChangeText={setCategorySearchQuery}
+              />
+              {!categories.length ? <Text style={styles.helperText}>No hay categorías disponibles para esta ciudad todavía.</Text> : null}
+              {!!categories.length && !filteredCategories.length ? <Text style={styles.helperText}>No encontramos categorías con ese criterio.</Text> : null}
+              <ScrollView style={styles.categoryResults} nestedScrollEnabled>
+                {filteredCategories.map((cat) => (
+                  <TouchableOpacity key={cat} style={[styles.categoryOption, selectedCategory === cat && styles.categoryOptionActive]} onPress={() => handleSelectCategory(cat)}>
+                    <Text style={[styles.categoryOptionText, selectedCategory === cat && styles.categoryOptionTextActive]}>{cat}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            {selectedCategory ? (
+              <View style={styles.selectedCategoryBar}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionLabel}>2. Staff disponible</Text>
+                  <Text style={styles.selectedCategoryText}>{selectedCategory}</Text>
+                </View>
+                <TouchableOpacity style={styles.categoryClearButton} onPress={handleClearCategorySelection}>
+                  <Text style={styles.categoryClearButtonText}>CAMBIAR</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.helperText}>Seleccioná una categoría para ver el staff asociado.</Text>
+            )}
             <View style={styles.staffList}>
               {selectedCategory && apiLists.staff.map(item => {
                 const exists = currentPoint.assignedStaff.find(p => p.id === item.id);
@@ -445,25 +640,55 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                   </TouchableOpacity>
                 </View>
               )})}
+              {selectedCategory && !apiLists.staff.length ? <Text style={styles.helperText}>No hay staff disponible para esta categoría en el rango indicado.</Text> : null}
             </View>
-            <TouchableOpacity style={[styles.actionButton, {marginTop: 20}]} onPress={() => { setSelectedCategory(null); setStep(2); }}><Text style={styles.actionText}>TERMINAR</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, {marginTop: 20}]} onPress={() => { handleClearCategorySelection(); setStep(2); }}><Text style={styles.actionText}>TERMINAR</Text></TouchableOpacity>
             <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#EEE'}]} onPress={() => setStep(3)}><Text style={styles.actionText}>ATRÁS</Text></TouchableOpacity>
           </View>
         )}
 
         {/* Modal Detalles Staff */}
+        <Modal visible={!!pointInDetail} transparent animationType="slide">
+          <View style={styles.overlayCenter}>
+            <View style={styles.detailPopup}>
+              {pointInDetail ? (
+                <>
+                  <Text style={styles.detailName}>{pointInDetail.point?.establishment || 'Punto sin nombre'}</Text>
+                  <Text style={styles.detailCategory}>{pointInDetail.cityName || 'Sin ciudad'}</Text>
+                  <View style={styles.detailInfoList}>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Establecimiento</Text><Text style={styles.infoVal}>{pointInDetail.point?.establishment || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Dirección</Text><Text style={styles.infoVal}>{pointInDetail.point?.address || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Contacto punto de venta</Text><Text style={styles.infoVal}>{pointInDetail.point?.contact || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Teléfono contacto</Text><Text style={styles.infoVal}>{pointInDetail.point?.phone || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Hora inicio</Text><Text style={styles.infoVal}>{formatPointTime(pointInDetail.point?.startTime)}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Hora fin</Text><Text style={styles.infoVal}>{formatPointTime(pointInDetail.point?.endTime)}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Coordinador</Text><Text style={styles.infoVal}>{pointInDetail.point?.coordinator?.name || pointInDetail.point?.coordinator?.fullName || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Staff asignado</Text><Text style={styles.infoVal}>{getAssignedStaffLabel(pointInDetail.point)}</Text></View>
+                  </View>
+                  <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setPointInDetail(null)}><Text style={styles.closeDetailText}>CERRAR</Text></TouchableOpacity>
+                </>
+              ) : null}
+            </View>
+          </View>
+        </Modal>
         <Modal visible={!!staffInDetail} transparent animationType="slide">
           <View style={styles.overlayCenter}>
             <View style={styles.detailPopup}>
               {staffInDetail && (
                 <>
-                  <Image source={{ uri: staffInDetail.photo }} style={styles.detailPhoto} />
-                  <Text style={styles.detailName}>{staffInDetail.name}</Text>
-                  <Text style={styles.detailCategory}>{staffInDetail.category}</Text>
-                  <View style={styles.gridInfo}>
-                    <View style={styles.infoBox}><Text style={styles.infoLabel}>Talla Ropa</Text><Text style={styles.infoVal}>{staffInDetail.clothingSize}</Text></View>
-                    <View style={styles.infoBox}><Text style={styles.infoLabel}>Zapatos</Text><Text style={styles.infoVal}>{staffInDetail.shoeSize}</Text></View>
-                    <View style={styles.infoBox}><Text style={styles.infoLabel}>Medidas</Text><Text style={styles.infoVal}>{staffInDetail.measurements}</Text></View>
+                  <TouchableOpacity onPress={() => setExpandedStaffPhoto(staffInDetail.photo)}>
+                    <Image source={{ uri: staffInDetail.photo }} style={styles.detailPhoto} />
+                  </TouchableOpacity>
+                  <Text style={styles.helperTextDark}>Tocá la foto para verla más grande.</Text>
+                  <Text style={styles.detailName}>{staffInDetail.name || staffInDetail.fullName}</Text>
+                  <Text style={styles.detailCategory}>{staffInDetail.category || 'Sin categoría'}</Text>
+                  <View style={styles.detailInfoList}>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Cédula</Text><Text style={styles.infoVal}>{staffInDetail.cedula || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Ciudad</Text><Text style={styles.infoVal}>{staffInDetail.city || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Categoría</Text><Text style={styles.infoVal}>{staffInDetail.category || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Talla Ropa</Text><Text style={styles.infoVal}>{staffInDetail.clothingSize || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Zapatos</Text><Text style={styles.infoVal}>{staffInDetail.shoeSize || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Medidas</Text><Text style={styles.infoVal}>{staffInDetail.measurements || 'Sin dato'}</Text></View>
                   </View>
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setStaffInDetail(null)}><Text style={styles.closeDetailText}>CERRAR</Text></TouchableOpacity>
                 </>
@@ -471,14 +696,23 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
             </View>
           </View>
         </Modal>
+        <Modal visible={!!expandedStaffPhoto} transparent animationType="fade">
+          <View style={styles.overlayCenter}>
+            <TouchableOpacity style={styles.photoPreviewOverlay} activeOpacity={1} onPress={() => setExpandedStaffPhoto(null)}>
+              {expandedStaffPhoto ? <Image source={{ uri: expandedStaffPhoto }} style={styles.expandedPhoto} resizeMode="contain" /> : null}
+              <Text style={styles.photoPreviewHint}>Tocá para cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
 
         {/* Modal Ciudades */}
         <Modal visible={showCitySearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Filtrar ciudad</Text><TextInput style={styles.searchInput} placeholder="Buscar..." value={searchQuery} onChangeText={setSearchQuery} /><ScrollView style={{maxHeight: 400}}>
           {apiLists.cities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(i => (<TouchableOpacity key={i.id} style={styles.cityItem} onPress={() => { setCurrentPoint((prev) => ({ ...prev, coordinator: null, assignedStaff: [] })); if (isOtherCityOption(i)) { setIsNewCity(true); setCurrentCityName(''); setManualCityName(''); } else { setIsNewCity(false); setCurrentCityName(i.name); setManualCityName(''); } setShowCitySearch(false); setSearchQuery(''); }}><Text style={styles.cityItemText}>{i.name}</Text></TouchableOpacity>))}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => setShowCitySearch(false)}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
-        <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar cliente..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><ScrollView style={{maxHeight: 400}}>
-          {apiLists.clients.filter((client) => [client.fullName, client.razonSocial, client.contactFullName, client.username, client.email].some((value) => normalizeComparableValue(value).includes(normalizeComparableValue(clientSearchQuery)))).map((client) => (<TouchableOpacity key={client.clientId || client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: getClientLabel(client), clientId: client.clientId || null, clientUserId: client.userId || client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{getClientLabel(client)}</Text><Text style={styles.clientItemMeta}>{getClientDescription(client)}</Text></TouchableOpacity>))}
-          {apiLists.clients.length === 0 ? <Text style={styles.emptyModalText}>No hay clientes disponibles.</Text> : null}
+        <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar por NIT o nombre..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><Text style={styles.modalHelperText}>La búsqueda consulta la base de datos.</Text><ScrollView style={{maxHeight: 400}}>
+          {clientSearchLoading ? <ActivityIndicator style={styles.modalLoader} size="small" color={palette.primaryButton} /> : null}
+          {clientSearchResults.map((client) => (<TouchableOpacity key={client.clientId || client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: getClientLabel(client), clientId: client.clientId || null, clientUserId: client.userId || client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{getClientLabel(client)}</Text><Text style={styles.clientItemMeta}>{client.nit ? `NIT ${client.nit} · ` : ''}{getClientDescription(client)}</Text></TouchableOpacity>))}
+          {!clientSearchLoading && clientSearchResults.length === 0 ? <Text style={styles.emptyModalText}>No encontramos clientes con ese NIT o nombre.</Text> : null}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => { setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
         {showPicker && <DateTimePicker value={(showPicker === 'start_time' ? currentPoint.startTime : showPicker === 'end_time' ? currentPoint.endTime : showPicker === 'start_date' ? eventData.startDate : eventData.endDate) || new Date()} mode={showPicker.includes('date') ? 'date' : 'time'} is24Hour={false} display="default" onChange={onPickerChange} />}
       </ScrollView>
@@ -492,10 +726,16 @@ const createStyles = (palette) => StyleSheet.create({
   scrollContent: { padding: SPACING.xl, paddingBottom: 60 },
   title: { fontSize: 32, fontWeight: 'bold', color: palette.onHero, textAlign: 'center', marginBottom: 20 },
   form: { gap: 8 },
+  imageCard: { backgroundColor: palette.panel, borderRadius: RADII.sm, padding: 14, marginBottom: 8 },
   imageSelector: { alignSelf: 'center', marginBottom: 15 },
   selectedImage: { width: 300, height: 160, borderRadius: RADII.sm, borderWidth: 2, borderColor: palette.onHero },
   photoPlaceholder: { width: 300, height: 160, backgroundColor: palette.panelStrong, justifyContent: 'center', alignItems: 'center', borderRadius: RADII.sm, borderStyle: 'dashed', borderWidth: 2, borderColor: palette.onHero },
   photoText: { fontSize: 11, fontWeight: 'bold', color: palette.onHero },
+  imageActionsCard: { backgroundColor: palette.panelStrong, borderRadius: RADII.sm, padding: 12, gap: 8 },
+  imageActionsInline: { gap: 8 },
+  imageActionsTitle: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
+  imageRemoveLink: { alignSelf: 'flex-start', paddingVertical: 4 },
+  imageRemoveText: { color: palette.onHero, fontSize: 12, fontWeight: 'bold', textDecorationLine: 'underline' },
   inputContainer: { marginBottom: 10 },
   label: { color: palette.onHero, fontSize: 13, marginBottom: 2, fontWeight: 'bold' },
   input: { color: palette.onHero, fontSize: 16, paddingVertical: 5 },
@@ -510,6 +750,7 @@ const createStyles = (palette) => StyleSheet.create({
   listPreview: { marginVertical: 15, gap: 6 },
   previewRow: { backgroundColor: palette.panelStrong, padding: 12, borderRadius: 8 },
   previewTxt: { color: palette.onHero },
+  previewHint: { color: palette.onHero, opacity: 0.7, fontSize: 11, marginTop: 4 },
   footerButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
   footerBtn: { backgroundColor: palette.secondaryButton, paddingVertical: 12, borderRadius: 30, width: '48%', alignItems: 'center' },
   actionButton: { backgroundColor: palette.secondaryButton, paddingVertical: 14, borderRadius: 30, alignItems: 'center', marginTop: 10 },
@@ -521,6 +762,8 @@ const createStyles = (palette) => StyleSheet.create({
   modalScrollOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 25 },
   modalPanel: { backgroundColor: palette.surface, borderRadius: 20, padding: 20, maxHeight: '80%' },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: palette.text },
+  modalHelperText: { color: palette.textMuted, textAlign: 'center', marginBottom: 10, fontSize: 12 },
+  modalLoader: { marginVertical: 12 },
   searchInput: { backgroundColor: palette.surfaceMuted, padding: 12, borderRadius: RADII.sm, marginBottom: 15, fontSize: 16, color: palette.text },
   cityItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
   cityItemText: { fontSize: 16, color: palette.text },
@@ -536,9 +779,17 @@ const createStyles = (palette) => StyleSheet.create({
   disabledText: { color: '#666' },
   disabledHint: { color: '#666', fontSize: 12, marginTop: 4 },
   stepTitle: { fontSize: 22, fontWeight: 'bold', color: palette.onHero, textAlign: 'center', marginBottom: 20 },
-  catWrap: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  catItem: { flex: 1, backgroundColor: palette.panelStrong, paddingVertical: 10, borderRadius: RADII.sm, alignItems: 'center', marginHorizontal: 4 },
-  catTxt: { color: palette.onHero, fontSize: 10, fontWeight: 'bold' },
+  categoryPanel: { backgroundColor: palette.panel, borderRadius: RADII.sm, padding: 14, gap: 10, marginBottom: 16 },
+  sectionLabel: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
+  categoryResults: { maxHeight: 220 },
+  categoryOption: { backgroundColor: palette.panelStrong, borderRadius: RADII.sm, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8 },
+  categoryOptionActive: { backgroundColor: '#FFB300' },
+  categoryOptionText: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
+  categoryOptionTextActive: { color: '#222' },
+  selectedCategoryBar: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  selectedCategoryText: { color: palette.onHero, fontSize: 18, fontWeight: 'bold' },
+  categoryClearButton: { backgroundColor: palette.panelStrong, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14 },
+  categoryClearButtonText: { color: palette.onHero, fontSize: 11, fontWeight: 'bold' },
   staffList: { gap: 10 },
   staffRow: { backgroundColor: palette.panelStrong, padding: 15, borderRadius: RADII.sm, flexDirection: 'row', alignItems: 'center' },
   staffName: { color: palette.onHero, fontWeight: 'bold', fontSize: 15 },
@@ -547,14 +798,18 @@ const createStyles = (palette) => StyleSheet.create({
   overlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
   detailPopup: { backgroundColor: palette.surface, width: '85%', borderRadius: 30, padding: 25, alignItems: 'center' },
   detailPhoto: { width: 120, height: 120, borderRadius: 60, marginBottom: 15, borderWidth: 3, borderColor: palette.heroSoft },
+  helperTextDark: { color: palette.textMuted, fontSize: 12, marginTop: -4, marginBottom: 12 },
   detailName: { fontSize: 22, fontWeight: 'bold', color: palette.text },
   detailCategory: { fontSize: 14, color: '#666', marginBottom: 20, letterSpacing: 2 },
-  gridInfo: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  infoBox: { alignItems: 'center', flex: 1 },
+  detailInfoList: { width: '100%', gap: 12, marginBottom: 25 },
+  detailInfoRow: { backgroundColor: palette.surfaceMuted, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
   infoLabel: { fontSize: 10, color: '#999', textTransform: 'uppercase' },
-  infoVal: { fontSize: 16, fontWeight: 'bold', color: palette.text },
+  infoVal: { fontSize: 16, fontWeight: 'bold', color: palette.text, marginTop: 4 },
   closeDetailBtn: { backgroundColor: palette.heroSoft, width: '100%', paddingVertical: 15, borderRadius: 15, alignItems: 'center' },
-  closeDetailText: { color: palette.onHero, fontWeight: 'bold' }
+  closeDetailText: { color: palette.onHero, fontWeight: 'bold' },
+  photoPreviewOverlay: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  expandedPhoto: { width: '100%', height: '80%' },
+  photoPreviewHint: { color: '#FFF', marginTop: 16, fontWeight: 'bold' },
 });
 
 export default CreateEventScreen;

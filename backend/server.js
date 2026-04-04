@@ -122,7 +122,9 @@ app.get('/api/coordinators', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/clients', asyncHandler(async (req, res) => {
-  return res.json(await req.app.locals.repository.getClients());
+  return res.json(await req.app.locals.repository.getClients({
+    search: normalizeString(req.query?.q),
+  }));
 }));
 
 app.get('/api/admin/clients', asyncHandler(async (req, res) => {

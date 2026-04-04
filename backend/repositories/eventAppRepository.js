@@ -290,14 +290,28 @@ class EventAppRepository {
     };
   }
 
-  getClients() {
-    return this.db.clients
+  getClients({ search } = {}) {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    const clients = this.db.clients
       .map((client) => sanitizeClientRecord({
         client,
         user: this.findUserById(client.userId),
       }))
       .filter((client) => client.userId && client.isActive !== false)
       .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
+
+    if (!normalizedSearch) {
+      return clients;
+    }
+
+    return clients.filter((client) => [
+      client.fullName,
+      client.razonSocial,
+      client.contactFullName,
+      client.username,
+      client.email,
+      client.nit,
+    ].some((value) => String(value || '').trim().toLowerCase().includes(normalizedSearch)));
   }
 
   getAdminClients() {

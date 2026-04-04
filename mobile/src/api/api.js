@@ -58,7 +58,7 @@ export const getAppConfig = async () => (await getAPI().get('/app-config')).data
 export const getEvents = async (createdByUserId) => (await getAPI().get('/events', { params: { createdByUserId } })).data;
 export const getCoordinatorEvents = async (userId) => (await getAPI().get('/coordinator/events', { params: { userId } })).data;
 export const getClientEvents = async (userId) => (await getAPI().get('/client/events', { params: { userId } })).data;
-export const getClients = async () => (await getAPI().get('/clients')).data;
+export const getClients = async (params = {}) => (await getAPI().get('/clients', { params })).data;
 export const getAdminClients = async () => (await getAPI().get('/admin/clients')).data;
 export const findAdminClientByNit = async (nit) => (await getAPI().get('/admin/clients/by-nit', { params: { nit } })).data;
 export const createAdminClient = async (data) => (await getAPI().post('/admin/clients', data)).data;

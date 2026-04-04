@@ -1,6 +1,7 @@
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 const normalizeEmail = (value) => normalizeString(value).toLowerCase();
+const normalizePhoneDigits = (value) => String(value || '').replace(/\D/g, '');
 const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 const isValidEmail = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -73,6 +74,9 @@ const validateEventPayload = (payload) => {
       if (!isNonEmptyString(point.address)) return 'Cada punto debe tener dirección';
       if (!isNonEmptyString(point.contact)) return 'Cada punto debe tener contacto';
       if (!isNonEmptyString(point.phone)) return 'Cada punto debe tener teléfono';
+      const normalizedPointPhone = normalizePhoneDigits(point.phone);
+      if (normalizedPointPhone !== String(point.phone).trim()) return 'El teléfono del punto solo puede contener números';
+      if (normalizedPointPhone.length > 10) return 'El teléfono del punto no puede superar 10 dígitos';
       if (!point.coordinator || typeof point.coordinator !== 'object') return 'Cada punto debe tener coordinador';
       if (!isValidIdValue(point.coordinator.id) && !isNonEmptyString(point.coordinator.name)) {
         return 'Cada punto debe tener un coordinador válido';

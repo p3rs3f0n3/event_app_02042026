@@ -253,7 +253,9 @@ class PostgresEventAppRepository {
     };
   }
 
-  async getClients() {
+  async getClients({ search } = {}) {
+    const normalizedSearch = normalizeString(search);
+    const searchPattern = normalizedSearch ? `%${normalizedSearch.toLowerCase()}%` : null;
     const result = await query(
       `
         SELECT c.id AS "clientId", u.id AS "userId", COALESCE(c.razon_social, u.full_name) AS "razonSocial", c.nit,
@@ -264,12 +266,21 @@ class PostgresEventAppRepository {
                COALESCE(c.is_active, u.is_active) AS "isActive",
                u.id, u.username, u.full_name AS "userFullName", u.phone AS "userPhone",
                u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
-        FROM users u
-        INNER JOIN roles r ON r.id = u.role_id
-        LEFT JOIN clients c ON c.user_id = u.id
-        WHERE r.code = 'CLIENTE' AND u.is_active = TRUE AND COALESCE(c.is_active, TRUE) = TRUE
-        ORDER BY COALESCE(c.razon_social, u.full_name) ASC, COALESCE(c.id, u.id) ASC
+         FROM users u
+         INNER JOIN roles r ON r.id = u.role_id
+         LEFT JOIN clients c ON c.user_id = u.id
+         WHERE r.code = 'CLIENTE' AND u.is_active = TRUE AND COALESCE(c.is_active, TRUE) = TRUE
+           AND (
+             $1::text IS NULL
+             OR LOWER(COALESCE(c.razon_social, u.full_name)) LIKE $2
+             OR LOWER(COALESCE(c.contact_full_name, u.full_name)) LIKE $2
+             OR LOWER(COALESCE(u.username, '')) LIKE $2
+             OR LOWER(COALESCE(c.email, u.email, '')) LIKE $2
+             OR LOWER(COALESCE(c.nit, '')) LIKE $2
+           )
+         ORDER BY COALESCE(c.razon_social, u.full_name) ASC, COALESCE(c.id, u.id) ASC
       `,
+      [normalizedSearch || null, searchPattern],
     );
 
     return result.rows.map((row) => sanitizeClientRecord({
