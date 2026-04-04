@@ -51,8 +51,14 @@ export const getEvents = async (createdByUserId) => (await getAPI().get('/events
 export const getCoordinatorEvents = async (userId) => (await getAPI().get('/coordinator/events', { params: { userId } })).data;
 export const getClientEvents = async (userId) => (await getAPI().get('/client/events', { params: { userId } })).data;
 export const getClients = async () => (await getAPI().get('/clients')).data;
+export const getAdminClients = async () => (await getAPI().get('/admin/clients')).data;
+export const createAdminClient = async (data) => (await getAPI().post('/admin/clients', data)).data;
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
+export const getAdminCoordinators = async () => (await getAPI().get('/admin/coordinators')).data;
+export const createAdminCoordinator = async (data) => (await getAPI().post('/admin/coordinators', data)).data;
 export const getStaff = async (params = {}) => (await getAPI().get('/staff', { params })).data;
+export const getAdminStaff = async () => (await getAPI().get('/admin/staff')).data;
+export const createAdminStaff = async (data) => (await getAPI().post('/admin/staff', data)).data;
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
 export const addColombiaCity = async (name) => (await getAPI().post('/colombia-cities', { name })).data;
 export const createEvent = async (data) => (await getAPI().post('/events', data)).data;

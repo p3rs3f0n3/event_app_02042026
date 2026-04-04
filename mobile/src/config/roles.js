@@ -1,7 +1,7 @@
 export const FALLBACK_APP_CONFIG = {
   appName: 'EventApp',
   roles: [
-    { code: 'ADMIN', label: 'Administrador', theme: 'blue', status: 'planned', enabled: false },
+    { code: 'ADMIN', label: 'Administrador', theme: 'blue', status: 'active', enabled: true },
     { code: 'EJECUTIVO', label: 'Ejecutivo', theme: 'green', status: 'active', enabled: true },
     { code: 'COORDINADOR', label: 'Coordinador', theme: 'brown', status: 'active', enabled: true },
     { code: 'CLIENTE', label: 'Cliente', theme: 'blue', status: 'active', enabled: true },

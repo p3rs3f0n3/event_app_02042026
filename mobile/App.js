@@ -4,6 +4,7 @@ import { getAppConfig } from './src/api/api';
 import { FALLBACK_APP_CONFIG, getRolePresentation } from './src/config/roles';
 import CoordinatorHomeScreen from './src/screens/CoordinatorHomeScreen';
 import ClientHomeScreen from './src/screens/ClientHomeScreen';
+import AdminHomeScreen from './src/screens/AdminHomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import ExecutiveHomeScreen from './src/screens/ExecutiveHomeScreen';
 import RolePlaceholderScreen from './src/screens/RolePlaceholderScreen';
@@ -64,6 +65,14 @@ export default function App() {
     return (
       <View style={styles.container}>
         <ExecutiveHomeScreen user={user} onLogout={handleLogout} appConfig={appConfig} roleConfig={roleConfig} />
+      </View>
+    );
+  }
+
+  if (role === 'ADMIN') {
+    return (
+      <View style={styles.container}>
+        <AdminHomeScreen user={user} onLogout={handleLogout} appConfig={appConfig} roleConfig={roleConfig} />
       </View>
     );
   }

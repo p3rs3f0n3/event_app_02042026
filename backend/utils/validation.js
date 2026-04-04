@@ -1,8 +1,11 @@
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeEmail = (value) => normalizeString(value).toLowerCase();
 const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
+const isValidEmail = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const MAX_COORDINATOR_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_STAFF_CATEGORIES = new Set(['BARISTAS', 'IMPULSADORES', 'LOGISTICOS']);
 const ALLOWED_COORDINATOR_PHOTO_MIME_TYPES = new Set([
   'image/jpeg',
   'image/jpg',
@@ -193,11 +196,63 @@ const validateExecutiveReportPayload = (payload) => {
   return null;
 };
 
+const validateAdminClientPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de cliente inválido';
+  }
+
+  if (!isNonEmptyString(payload.username)) return 'El usuario es obligatorio';
+  if (!isNonEmptyString(payload.password) || normalizeString(payload.password).length < 8) return 'La contraseña debe tener al menos 8 caracteres';
+  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
+
+  const email = normalizeEmail(payload.email);
+  if (email && !isValidEmail(email)) return 'El email no es válido';
+
+  return null;
+};
+
+const validateAdminCoordinatorPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de coordinador inválido';
+  }
+
+  if (!isNonEmptyString(payload.username)) return 'El usuario es obligatorio';
+  if (!isNonEmptyString(payload.password) || normalizeString(payload.password).length < 8) return 'La contraseña debe tener al menos 8 caracteres';
+  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
+  if (!isNonEmptyString(payload.address)) return 'La dirección es obligatoria';
+  if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
+  if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
+
+  const email = normalizeEmail(payload.email);
+  if (email && !isValidEmail(email)) return 'El email no es válido';
+
+  return null;
+};
+
+const validateAdminStaffPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de staff inválido';
+  }
+
+  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
+  if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
+  if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
+  if (!ALLOWED_STAFF_CATEGORIES.has(normalizeString(payload.category).toUpperCase())) return 'La categoría de staff no es válida';
+
+  return null;
+};
+
 module.exports = {
   ALLOWED_COORDINATOR_PHOTO_MIME_TYPES,
   MAX_COORDINATOR_PHOTO_SIZE_BYTES,
   badRequest: (res, message) => res.status(400).json({ message }),
   normalizeString,
+  validateAdminClientPayload,
+  validateAdminCoordinatorPayload,
+  validateAdminStaffPayload,
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
   validateExecutiveReportPayload,

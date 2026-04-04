@@ -3,8 +3,8 @@ const ROLE_CONFIG = {
     code: 'ADMIN',
     label: 'Administrador',
     theme: 'blue',
-    status: 'planned',
-    enabled: false,
+    status: 'active',
+    enabled: true,
   },
   EJECUTIVO: {
     code: 'EJECUTIVO',

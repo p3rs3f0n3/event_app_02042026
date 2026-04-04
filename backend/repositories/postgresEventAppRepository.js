@@ -4,9 +4,15 @@ const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, norm
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 const { normalizeString } = require('../utils/validation');
-const { verifyPassword } = require('../utils/passwords');
-
-const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
+const { createPasswordHash, verifyPassword } = require('../utils/passwords');
+const {
+  DEFAULT_PROFILE_PHOTO,
+  normalizeComparableValue,
+  normalizePhoneValue,
+  sanitizeCoordinatorAdminRecord,
+  sanitizeStaffAdminRecord,
+  sanitizeUserRecord,
+} = require('../utils/adminRecords');
 
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
@@ -117,15 +123,48 @@ class PostgresEventAppRepository {
       `,
     );
 
-    return result.rows.map((row) => ({
-      id: Number(row.id),
-      username: row.username,
-      fullName: row.fullName,
-      phone: row.phone || null,
-      whatsappPhone: row.whatsappPhone || null,
-      email: row.email || null,
-      role: row.role,
+    return result.rows.map(sanitizeUserRecord);
+  }
+
+  async getAdminClients() {
+    return this.getClients();
+  }
+
+  async getAdminCoordinators() {
+    const result = await query(
+      `
+        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.name AS city,
+               u.id AS user_id_ref, u.username, u.whatsapp_phone AS "whatsappPhone", u.email
+        FROM coordinators c
+        INNER JOIN cities ci ON ci.id = c.city_id
+        LEFT JOIN users u ON u.id = c.user_id
+        ORDER BY c.full_name ASC, c.id ASC
+      `,
+    );
+
+    return result.rows.map((row) => sanitizeCoordinatorAdminRecord({
+      coordinator: row,
+      user: row.username ? {
+        id: row.user_id_ref,
+        username: row.username,
+        whatsappPhone: row.whatsappPhone,
+        email: row.email,
+      } : null,
     }));
+  }
+
+  async getAdminStaff() {
+    const result = await query(
+      `
+        SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo,
+               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+        FROM staff s
+        INNER JOIN cities ci ON ci.id = s.city_id
+        ORDER BY s.full_name ASC, s.id ASC
+      `,
+    );
+
+    return result.rows.map(sanitizeStaffAdminRecord);
   }
 
   async findCoordinatorProfileByUserId(userId) {
@@ -220,6 +259,146 @@ class PostgresEventAppRepository {
     );
 
     return result.rows;
+  }
+
+  async createClient(payload) {
+    const duplicateResult = await query(
+      `
+        SELECT u.id
+        FROM users u
+        INNER JOIN roles r ON r.id = u.role_id
+        WHERE LOWER(u.username) = LOWER($1)
+           OR ($2::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($2))
+           OR ($3::text IS NOT NULL AND COALESCE(u.phone, '') = $3)
+           OR ($4::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $4)
+           OR (r.code = 'CLIENTE' AND LOWER(u.full_name) = LOWER($5))
+        LIMIT 1
+      `,
+      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.fullName],
+    );
+
+    if (duplicateResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    }
+
+    const result = await query(
+      `
+        INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM roles WHERE code = 'CLIENTE'), TRUE)
+        RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, 'CLIENTE' AS role
+      `,
+      [payload.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, createPasswordHash(payload.password)],
+    );
+
+    return sanitizeUserRecord(result.rows[0]);
+  }
+
+  async createCoordinator(payload) {
+    const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
+    if (cityResult.rowCount === 0) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const duplicateUserResult = await query(
+      `
+        SELECT id
+        FROM users
+        WHERE LOWER(username) = LOWER($1)
+           OR ($2::text IS NOT NULL AND LOWER(COALESCE(email, '')) = LOWER($2))
+           OR ($3::text IS NOT NULL AND COALESCE(phone, '') = $3)
+           OR ($4::text IS NOT NULL AND COALESCE(whatsapp_phone, '') = $4)
+        LIMIT 1
+      `,
+      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null],
+    );
+    const duplicateCoordinatorResult = await query(
+      `
+        SELECT id
+        FROM coordinators
+        WHERE LOWER(cedula) = LOWER($1)
+           OR LOWER(full_name) = LOWER($2)
+           OR phone = $3
+        LIMIT 1
+      `,
+      [payload.cedula, payload.fullName, payload.phone],
+    );
+
+    if (duplicateUserResult.rowCount > 0 || duplicateCoordinatorResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM roles WHERE code = 'COORDINADOR'), TRUE)
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+        `,
+        [payload.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, createPasswordHash(payload.password)],
+      );
+
+      const coordinatorResult = await client.query(
+        `
+          INSERT INTO coordinators (user_id, full_name, cedula, address, phone, rating, photo, city_id)
+          VALUES ($1, $2, $3, $4, $5, 5, $6, $7)
+          RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo
+        `,
+        [userResult.rows[0].id, payload.fullName, payload.cedula, payload.address, payload.phone, DEFAULT_PROFILE_PHOTO, cityResult.rows[0].id],
+      );
+
+      await client.query('COMMIT');
+      return sanitizeCoordinatorAdminRecord({
+        coordinator: { ...coordinatorResult.rows[0], city: cityResult.rows[0].name },
+        user: userResult.rows[0],
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createStaff(payload) {
+    const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
+    if (cityResult.rowCount === 0) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const duplicateResult = await query(
+      `
+        SELECT id
+        FROM staff s
+        INNER JOIN cities ci ON ci.id = s.city_id
+        WHERE LOWER(s.cedula) = LOWER($1)
+           OR (
+             LOWER(s.full_name) = LOWER($2)
+             AND LOWER(ci.name) = LOWER($3)
+             AND UPPER(s.category) = UPPER($4)
+           )
+        LIMIT 1
+      `,
+      [payload.cedula, payload.fullName, payload.city, payload.category],
+    );
+
+    if (duplicateResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    }
+
+    const result = await query(
+      `
+        INSERT INTO staff (full_name, cedula, city_id, category, photo, clothing_size, shoe_size, measurements)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+      `,
+      [payload.fullName, payload.cedula, cityResult.rows[0].id, payload.category, DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+    );
+
+    return sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
   }
 
   async getCities() {

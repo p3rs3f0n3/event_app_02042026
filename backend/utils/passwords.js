@@ -2,6 +2,11 @@ const crypto = require('crypto');
 
 const hashPassword = (password, salt) => crypto.scryptSync(password, salt, 64).toString('hex');
 
+const createPasswordHash = (password) => {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${hashPassword(password, salt)}`;
+};
+
 const verifyPassword = (password, storedHash) => {
   if (typeof storedHash !== 'string' || !storedHash.includes(':')) {
     return false;
@@ -24,5 +29,6 @@ const verifyPassword = (password, storedHash) => {
 };
 
 module.exports = {
+  createPasswordHash,
   verifyPassword,
 };

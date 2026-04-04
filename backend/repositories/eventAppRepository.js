@@ -3,12 +3,18 @@ const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coo
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
+const {
+  DEFAULT_PROFILE_PHOTO,
+  normalizeComparableValue,
+  normalizePhoneValue,
+  sanitizeCoordinatorAdminRecord,
+  sanitizeStaffAdminRecord,
+  sanitizeUserRecord,
+} = require('../utils/adminRecords');
 
 const DEFAULT_EXECUTIVE_USER_ID = 2;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
-
-const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
@@ -73,6 +79,12 @@ const normalizeEvent = (event, clients = []) => ({
 const normalizeCoordinator = (coordinator) => ({
   ...coordinator,
   userId: Number(coordinator.userId || coordinator.user_id || 0) || null,
+  photo: coordinator.photo || DEFAULT_PROFILE_PHOTO,
+});
+
+const normalizeStaffMember = (staffMember) => ({
+  ...staffMember,
+  photo: staffMember.photo || DEFAULT_PROFILE_PHOTO,
 });
 
 const normalizeDb = (db, initialDb) => ({
@@ -80,6 +92,7 @@ const normalizeDb = (db, initialDb) => ({
   ...db,
   users: Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users),
   coordinators: Array.isArray(db?.coordinators) && db.coordinators.length > 0 ? db.coordinators.map(normalizeCoordinator) : clone(initialDb.coordinators).map(normalizeCoordinator),
+  staff: Array.isArray(db?.staff) && db.staff.length > 0 ? db.staff.map(normalizeStaffMember) : clone(initialDb.staff).map(normalizeStaffMember),
   cities: Array.isArray(db?.cities) && db.cities.length > 0 ? db.cities.map(normalizeCity) : clone(initialDb.cities),
   events: Array.isArray(db?.events) ? db.events : [],
 });
@@ -142,15 +155,26 @@ class EventAppRepository {
   getClients() {
     return this.db.users
       .filter((user) => String(user.role || '').toUpperCase() === 'CLIENTE' && user.isActive !== false)
-      .map((user) => ({
-        id: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        phone: user.phone || null,
-        whatsappPhone: user.whatsappPhone || user.whatsapp_phone || null,
-        email: user.email || null,
-        role: user.role,
+      .map(sanitizeUserRecord)
+      .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
+  }
+
+  getAdminClients() {
+    return this.getClients();
+  }
+
+  getAdminCoordinators() {
+    return this.db.coordinators
+      .map((coordinator) => sanitizeCoordinatorAdminRecord({
+        coordinator,
+        user: coordinator.userId ? this.findUserById(coordinator.userId) : null,
       }))
+      .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
+  }
+
+  getAdminStaff() {
+    return this.db.staff
+      .map(sanitizeStaffAdminRecord)
       .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
   }
 
@@ -199,7 +223,7 @@ class EventAppRepository {
   }
 
   getStaff({ city, category } = {}) {
-    let result = this.db.staff;
+    let result = this.db.staff.map(normalizeStaffMember);
 
     if (city) {
       result = result.filter((staffMember) => staffMember.city.toLowerCase() === city.toLowerCase());
@@ -210,6 +234,142 @@ class EventAppRepository {
     }
 
     return result;
+  }
+
+  createClient(payload) {
+    const username = normalizeComparableValue(payload.username);
+    const fullName = normalizeComparableValue(payload.fullName);
+    const phone = normalizePhoneValue(payload.phone);
+    const whatsappPhone = normalizePhoneValue(payload.whatsappPhone);
+    const email = normalizeComparableValue(payload.email);
+
+    const duplicateUser = this.db.users.find((user) => {
+      if (normalizeComparableValue(user.username) === username) return true;
+      if (email && normalizeComparableValue(user.email) === email) return true;
+      if (phone && normalizePhoneValue(user.phone) === phone) return true;
+      if (whatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === whatsappPhone) return true;
+      return String(user.role || '').toUpperCase() === 'CLIENTE' && normalizeComparableValue(user.fullName) === fullName;
+    });
+
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    }
+
+    const newUser = {
+      id: this.#nextId(this.db.users),
+      username: payload.username,
+      password: payload.password,
+      fullName: payload.fullName,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      role: 'CLIENTE',
+      isActive: true,
+    };
+
+    this.db.users.push(newUser);
+    this.save();
+    return sanitizeUserRecord(newUser);
+  }
+
+  createCoordinator(payload) {
+    const city = this.findCityByName(payload.city);
+    if (!city) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const username = normalizeComparableValue(payload.username);
+    const email = normalizeComparableValue(payload.email);
+    const phone = normalizePhoneValue(payload.phone);
+    const whatsappPhone = normalizePhoneValue(payload.whatsappPhone);
+    const fullName = normalizeComparableValue(payload.fullName);
+    const cedula = normalizeComparableValue(payload.cedula);
+
+    const duplicateUser = this.db.users.find((user) => {
+      if (normalizeComparableValue(user.username) === username) return true;
+      if (email && normalizeComparableValue(user.email) === email) return true;
+      if (phone && normalizePhoneValue(user.phone) === phone) return true;
+      return whatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === whatsappPhone;
+    });
+    const duplicateCoordinator = this.db.coordinators.find((coordinator) => (
+      normalizeComparableValue(coordinator.cedula) === cedula
+      || normalizeComparableValue(coordinator.name) === fullName
+      || normalizePhoneValue(coordinator.phone) === phone
+    ));
+
+    if (duplicateUser || duplicateCoordinator) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    }
+
+    const newUser = {
+      id: this.#nextId(this.db.users),
+      username: payload.username,
+      password: payload.password,
+      fullName: payload.fullName,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      role: 'COORDINADOR',
+      isActive: true,
+    };
+    const newCoordinator = normalizeCoordinator({
+      id: this.#nextId(this.db.coordinators),
+      userId: newUser.id,
+      name: payload.fullName,
+      cedula: payload.cedula,
+      address: payload.address,
+      phone: payload.phone,
+      rating: 5,
+      photo: DEFAULT_PROFILE_PHOTO,
+      city: city.name,
+    });
+
+    this.db.users.push(newUser);
+    this.db.coordinators.push(newCoordinator);
+    this.save();
+
+    return sanitizeCoordinatorAdminRecord({ coordinator: newCoordinator, user: newUser });
+  }
+
+  createStaff(payload) {
+    const city = this.findCityByName(payload.city);
+    if (!city) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const fullName = normalizeComparableValue(payload.fullName);
+    const cedula = normalizeComparableValue(payload.cedula);
+    const category = normalizeComparableValue(payload.category);
+    const cityName = normalizeComparableValue(city.name);
+
+    const duplicateStaff = this.db.staff.find((staffMember) => (
+      normalizeComparableValue(staffMember.cedula) === cedula
+      || (
+        normalizeComparableValue(staffMember.name) === fullName
+        && normalizeComparableValue(staffMember.city) === cityName
+        && normalizeComparableValue(staffMember.category) === category
+      )
+    ));
+
+    if (duplicateStaff) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    }
+
+    const newStaffMember = normalizeStaffMember({
+      id: this.#nextId(this.db.staff),
+      name: payload.fullName,
+      cedula: payload.cedula,
+      city: city.name,
+      category: payload.category,
+      photo: DEFAULT_PROFILE_PHOTO,
+      clothingSize: payload.clothingSize || null,
+      shoeSize: payload.shoeSize || null,
+      measurements: payload.measurements || null,
+    });
+
+    this.db.staff.push(newStaffMember);
+    this.save();
+    return sanitizeStaffAdminRecord(newStaffMember);
   }
 
   getCities() {
@@ -435,6 +595,10 @@ class EventAppRepository {
 
     this.save();
     return enrichEventLifecycle(normalizeEvent(this.db.events[eventIndex], this.getClients()));
+  }
+
+  #nextId(collection) {
+    return collection.reduce((maxValue, item) => Math.max(maxValue, Number(item.id) || 0), 0) + 1;
   }
 }
 

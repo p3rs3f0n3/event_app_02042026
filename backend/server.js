@@ -10,6 +10,9 @@ const {
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
   validateExecutiveReportPayload,
+  validateAdminClientPayload,
+  validateAdminCoordinatorPayload,
+  validateAdminStaffPayload,
   validateEventPayload,
   validateLoginPayload,
   validateManualInactivationPayload,
@@ -90,6 +93,32 @@ app.get('/api/clients', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getClients());
 }));
 
+app.get('/api/admin/clients', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getAdminClients());
+}));
+
+app.post('/api/admin/clients', asyncHandler(async (req, res) => {
+  const validationError = validateAdminClientPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.createClient({
+    username: normalizeString(req.body.username),
+    password: normalizeString(req.body.password),
+    fullName: normalizeString(req.body.fullName),
+    phone: normalizeString(req.body.phone),
+    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    email: normalizeString(req.body.email).toLowerCase(),
+  });
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  return res.status(201).json(result);
+}));
+
 app.get('/api/staff', asyncHandler(async (req, res) => {
   const { city, category, startTime, endTime, eventStartDate, eventEndDate, selectedStaffIds } = req.query;
   const repository = req.app.locals.repository;
@@ -123,6 +152,70 @@ app.get('/api/staff', asyncHandler(async (req, res) => {
       unavailableReason: isUnavailable ? `Ocupado en ${scheduledAssignments.staffReasons.get(staffId)}` : null,
     };
   }));
+}));
+
+app.get('/api/admin/coordinators', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getAdminCoordinators());
+}));
+
+app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
+  const validationError = validateAdminCoordinatorPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.createCoordinator({
+    username: normalizeString(req.body.username),
+    password: normalizeString(req.body.password),
+    fullName: normalizeString(req.body.fullName),
+    cedula: normalizeString(req.body.cedula),
+    address: normalizeString(req.body.address),
+    phone: normalizeString(req.body.phone),
+    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    email: normalizeString(req.body.email).toLowerCase(),
+    city: normalizeString(req.body.city),
+  });
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_REFERENCE') {
+    return badRequest(res, result.message);
+  }
+
+  return res.status(201).json(result);
+}));
+
+app.get('/api/admin/staff', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getAdminStaff());
+}));
+
+app.post('/api/admin/staff', asyncHandler(async (req, res) => {
+  const validationError = validateAdminStaffPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.createStaff({
+    fullName: normalizeString(req.body.fullName),
+    cedula: normalizeString(req.body.cedula),
+    city: normalizeString(req.body.city),
+    category: normalizeString(req.body.category).toUpperCase(),
+    clothingSize: normalizeString(req.body.clothingSize),
+    shoeSize: normalizeString(req.body.shoeSize),
+    measurements: normalizeString(req.body.measurements),
+  });
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_REFERENCE') {
+    return badRequest(res, result.message);
+  }
+
+  return res.status(201).json(result);
 }));
 
 app.get('/api/colombia-cities', asyncHandler(async (req, res) => {
