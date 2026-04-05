@@ -3,7 +3,12 @@ const cors = require('cors');
 const { config } = require('./config/env');
 const { getRoleConfig, getRoleConfigList } = require('./config/roles');
 const { createRepository } = require('./repositories');
-const { collectScheduledAssignments, validateDraftAssignments } = require('./utils/availability');
+const {
+  collectScheduledAssignments,
+  normalizePointOriginalRef,
+  stripDraftAssignmentMetadata,
+  validateDraftAssignments,
+} = require('./utils/availability');
 const {
   badRequest,
   normalizeString,
@@ -92,7 +97,7 @@ app.post('/api/change-password', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/coordinators', asyncHandler(async (req, res) => {
-  const { city, startTime, endTime, eventStartDate, eventEndDate, selectedCoordinatorId } = req.query;
+  const { city, startTime, endTime, eventStartDate, eventEndDate, selectedCoordinatorId, excludeEventId, excludeCityIndex, excludePointIndex } = req.query;
   const repository = req.app.locals.repository;
   const [coordinators, events] = await Promise.all([
     repository.getCoordinators({ city }),
@@ -105,6 +110,7 @@ app.get('/api/coordinators', asyncHandler(async (req, res) => {
     endTime,
     eventStartDate,
     eventEndDate,
+    excludePointOriginalRef: normalizePointOriginalRef({ excludeEventId, excludeCityIndex, excludePointIndex }),
   });
   const selectedId = Number(selectedCoordinatorId);
 
@@ -204,7 +210,7 @@ app.put('/api/admin/clients/:id', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/staff', asyncHandler(async (req, res) => {
-  const { city, category, startTime, endTime, eventStartDate, eventEndDate, selectedStaffIds } = req.query;
+  const { city, category, startTime, endTime, eventStartDate, eventEndDate, selectedStaffIds, excludeEventId, excludeCityIndex, excludePointIndex } = req.query;
   const repository = req.app.locals.repository;
   const [staff, events] = await Promise.all([
     repository.getStaff({ city, category }),
@@ -217,6 +223,7 @@ app.get('/api/staff', asyncHandler(async (req, res) => {
     endTime,
     eventStartDate,
     eventEndDate,
+    excludePointOriginalRef: normalizePointOriginalRef({ excludeEventId, excludeCityIndex, excludePointIndex }),
   });
   const selectedIds = new Set(
     String(selectedStaffIds || '')
@@ -497,7 +504,7 @@ app.post('/api/events', asyncHandler(async (req, res) => {
     return badRequest(res, assignmentConflict);
   }
 
-  const newE = await req.app.locals.repository.createEvent(req.body);
+  const newE = await req.app.locals.repository.createEvent(stripDraftAssignmentMetadata(req.body));
   return res.status(201).json(newE);
 }));
 app.put('/api/events/:id', asyncHandler(async (req, res) => {
@@ -522,13 +529,12 @@ app.put('/api/events/:id', asyncHandler(async (req, res) => {
   const assignmentConflict = validateDraftAssignments({
     draftEvent: req.body,
     existingEvents: await req.app.locals.repository.getEvents(),
-    excludeEventId: req.params.id,
   });
   if (assignmentConflict) {
     return badRequest(res, assignmentConflict);
   }
 
-  const updatedEvent = await req.app.locals.repository.updateEvent(req.params.id, req.body);
+  const updatedEvent = await req.app.locals.repository.updateEvent(req.params.id, stripDraftAssignmentMetadata(req.body));
   if (updatedEvent) {
     return res.json(updatedEvent);
   }

@@ -43,8 +43,48 @@ const hasDateRangeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
   return normalizedLeftStart.getTime() < normalizedRightEnd.getTime() && normalizedRightStart.getTime() < normalizedLeftEnd.getTime();
 };
 
-const collectScheduledAssignments = ({ events = [], city, startTime, endTime, eventStartDate, eventEndDate, excludeEventId } = {}) => {
+const normalizePointOriginalRef = (value = {}) => {
+  const eventId = Number(value?.eventId ?? value?.excludeEventId);
+  const cityIndex = Number(value?.cityIndex ?? value?.excludeCityIndex);
+  const pointIndex = Number(value?.pointIndex ?? value?.excludePointIndex);
+
+  if (!Number.isInteger(eventId) || eventId <= 0 || !Number.isInteger(cityIndex) || cityIndex < 0 || !Number.isInteger(pointIndex) || pointIndex < 0) {
+    return null;
+  }
+
+  return { eventId, cityIndex, pointIndex };
+};
+
+const isSamePointOriginalRef = (leftRef, rightRef) => (
+  Boolean(leftRef)
+  && Boolean(rightRef)
+  && Number(leftRef.eventId) === Number(rightRef.eventId)
+  && Number(leftRef.cityIndex) === Number(rightRef.cityIndex)
+  && Number(leftRef.pointIndex) === Number(rightRef.pointIndex)
+);
+
+const stripDraftAssignmentMetadata = (draftEvent = {}) => ({
+  ...draftEvent,
+  cities: Array.isArray(draftEvent?.cities)
+    ? draftEvent.cities.map((city) => ({
+      ...city,
+      points: Array.isArray(city?.points)
+        ? city.points.map((point) => {
+          if (!point || typeof point !== 'object' || Array.isArray(point)) {
+            return point;
+          }
+
+          const { __originalRef, ...cleanPoint } = point;
+          return cleanPoint;
+        })
+        : [],
+    }))
+    : [],
+});
+
+const collectScheduledAssignments = ({ events = [], city, startTime, endTime, eventStartDate, eventEndDate, excludePointOriginalRef } = {}) => {
   const targetCity = normalizeCityName(city);
+  const normalizedExcludePointOriginalRef = normalizePointOriginalRef(excludePointOriginalRef);
 
   if (!targetCity || !startTime || !endTime || !eventStartDate || !eventEndDate) {
     return {
@@ -63,7 +103,7 @@ const collectScheduledAssignments = ({ events = [], city, startTime, endTime, ev
   };
 
   for (const event of events) {
-    if (!event || (excludeEventId && Number(event.id) === Number(excludeEventId))) {
+    if (!event) {
       continue;
     }
 
@@ -75,12 +115,17 @@ const collectScheduledAssignments = ({ events = [], city, startTime, endTime, ev
       continue;
     }
 
-    for (const eventCity of Array.isArray(event.cities) ? event.cities : []) {
+    for (const [cityIndex, eventCity] of (Array.isArray(event.cities) ? event.cities : []).entries()) {
       if (normalizeCityName(eventCity?.name) !== targetCity) {
         continue;
       }
 
-      for (const point of Array.isArray(eventCity?.points) ? eventCity.points : []) {
+      for (const [pointIndex, point] of (Array.isArray(eventCity?.points) ? eventCity.points : []).entries()) {
+        const pointOriginalRef = point?.__originalRef || { eventId: event.id, cityIndex, pointIndex };
+        if (isSamePointOriginalRef(pointOriginalRef, normalizedExcludePointOriginalRef)) {
+          continue;
+        }
+
         if (!hasTimeOverlap(point?.startTime, point?.endTime, startTime, endTime)) {
           continue;
         }
@@ -111,7 +156,7 @@ const collectScheduledAssignments = ({ events = [], city, startTime, endTime, ev
   return conflicts;
 };
 
-const validateDraftAssignments = ({ draftEvent, existingEvents = [], excludeEventId } = {}) => {
+const validateDraftAssignments = ({ draftEvent, existingEvents = [] } = {}) => {
   const draftCities = Array.isArray(draftEvent?.cities) ? draftEvent.cities : [];
 
   for (const city of draftCities) {
@@ -148,7 +193,7 @@ const validateDraftAssignments = ({ draftEvent, existingEvents = [], excludeEven
         endTime: point?.endTime,
         eventStartDate: draftEvent?.startDate,
         eventEndDate: draftEvent?.endDate,
-        excludeEventId,
+        excludePointOriginalRef: point?.__originalRef,
       });
 
       const coordinatorId = Number(point?.coordinator?.id);
@@ -172,5 +217,7 @@ module.exports = {
   collectScheduledAssignments,
   hasDateRangeOverlap,
   hasTimeOverlap,
+  normalizePointOriginalRef,
+  stripDraftAssignmentMetadata,
   validateDraftAssignments,
 };

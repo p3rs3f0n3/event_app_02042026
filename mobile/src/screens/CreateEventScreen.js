@@ -34,7 +34,49 @@ const findMatchingClient = (clients, eventLike) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
-const createEmptyPoint = () => ({ establishment: '', address: '', contact: '', phone: '', startTime: null, endTime: null, coordinator: null, assignedStaff: [] });
+const createEmptyPoint = () => ({ establishment: '', address: '', contact: '', phone: '', startTime: null, endTime: null, coordinator: null, assignedStaff: [], __originalRef: null });
+
+const buildPointOriginalRef = ({ eventId, cityIndex, pointIndex }) => {
+  const normalizedEventId = Number(eventId);
+  const normalizedCityIndex = Number(cityIndex);
+  const normalizedPointIndex = Number(pointIndex);
+
+  if (!Number.isInteger(normalizedEventId) || normalizedEventId <= 0 || !Number.isInteger(normalizedCityIndex) || normalizedCityIndex < 0 || !Number.isInteger(normalizedPointIndex) || normalizedPointIndex < 0) {
+    return null;
+  }
+
+  return {
+    eventId: normalizedEventId,
+    cityIndex: normalizedCityIndex,
+    pointIndex: normalizedPointIndex,
+  };
+};
+
+const attachOriginalRefsToCities = (cities, eventId) => (
+  Array.isArray(cities)
+    ? cities.map((city, cityIndex) => ({
+      ...city,
+      points: Array.isArray(city?.points)
+        ? city.points.map((point, pointIndex) => ({
+          ...point,
+          __originalRef: point?.__originalRef || buildPointOriginalRef({ eventId, cityIndex, pointIndex }),
+        }))
+        : [],
+    }))
+    : []
+);
+
+const normalizePointForForm = (point) => ({
+  establishment: point?.establishment || '',
+  address: point?.address || '',
+  contact: point?.contact || '',
+  phone: normalizePhoneValue(point?.phone || ''),
+  startTime: point?.startTime ? new Date(point.startTime) : null,
+  endTime: point?.endTime ? new Date(point.endTime) : null,
+  coordinator: point?.coordinator || null,
+  assignedStaff: Array.isArray(point?.assignedStaff) ? point.assignedStaff : [],
+  __originalRef: point?.__originalRef || null,
+});
 
 const formatPointTime = (value) => {
   if (!value) {
@@ -100,16 +142,17 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [showPicker, setShowPicker] = useState(null);
   const [apiLists, setApiLists] = useState({ coordinators: [], staff: [], cities: [], clients: [] });
   const [loading, setLoading] = useState(true);
-  const [eventData, setEventData] = useState({
+  const [eventData, setEventData] = useState(() => ({
     name: eventToEdit?.name || '', client: eventToEdit?.client || '', clientId: eventToEdit?.clientId || null, clientUserId: eventToEdit?.clientUserId || null,
     startDate: eventToEdit?.startDate ? new Date(eventToEdit.startDate) : null,
     endDate: eventToEdit?.endDate ? new Date(eventToEdit.endDate) : null,
-    image: eventToEdit?.image || null, cities: eventToEdit?.cities || []
-  });
+    image: eventToEdit?.image || null, cities: attachOriginalRefsToCities(eventToEdit?.cities, eventToEdit?.id)
+  }));
 
   const [currentCityName, setCurrentCityName] = useState('');
   const [cityPoints, setCityPoints] = useState([]);
   const [editingCityIndex, setEditingCityIndex] = useState(null);
+  const [editingPointIndex, setEditingPointIndex] = useState(null);
   const [isNewCity, setIsNewCity] = useState(false);
   const [manualCityName, setManualCityName] = useState('');
   const [showCitySearch, setShowCitySearch] = useState(false);
@@ -127,6 +170,16 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [categories, setCategories] = useState([]);
 
   const [currentPoint, setCurrentPoint] = useState(createEmptyPoint());
+  const isEditingEvent = Boolean(eventToEdit);
+  const isEditingPoint = editingPointIndex !== null;
+  const isEditingCity = editingCityIndex !== null;
+  const coordinatorButtonText = currentPoint.coordinator?.name
+    ? `Coord: ${currentPoint.coordinator.name}`
+    : isEditingPoint
+      ? 'ACTUALIZAR COORDINADOR *'
+      : 'ASIGNAR COORDINADOR *';
+  const pointActionText = isEditingPoint ? 'ACTUALIZAR PUNTO' : 'AÑADIR PUNTO';
+  const cityActionText = isEditingCity ? 'ACTUALIZAR CIUDAD' : 'AGREGAR CIUDAD';
   const selectedClient = useMemo(
     () => apiLists.clients.find((client) => Number(client.clientId) === Number(eventData.clientId))
       || apiLists.clients.find((client) => Number(client.userId || client.id) === Number(eventData.clientUserId))
@@ -234,12 +287,19 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       return { coordinatorIds, staffIds };
     }
 
-    for (const city of buildDraftCities()) {
+    for (const [cityIndex, city] of buildDraftCities().entries()) {
       if (normalizeCityName(city?.name) !== normalizeCityName(resolvedCityName)) {
         continue;
       }
 
-      for (const point of Array.isArray(city?.points) ? city.points : []) {
+      const points = Array.isArray(city?.points) ? city.points : [];
+
+      for (let index = 0; index < points.length; index += 1) {
+        if (editingCityIndex !== null && editingPointIndex !== null && cityIndex === editingCityIndex && index === editingPointIndex) {
+          continue;
+        }
+
+        const point = points[index];
         if (!hasTimeOverlap(point?.startTime, point?.endTime, currentPoint.startTime, currentPoint.endTime)) {
           continue;
         }
@@ -334,8 +394,20 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     if (new Date(currentPoint.endTime).getTime() <= new Date(currentPoint.startTime).getTime()) {
       return Alert.alert('Error', 'Hora fin debe ser posterior a inicio');
     }
-    setCityPoints([...cityPoints, currentPoint]);
+    const normalizedPoint = {
+      ...currentPoint,
+      phone: normalizePhoneValue(currentPoint.phone),
+    };
+
+    if (editingPointIndex !== null) {
+      setCityPoints(cityPoints.map((point, index) => (index === editingPointIndex ? normalizedPoint : point)));
+      setEditingPointIndex(null);
+    } else {
+      setCityPoints([...cityPoints, normalizedPoint]);
+    }
+
     setCurrentPoint(createEmptyPoint());
+    handleClearCategorySelection();
   };
 
   const handleAddCity = async () => {
@@ -352,7 +424,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       if (editingCityIndex !== null) updated[editingCityIndex] = { name: cityName, points: cityPoints };
       else updated.push({ name: cityName, points: cityPoints });
       setEventData({ ...eventData, cities: updated });
-      setCurrentCityName(''); setCityPoints([]); setEditingCityIndex(null); setIsNewCity(false); setManualCityName(''); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection();
+      setCurrentCityName(''); setCityPoints([]); setEditingCityIndex(null); setEditingPointIndex(null); setIsNewCity(false); setManualCityName(''); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection();
     } catch (error) {
       Alert.alert('Error', error?.message || 'No se pudo registrar la ciudad');
     }
@@ -411,6 +483,9 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         endTime: currentPoint.endTime?.toISOString?.() || currentPoint.endTime,
         eventStartDate: eventData.startDate?.toISOString?.() || eventData.startDate,
         eventEndDate: eventData.endDate?.toISOString?.() || eventData.endDate,
+        excludeEventId: currentPoint.__originalRef?.eventId,
+        excludeCityIndex: currentPoint.__originalRef?.cityIndex,
+        excludePointIndex: currentPoint.__originalRef?.pointIndex,
         selectedCoordinatorId: currentPoint.coordinator?.id,
       });
       setApiLists(prev => ({
@@ -447,6 +522,9 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         endTime: currentPoint.endTime?.toISOString?.() || currentPoint.endTime,
         eventStartDate: eventData.startDate?.toISOString?.() || eventData.startDate,
         eventEndDate: eventData.endDate?.toISOString?.() || eventData.endDate,
+        excludeEventId: currentPoint.__originalRef?.eventId,
+        excludeCityIndex: currentPoint.__originalRef?.cityIndex,
+        excludePointIndex: currentPoint.__originalRef?.pointIndex,
         selectedStaffIds,
       });
       setApiLists(prev => ({
@@ -470,10 +548,27 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const onPickerChange = (event, selectedDate) => {
     const type = showPicker; setShowPicker(null); if (!selectedDate) return;
     if (type.includes('date')) setEventData({ ...eventData, [type === 'start_date' ? 'startDate' : 'endDate']: selectedDate });
-    else {
-      setCurrentPoint({ ...currentPoint, [type === 'start_time' ? 'startTime' : 'endTime']: selectedDate, coordinator: null, assignedStaff: [] });
-      handleClearCategorySelection();
-    }
+      else {
+        setCurrentPoint({ ...currentPoint, [type === 'start_time' ? 'startTime' : 'endTime']: selectedDate, coordinator: null, assignedStaff: [] });
+        handleClearCategorySelection();
+      }
+  };
+
+  const handleSelectPointForEdit = (point, pointIndex) => {
+    setCurrentPoint(normalizePointForForm(point));
+    setEditingPointIndex(pointIndex);
+    handleClearCategorySelection();
+  };
+
+  const handleSelectCityForEdit = (city, cityIndex) => {
+    setIsNewCity(false);
+    setManualCityName('');
+    setCurrentCityName(city.name);
+    setCityPoints(Array.isArray(city.points) ? city.points : []);
+    setEditingCityIndex(cityIndex);
+    setEditingPointIndex(null);
+    setCurrentPoint(createEmptyPoint());
+    handleClearCategorySelection();
   };
 
   const handleSelectCategory = (category) => {
@@ -560,12 +655,12 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 <Text style={styles.helperText}>Solo números, máximo 10 dígitos.</Text>
                 <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
-                 <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{currentPoint.coordinator?.name ? `Coord: ${currentPoint.coordinator.name}` : 'ASIGNAR COORDINADOR *'}</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>AÑADIR PUNTO</Text></TouchableOpacity>
-            </View>
-            <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => setPointInDetail({ point: p, cityName: resolvedCityName })}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewHint}>Tocá para ver el detalle del punto</Text></TouchableOpacity>)}
-              {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => { setIsNewCity(false); setManualCityName(''); setCurrentCityName(c.name); setCityPoints(c.points); setEditingCityIndex(i); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection(); }}><Text style={styles.previewTxt}>🌆 {c.name}</Text></TouchableOpacity>)}</View>
-            <View style={styles.footerButtons}><TouchableOpacity style={styles.footerBtn} onPress={() => setStep(1)}><Text style={styles.actionText}>ATRAS</Text></TouchableOpacity><TouchableOpacity style={styles.footerBtn} onPress={handleAddCity}><Text style={styles.actionText}>AGR CIUDAD</Text></TouchableOpacity></View>
+                 <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{coordinatorButtonText}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>{pointActionText}</Text></TouchableOpacity>
+             </View>
+            <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => (isEditingEvent ? handleSelectPointForEdit(p, i) : setPointInDetail({ point: p, cityName: resolvedCityName }))}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewHint}>{isEditingEvent ? 'Tocá para cargar este punto y editarlo' : 'Tocá para ver el detalle del punto'}</Text></TouchableOpacity>)}
+              {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => handleSelectCityForEdit(c, i)}><Text style={styles.previewTxt}>🌆 {c.name}</Text><Text style={styles.previewHint}>{editingCityIndex === i ? 'Ciudad en edición' : 'Tocá para cargar ciudad y sus puntos'}</Text></TouchableOpacity>)}</View>
+            <View style={styles.footerButtons}><TouchableOpacity style={styles.footerBtn} onPress={() => setStep(1)}><Text style={styles.actionText}>ATRAS</Text></TouchableOpacity><TouchableOpacity style={styles.footerBtn} onPress={handleAddCity}><Text style={styles.actionText}>{cityActionText}</Text></TouchableOpacity></View>
             <TouchableOpacity style={styles.finalSaveBtn} onPress={handleFinalSave}><Text style={styles.finalSaveText}>{eventToEdit ? 'GUARDAR EVENTO' : 'CREAR EVENTO'}</Text></TouchableOpacity>
           </View>
         )}
@@ -707,7 +802,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
 
         {/* Modal Ciudades */}
         <Modal visible={showCitySearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Filtrar ciudad</Text><TextInput style={styles.searchInput} placeholder="Buscar..." value={searchQuery} onChangeText={setSearchQuery} /><ScrollView style={{maxHeight: 400}}>
-          {apiLists.cities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(i => (<TouchableOpacity key={i.id} style={styles.cityItem} onPress={() => { setCurrentPoint((prev) => ({ ...prev, coordinator: null, assignedStaff: [] })); if (isOtherCityOption(i)) { setIsNewCity(true); setCurrentCityName(''); setManualCityName(''); } else { setIsNewCity(false); setCurrentCityName(i.name); setManualCityName(''); } setShowCitySearch(false); setSearchQuery(''); }}><Text style={styles.cityItemText}>{i.name}</Text></TouchableOpacity>))}
+          {apiLists.cities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(i => (<TouchableOpacity key={i.id} style={styles.cityItem} onPress={() => { setEditingPointIndex(null); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection(); if (isOtherCityOption(i)) { setIsNewCity(true); setCurrentCityName(''); setManualCityName(''); } else { setIsNewCity(false); setCurrentCityName(i.name); setManualCityName(''); } setShowCitySearch(false); setSearchQuery(''); }}><Text style={styles.cityItemText}>{i.name}</Text></TouchableOpacity>))}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => setShowCitySearch(false)}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
         <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar por NIT o nombre..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><Text style={styles.modalHelperText}>La búsqueda consulta la base de datos.</Text><ScrollView style={{maxHeight: 400}}>
           {clientSearchLoading ? <ActivityIndicator style={styles.modalLoader} size="small" color={palette.primaryButton} /> : null}
