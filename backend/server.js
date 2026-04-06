@@ -11,6 +11,7 @@ const {
 } = require('./utils/availability');
 const {
   badRequest,
+  normalizePhoneDigits,
   normalizeString,
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
@@ -36,6 +37,25 @@ const asyncHandler = (handler) => async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+const normalizeAdminPhonePayload = (payload = {}) => ({
+  phone: normalizePhoneDigits(payload.phone).slice(0, 10),
+  whatsappPhone: normalizePhoneDigits(payload.whatsappPhone).slice(0, 10),
+});
+
+const normalizeAdminPhotoPayload = (photo) => {
+  if (!photo || typeof photo !== 'object' || Array.isArray(photo)) {
+    return null;
+  }
+
+  return {
+    uri: normalizeString(photo.uri),
+    mimeType: normalizeString(photo.mimeType).toLowerCase() || null,
+    fileSize: Number(photo.fileSize || 0) || null,
+    fileName: normalizeString(photo.fileName) || null,
+    source: normalizeString(photo.source) || 'admin',
+  };
 };
 
 app.use(cors());
@@ -157,6 +177,8 @@ app.post('/api/admin/clients', asyncHandler(async (req, res) => {
     return badRequest(res, validationError);
   }
 
+  const normalizedPhones = normalizeAdminPhonePayload(req.body);
+
   const result = await req.app.locals.repository.createClient({
     actorUserId: Number(req.body.actorUserId),
     username: normalizeString(req.body.username),
@@ -165,8 +187,8 @@ app.post('/api/admin/clients', asyncHandler(async (req, res) => {
     nit: normalizeString(req.body.nit),
     contactFullName: normalizeString(req.body.contactFullName),
     contactRole: normalizeString(req.body.contactRole),
-    phone: normalizeString(req.body.phone),
-    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    phone: normalizedPhones.phone,
+    whatsappPhone: normalizedPhones.whatsappPhone,
     email: normalizeString(req.body.email).toLowerCase(),
   });
 
@@ -183,6 +205,8 @@ app.put('/api/admin/clients/:id', asyncHandler(async (req, res) => {
     return badRequest(res, validationError);
   }
 
+  const normalizedPhones = normalizeAdminPhonePayload(req.body);
+
   const result = await req.app.locals.repository.updateClient(req.params.id, {
     actorUserId: Number(req.body.actorUserId),
     username: normalizeString(req.body.username),
@@ -190,8 +214,8 @@ app.put('/api/admin/clients/:id', asyncHandler(async (req, res) => {
     nit: normalizeString(req.body.nit),
     contactFullName: normalizeString(req.body.contactFullName),
     contactRole: normalizeString(req.body.contactRole),
-    phone: normalizeString(req.body.phone),
-    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    phone: normalizedPhones.phone,
+    whatsappPhone: normalizedPhones.whatsappPhone,
     email: normalizeString(req.body.email).toLowerCase(),
   });
 
@@ -273,6 +297,8 @@ app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
     return badRequest(res, validationError);
   }
 
+  const normalizedPhones = normalizeAdminPhonePayload(req.body);
+
   const result = await req.app.locals.repository.createCoordinator({
     actorUserId: Number(req.body.actorUserId),
     username: normalizeString(req.body.username),
@@ -280,8 +306,8 @@ app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
     fullName: normalizeString(req.body.fullName),
     cedula: normalizeString(req.body.cedula),
     address: normalizeString(req.body.address),
-    phone: normalizeString(req.body.phone),
-    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    phone: normalizedPhones.phone,
+    whatsappPhone: normalizedPhones.whatsappPhone,
     email: normalizeString(req.body.email).toLowerCase(),
     city: normalizeString(req.body.city),
   });
@@ -303,14 +329,16 @@ app.put('/api/admin/coordinators/:id', asyncHandler(async (req, res) => {
     return badRequest(res, validationError);
   }
 
+  const normalizedPhones = normalizeAdminPhonePayload(req.body);
+
   const result = await req.app.locals.repository.updateCoordinator(req.params.id, {
     actorUserId: Number(req.body.actorUserId),
     username: normalizeString(req.body.username),
     fullName: normalizeString(req.body.fullName),
     cedula: normalizeString(req.body.cedula),
     address: normalizeString(req.body.address),
-    phone: normalizeString(req.body.phone),
-    whatsappPhone: normalizeString(req.body.whatsappPhone),
+    phone: normalizedPhones.phone,
+    whatsappPhone: normalizedPhones.whatsappPhone,
     email: normalizeString(req.body.email).toLowerCase(),
     city: normalizeString(req.body.city),
   });
@@ -390,6 +418,7 @@ app.post('/api/admin/staff', asyncHandler(async (req, res) => {
     clothingSize: normalizeString(req.body.clothingSize),
     shoeSize: normalizeString(req.body.shoeSize),
     measurements: normalizeString(req.body.measurements),
+    photo: normalizeAdminPhotoPayload(req.body.photo),
   });
 
   if (result?.errorCode === 'DUPLICATE_RECORD') {
@@ -418,6 +447,7 @@ app.put('/api/admin/staff/:id', asyncHandler(async (req, res) => {
     clothingSize: normalizeString(req.body.clothingSize),
     shoeSize: normalizeString(req.body.shoeSize),
     measurements: normalizeString(req.body.measurements),
+    photo: normalizeAdminPhotoPayload(req.body.photo),
   });
 
   if (result?.errorCode === 'NOT_FOUND') {

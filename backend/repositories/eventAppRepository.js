@@ -11,6 +11,7 @@ const {
   isDocumentEquivalent,
   isNitEquivalent,
   normalizeComparableValue,
+  normalizeProfilePhotoField,
   normalizePhoneValue,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
@@ -127,12 +128,12 @@ const normalizeEvent = (event, clients = []) => ({
 const normalizeCoordinator = (coordinator) => ({
   ...coordinator,
   userId: Number(coordinator.userId || coordinator.user_id || 0) || null,
-  photo: coordinator.photo || DEFAULT_PROFILE_PHOTO,
+  ...normalizeProfilePhotoField(coordinator.photoMetadata ? { uri: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
 });
 
 const normalizeStaffMember = (staffMember) => ({
   ...staffMember,
-  photo: staffMember.photo || DEFAULT_PROFILE_PHOTO,
+  ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
 });
 
 const normalizeDb = (db, initialDb) => ({
@@ -773,7 +774,7 @@ class EventAppRepository {
       cedula: payload.cedula,
       city: city.name,
       category: categoryRecord.name,
-      photo: DEFAULT_PROFILE_PHOTO,
+      photo: payload.photo || DEFAULT_PROFILE_PHOTO,
       clothingSize: payload.clothingSize || null,
       shoeSize: payload.shoeSize || null,
       measurements: payload.measurements || null,
@@ -831,6 +832,7 @@ class EventAppRepository {
       cedula: payload.cedula,
       city: city.name,
       category: categoryRecord.name,
+      photo: payload.photo || this.db.staff[staffIndex].photo,
       clothingSize: payload.clothingSize || null,
       shoeSize: payload.shoeSize || null,
       measurements: payload.measurements || null,

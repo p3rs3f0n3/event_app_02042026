@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 import {
   createAdminStaffCategory,
@@ -71,7 +72,19 @@ const TABS = [
   { key: 'staff', label: 'Staff' },
 ];
 
-const InputRow = ({ label, value, onChangeText, placeholder, multiline = false, editable = true, onPress }) => (
+const MAX_ADMIN_STAFF_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+
+const InputRow = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  multiline = false,
+  editable = true,
+  onPress,
+  keyboardType = 'default',
+  maxLength,
+}) => (
   <View style={stylesShared.fieldWrap}>
     <Text style={stylesShared.fieldLabel}>{label}</Text>
     {onPress ? (
@@ -87,6 +100,8 @@ const InputRow = ({ label, value, onChangeText, placeholder, multiline = false, 
         placeholderTextColor="#94A3B8"
         multiline={multiline}
         editable={editable}
+        keyboardType={keyboardType}
+        maxLength={maxLength}
       />
     )}
   </View>
@@ -95,6 +110,36 @@ const InputRow = ({ label, value, onChangeText, placeholder, multiline = false, 
 const normalizeNitSearchValue = (value) => String(value || '').trim();
 const normalizeDocumentSearchValue = (value) => String(value || '').trim();
 const normalizeCategoryValue = (value) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '').slice(0, 10);
+const normalizeEmailValue = (value) => String(value || '').trim().toLowerCase();
+const isValidEmailValue = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const hasTextValue = (value) => String(value || '').trim().length > 0;
+
+const getClientCreateValidationMessage = (form) => {
+  if (!hasTextValue(form.nit)) return 'El NIT es obligatorio en el alta.';
+  if (!hasTextValue(form.razonSocial)) return 'La razón social es obligatoria en el alta.';
+  if (!hasTextValue(form.contactFullName)) return 'El nombre del contacto es obligatorio en el alta.';
+  if (!hasTextValue(form.contactRole)) return 'El cargo del contacto es obligatorio en el alta.';
+  if (!hasTextValue(form.phone)) return 'El teléfono es obligatorio en el alta.';
+  if (!hasTextValue(form.whatsappPhone)) return 'El WhatsApp es obligatorio en el alta.';
+  if (!hasTextValue(form.email)) return 'El email es obligatorio en el alta.';
+  if (!hasTextValue(form.username)) return 'El usuario es obligatorio en el alta.';
+  if (!hasTextValue(form.password)) return 'La contraseña es obligatoria en el alta.';
+  return null;
+};
+
+const getCoordinatorCreateValidationMessage = (form) => {
+  if (!hasTextValue(form.cedula)) return 'La cédula es obligatoria en el alta.';
+  if (!hasTextValue(form.fullName)) return 'El nombre completo es obligatorio en el alta.';
+  if (!hasTextValue(form.address)) return 'La dirección es obligatoria en el alta.';
+  if (!hasTextValue(form.phone)) return 'El teléfono es obligatorio en el alta.';
+  if (!hasTextValue(form.whatsappPhone)) return 'El WhatsApp es obligatorio en el alta.';
+  if (!hasTextValue(form.email)) return 'El email es obligatorio en el alta.';
+  if (!hasTextValue(form.city)) return 'La ciudad es obligatoria en el alta.';
+  if (!hasTextValue(form.username)) return 'El usuario es obligatorio en el alta.';
+  if (!hasTextValue(form.password)) return 'La contraseña es obligatoria en el alta.';
+  return null;
+};
 
 const buildClientFormFromRecord = (client) => ({
   username: client?.username || '',
@@ -103,9 +148,9 @@ const buildClientFormFromRecord = (client) => ({
   nit: client?.nit || '',
   contactFullName: client?.contactFullName || '',
   contactRole: client?.contactRole || '',
-  phone: client?.phone || '',
-  whatsappPhone: client?.whatsappPhone || '',
-  email: client?.email || '',
+  phone: normalizePhoneValue(client?.phone),
+  whatsappPhone: normalizePhoneValue(client?.whatsappPhone),
+  email: normalizeEmailValue(client?.email),
 });
 
 const buildCoordinatorFormFromRecord = (coordinator) => ({
@@ -114,9 +159,9 @@ const buildCoordinatorFormFromRecord = (coordinator) => ({
   fullName: coordinator?.fullName || '',
   cedula: coordinator?.cedula || '',
   address: coordinator?.address || '',
-  phone: coordinator?.phone || '',
-  whatsappPhone: coordinator?.whatsappPhone || '',
-  email: coordinator?.email || '',
+  phone: normalizePhoneValue(coordinator?.phone),
+  whatsappPhone: normalizePhoneValue(coordinator?.whatsappPhone),
+  email: normalizeEmailValue(coordinator?.email),
   city: coordinator?.city || '',
 });
 
@@ -129,6 +174,8 @@ const buildStaffFormFromRecord = (staffMember) => ({
   shoeSize: staffMember?.shoeSize || '',
   measurements: staffMember?.measurements || '',
 });
+
+const getStaffPhotoPreviewUri = ({ draftPhoto, staffLookup }) => draftPhoto?.uri || staffLookup.result?.photo || null;
 
 const getLookupTone = (status) => {
   if (status === 'exists') return 'warning';
@@ -195,6 +242,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [coordinatorLookup, setCoordinatorLookup] = useState(LOOKUP_INITIAL_STATE);
   const [staffForm, setStaffForm] = useState(INITIAL_STAFF_FORM);
   const [staffLookup, setStaffLookup] = useState(LOOKUP_INITIAL_STATE);
+  const [staffPhotoDraft, setStaffPhotoDraft] = useState(null);
 
   const applyFeedback = useCallback((tone, message) => {
     setFeedback({ tone, message });
@@ -213,12 +261,14 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const resetStaffForm = useCallback(() => {
     setStaffForm(INITIAL_STAFF_FORM);
     setStaffLookup(LOOKUP_INITIAL_STATE);
+    setStaffPhotoDraft(null);
   }, []);
 
   const isEditingClient = clientLookup.status === 'exists' && Boolean(clientLookup.result?.clientId);
   const isEditingCoordinator = coordinatorLookup.status === 'exists' && Boolean(coordinatorLookup.result?.id);
   const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
   const canEditCoordinatorUserFields = !isEditingCoordinator || Boolean(coordinatorLookup.result?.userId);
+  const staffPhotoPreviewUri = getStaffPhotoPreviewUri({ draftPhoto: staffPhotoDraft, staffLookup });
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -315,6 +365,20 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   };
 
   const submitClient = async () => {
+    if (!isEditingClient) {
+      const validationMessage = getClientCreateValidationMessage(clientForm);
+      if (validationMessage) {
+        applyFeedback('error', validationMessage);
+        return;
+      }
+    }
+
+    const normalizedEmail = normalizeEmailValue(clientForm.email);
+    if (!isValidEmailValue(normalizedEmail)) {
+      applyFeedback('error', 'Ingresá un correo electrónico válido.');
+      return;
+    }
+
     setSaving(true);
     try {
       const editingClientId = Number(clientLookup.result?.clientId || 0);
@@ -322,6 +386,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       if (editingClientId > 0) {
         const updated = await updateAdminClient(editingClientId, {
           ...clientForm,
+          email: normalizedEmail,
           actorUserId: user?.id,
         });
 
@@ -342,6 +407,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       } else {
         const created = await createAdminClient({
           ...clientForm,
+          email: normalizedEmail,
           actorUserId: user?.id,
         });
         setLists((current) => ({ clients: [created, ...current.clients], coordinators: current.coordinators, staff: current.staff }));
@@ -364,6 +430,16 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         searchedValue: current.searchedValue,
       }));
     }
+  };
+
+  const handleClientPhoneChange = (field, value) => {
+    const normalizedPhone = normalizePhoneValue(value);
+    setClientForm((current) => ({ ...current, [field]: normalizedPhone }));
+  };
+
+  const handleCoordinatorPhoneChange = (field, value) => {
+    const normalizedPhone = normalizePhoneValue(value);
+    setCoordinatorForm((current) => ({ ...current, [field]: normalizedPhone }));
   };
 
   const checkClientNit = async () => {
@@ -490,6 +566,20 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   };
 
   const submitCoordinator = async () => {
+    if (!isEditingCoordinator) {
+      const validationMessage = getCoordinatorCreateValidationMessage(coordinatorForm);
+      if (validationMessage) {
+        applyFeedback('error', validationMessage);
+        return;
+      }
+    }
+
+    const normalizedEmail = normalizeEmailValue(coordinatorForm.email);
+    if (!isValidEmailValue(normalizedEmail)) {
+      applyFeedback('error', 'Ingresá un correo electrónico válido.');
+      return;
+    }
+
     setSaving(true);
     try {
       const editingCoordinatorId = Number(coordinatorLookup.result?.id || 0);
@@ -497,6 +587,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       if (editingCoordinatorId > 0) {
         const updated = await updateAdminCoordinator(editingCoordinatorId, {
           ...coordinatorForm,
+          email: normalizedEmail,
           actorUserId: user?.id,
         });
         setLists((current) => ({
@@ -516,6 +607,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       } else {
         const created = await createAdminCoordinator({
           ...coordinatorForm,
+          email: normalizedEmail,
           actorUserId: user?.id,
         });
         setLists((current) => ({ clients: current.clients, coordinators: [created, ...current.coordinators], staff: current.staff }));
@@ -560,6 +652,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
       if (response?.exists && response?.staff) {
         setStaffForm(buildStaffFormFromRecord(response.staff));
+        setStaffPhotoDraft(null);
         setStaffLookup({
           status: 'exists',
           message: 'Esa persona de staff ya existe. Entraste en modo edición para actualizar cualquier dato recuperado.',
@@ -593,6 +686,54 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     }
   };
 
+  const handlePickStaffPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Necesitás habilitar la galería para seleccionar una foto de staff.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.6,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const fileSize = Number(asset.fileSize || 0) || null;
+
+      if (fileSize && fileSize > MAX_ADMIN_STAFF_PHOTO_SIZE_BYTES) {
+        Alert.alert('Archivo demasiado grande', 'La foto supera el límite de 10 MB.');
+        return;
+      }
+
+      const uri = asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri;
+
+      setStaffPhotoDraft({
+        uri,
+        mimeType,
+        fileSize,
+        fileName: asset.fileName || null,
+        source: 'admin',
+      });
+      applyFeedback('success', 'Foto lista para guardar con el alta de staff.');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo seleccionar la foto ahora.');
+    }
+  };
+
+  const handleClearStaffPhotoDraft = () => {
+    setStaffPhotoDraft(null);
+    applyFeedback('success', isEditingStaff ? 'Se descartó el cambio de foto pendiente.' : 'Se quitó la foto seleccionada.');
+  };
+
   const submitStaff = async () => {
     setSaving(true);
     try {
@@ -602,6 +743,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         const updated = await updateAdminStaff(editingStaffId, {
           ...staffForm,
           actorUserId: user?.id,
+          ...(staffPhotoDraft ? { photo: staffPhotoDraft } : {}),
         });
         setLists((current) => ({
           clients: current.clients,
@@ -609,6 +751,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           staff: current.staff.map((staffMember) => (Number(staffMember.id) === editingStaffId ? updated : staffMember)),
         }));
         setStaffForm(buildStaffFormFromRecord(updated));
+        setStaffPhotoDraft(null);
         setStaffLookup({
           status: 'exists',
           message: 'Staff recuperado en modo edición. Los cambios ya quedaron persistidos y trazados.',
@@ -621,6 +764,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         const created = await createAdminStaff({
           ...staffForm,
           actorUserId: user?.id,
+          ...(staffPhotoDraft ? { photo: staffPhotoDraft } : {}),
         });
         setLists((current) => ({ clients: current.clients, coordinators: current.coordinators, staff: [created, ...current.staff] }));
         resetStaffForm();
@@ -640,10 +784,10 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             <Text style={styles.cardTitle}>{isEditingClient ? 'Edición de cliente' : 'Alta de cliente'}</Text>
             <StatusBadge label={isEditingClient ? 'Modo actualización' : 'Modo alta'} tone={isEditingClient ? 'warning' : 'info'} />
           </View>
-          <Text style={styles.helperText}>{isEditingClient ? 'Estás editando un cliente existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por el NIT. Lo verificamos y, si ya existe, autocompletamos la ficha.'}</Text>
+        <Text style={styles.helperText}>{isEditingClient ? 'Estás editando un cliente existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por el NIT. Lo verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
-            <InputRow label="NIT" value={clientForm.nit} onChangeText={handleNitChange} placeholder="900123456 o 900123456-7" />
+            <InputRow label={`NIT${!isEditingClient ? ' *' : ''}`} value={clientForm.nit} onChangeText={handleNitChange} placeholder="900123456 o 900123456-7" />
           </View>
           <View style={styles.lookupButtonWrap}>
             <AppButton title={checkingNit ? 'VERIFICANDO...' : 'VERIFICAR NIT'} onPress={checkClientNit} disabled={checkingNit || saving} />
@@ -670,15 +814,15 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             ) : null}
           </View>
         ) : null}
-        <InputRow label="Razón social" value={clientForm.razonSocial} onChangeText={(value) => setClientForm((current) => ({ ...current, razonSocial: value }))} placeholder="Empresa SAS" />
-        <InputRow label="Nombre del contacto" value={clientForm.contactFullName} onChangeText={(value) => setClientForm((current) => ({ ...current, contactFullName: value }))} placeholder="Nombre y apellido" />
-        <InputRow label="Cargo del contacto" value={clientForm.contactRole} onChangeText={(value) => setClientForm((current) => ({ ...current, contactRole: value }))} placeholder="Brand Manager" />
-        <InputRow label="Teléfono" value={clientForm.phone} onChangeText={(value) => setClientForm((current) => ({ ...current, phone: value }))} placeholder="3001234567" />
-        <InputRow label="WhatsApp" value={clientForm.whatsappPhone} onChangeText={(value) => setClientForm((current) => ({ ...current, whatsappPhone: value }))} placeholder="Opcional" />
-        <InputRow label="Email" value={clientForm.email} onChangeText={(value) => setClientForm((current) => ({ ...current, email: value }))} placeholder="cliente@empresa.com" />
-        <InputRow label="Usuario" value={clientForm.username} onChangeText={(value) => setClientForm((current) => ({ ...current, username: value }))} placeholder="cliente.nuevo" />
+        <InputRow label={`Razón social${!isEditingClient ? ' *' : ''}`} value={clientForm.razonSocial} onChangeText={(value) => setClientForm((current) => ({ ...current, razonSocial: value }))} placeholder="Empresa SAS" />
+        <InputRow label={`Nombre del contacto${!isEditingClient ? ' *' : ''}`} value={clientForm.contactFullName} onChangeText={(value) => setClientForm((current) => ({ ...current, contactFullName: value }))} placeholder="Nombre y apellido" />
+        <InputRow label={`Cargo del contacto${!isEditingClient ? ' *' : ''}`} value={clientForm.contactRole} onChangeText={(value) => setClientForm((current) => ({ ...current, contactRole: value }))} placeholder="Brand Manager" />
+        <InputRow label={`Teléfono${!isEditingClient ? ' *' : ''}`} value={clientForm.phone} onChangeText={(value) => handleClientPhoneChange('phone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`WhatsApp${!isEditingClient ? ' *' : ''}`} value={clientForm.whatsappPhone} onChangeText={(value) => handleClientPhoneChange('whatsappPhone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`Email${!isEditingClient ? ' *' : ''}`} value={clientForm.email} onChangeText={(value) => setClientForm((current) => ({ ...current, email: normalizeEmailValue(value) }))} placeholder="cliente@empresa.com" keyboardType="email-address" />
+        <InputRow label={`Usuario${!isEditingClient ? ' *' : ''}`} value={clientForm.username} onChangeText={(value) => setClientForm((current) => ({ ...current, username: value }))} placeholder="cliente.nuevo" />
         {!isEditingClient ? (
-          <InputRow label="Contraseña" value={clientForm.password} onChangeText={(value) => setClientForm((current) => ({ ...current, password: value }))} placeholder="mínimo 8 caracteres" />
+          <InputRow label="Contraseña *" value={clientForm.password} onChangeText={(value) => setClientForm((current) => ({ ...current, password: value }))} placeholder="mínimo 8 caracteres" />
         ) : (
           <View style={styles.inlineNotice}>
             <Text style={styles.inlineNoticeText}>La contraseña no se cambia desde esta ficha. Esa acción pertenece al usuario autenticado en su bloque de perfil.</Text>
@@ -736,10 +880,10 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <Text style={styles.cardTitle}>{isEditingCoordinator ? 'Edición de coordinador' : 'Alta de coordinador'}</Text>
           <StatusBadge label={isEditingCoordinator ? 'Modo actualización' : 'Modo alta'} tone={isEditingCoordinator ? 'warning' : 'info'} />
         </View>
-        <Text style={styles.helperText}>{isEditingCoordinator ? 'Estás editando un coordinador existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por la cédula. La verificamos y, si ya existe, autocompletamos la ficha.'}</Text>
+        <Text style={styles.helperText}>{isEditingCoordinator ? 'Estás editando un coordinador existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por la cédula. La verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
-            <InputRow label="Cédula" value={coordinatorForm.cedula} onChangeText={handleCoordinatorCedulaChange} placeholder="Documento" />
+            <InputRow label={`Cédula${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.cedula} onChangeText={handleCoordinatorCedulaChange} placeholder="Documento" />
           </View>
           <View style={styles.lookupButtonWrap}>
             <AppButton title={checkingCoordinatorCedula ? 'VERIFICANDO...' : 'VERIFICAR CÉDULA'} onPress={checkCoordinatorCedula} disabled={checkingCoordinatorCedula || saving} />
@@ -766,20 +910,20 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             ) : null}
           </View>
         ) : null}
-        <InputRow label="Nombre completo" value={coordinatorForm.fullName} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
-        <InputRow label="Dirección" value={coordinatorForm.address} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, address: value }))} placeholder="Dirección operativa" multiline />
-        <InputRow label="Teléfono" value={coordinatorForm.phone} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, phone: value }))} placeholder="3001234567" />
-        <InputRow label="WhatsApp" value={coordinatorForm.whatsappPhone} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, whatsappPhone: value }))} placeholder="Opcional" editable={canEditCoordinatorUserFields} />
-        <InputRow label="Email" value={coordinatorForm.email} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, email: value }))} placeholder="coord@eventapp.local" editable={canEditCoordinatorUserFields} />
-        <InputRow label="Ciudad" value={coordinatorForm.city} onPress={() => openCityPicker('coordinator')} placeholder="Seleccionar ciudad" />
-        <InputRow label="Usuario" value={coordinatorForm.username} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, username: value }))} placeholder="coord.nuevo" editable={canEditCoordinatorUserFields} />
+        <InputRow label={`Nombre completo${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.fullName} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
+        <InputRow label={`Dirección${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.address} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, address: value }))} placeholder="Dirección operativa" multiline />
+        <InputRow label={`Teléfono${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.phone} onChangeText={(value) => handleCoordinatorPhoneChange('phone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`WhatsApp${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.whatsappPhone} onChangeText={(value) => handleCoordinatorPhoneChange('whatsappPhone', value)} placeholder="3001234567" editable={canEditCoordinatorUserFields} keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`Email${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.email} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, email: normalizeEmailValue(value) }))} placeholder="coord@eventapp.local" editable={canEditCoordinatorUserFields} keyboardType="email-address" />
+        <InputRow label={`Ciudad${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.city} onPress={() => openCityPicker('coordinator')} placeholder="Seleccionar ciudad" />
+        <InputRow label={`Usuario${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.username} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, username: value }))} placeholder="coord.nuevo" editable={canEditCoordinatorUserFields} />
         {isEditingCoordinator && !canEditCoordinatorUserFields ? (
           <View style={styles.inlineNotice}>
             <Text style={styles.inlineNoticeText}>Este coordinador no tiene usuario vinculado. Desde esta edición sólo actualizás su ficha operativa; credenciales y contacto autenticado siguen fuera de alcance.</Text>
           </View>
         ) : null}
         {!isEditingCoordinator ? (
-          <InputRow label="Contraseña" value={coordinatorForm.password} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, password: value }))} placeholder="mínimo 8 caracteres" />
+          <InputRow label="Contraseña *" value={coordinatorForm.password} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, password: value }))} placeholder="mínimo 8 caracteres" />
         ) : (
           <View style={styles.inlineNotice}>
             <Text style={styles.inlineNoticeText}>La contraseña no se cambia desde esta ficha. Esa acción pertenece al usuario autenticado en su bloque de perfil.</Text>
@@ -867,6 +1011,31 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             ) : null}
           </View>
         ) : null}
+        <View style={styles.photoCard}>
+          <Text style={styles.photoCardTitle}>Foto de perfil opcional</Text>
+          <Pressable style={styles.photoPreviewShell} onPress={handlePickStaffPhoto}>
+            {staffPhotoPreviewUri ? (
+              <Image source={{ uri: staffPhotoPreviewUri }} style={styles.photoPreviewImage} />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Text style={styles.photoPlaceholderText}>SIN FOTO</Text>
+              </View>
+            )}
+          </Pressable>
+          <Text style={styles.photoHelperText}>
+            {staffPhotoDraft
+              ? 'Vista previa lista. Se va a guardar en forma persistente cuando confirmes el alta o la actualización.'
+              : isEditingStaff
+                ? 'Si querés reemplazar la foto actual, elegí otra imagen. Si no tocás nada, se conserva la existente.'
+                : 'Podés sumar una foto ahora, verla antes de guardar y quitarla si cambiás de idea.'}
+          </Text>
+          <View style={styles.photoActionsRow}>
+            <AppButton title={staffPhotoPreviewUri ? 'CAMBIAR FOTO' : 'SELECCIONAR FOTO'} style={styles.photoActionButton} onPress={handlePickStaffPhoto} disabled={saving} />
+            {staffPhotoDraft ? (
+              <AppButton title="QUITAR" variant="secondary" style={styles.photoActionButton} onPress={handleClearStaffPhotoDraft} disabled={saving} />
+            ) : null}
+          </View>
+        </View>
         <InputRow label="Nombre completo" value={staffForm.fullName} onChangeText={(value) => setStaffForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
         <InputRow label="Ciudad" value={staffForm.city} onPress={() => openCityPicker('staff')} placeholder="Seleccionar ciudad" />
         <InputRow label="Categoría" value={staffForm.category} onPress={openCategoryPicker} placeholder="Buscar o crear categoría" />
@@ -1090,6 +1259,32 @@ const createStyles = (palette) => StyleSheet.create({
   listMeta: { color: palette.textMuted },
   searchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.sm },
   categoryHelperText: { color: palette.textMuted, marginTop: -SPACING.xs, lineHeight: 18 },
+  photoCard: {
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceMuted,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  photoCardTitle: { color: palette.text, fontWeight: '800', fontSize: 15 },
+  photoPreviewShell: { alignSelf: 'center' },
+  photoPreviewImage: { width: 180, height: 180, borderRadius: RADII.md, backgroundColor: '#E2E8F0' },
+  photoPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: RADII.md,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: palette.border,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoPlaceholderText: { color: palette.textMuted, fontWeight: '800' },
+  photoHelperText: { color: palette.textMuted, lineHeight: 19 },
+  photoActionsRow: { flexDirection: 'row', gap: SPACING.sm },
+  photoActionButton: { flex: 1 },
   categoryOption: {
     borderRadius: RADII.md,
     borderWidth: 1,

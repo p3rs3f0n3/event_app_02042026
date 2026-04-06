@@ -11,10 +11,12 @@ const {
   isDocumentEquivalent,
   isNitEquivalent,
   normalizeComparableValue,
+  normalizeProfilePhotoField,
   normalizePhoneValue,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
   sanitizeStaffAdminRecord,
+  serializeProfilePhotoField,
   sanitizeUserRecord,
 } = require('../utils/adminRecords');
 const {
@@ -107,6 +109,11 @@ const mapEventRow = (row, clients = []) => ({
 });
 
 const executeQuery = (client, text, params = []) => (client ? client.query(text, params) : query(text, params));
+
+const mapProfilePhotoRow = (row) => ({
+  ...row,
+  ...normalizeProfilePhotoField(row.photo),
+});
 
 class PostgresEventAppRepository {
   async #syncStaffCategories(client = null) {
@@ -432,7 +439,7 @@ class PostgresEventAppRepository {
       [normalizeString(city) || null],
     );
 
-    return result.rows;
+    return result.rows.map(mapProfilePhotoRow);
   }
 
   async getCoordinatorEvents({ userId }) {
@@ -491,7 +498,7 @@ class PostgresEventAppRepository {
       [normalizeString(city) || null, normalizeString(category) || null],
     );
 
-    return result.rows;
+    return result.rows.map(mapProfilePhotoRow);
   }
 
   async getStaffCategories({ search } = {}) {
@@ -998,7 +1005,7 @@ class PostgresEventAppRepository {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
       );
 
       const createdRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
@@ -1087,11 +1094,12 @@ class PostgresEventAppRepository {
               clothing_size = $6,
               shoe_size = $7,
               measurements = $8,
+              photo = $9,
               updated_at = NOW()
           WHERE id = $1
           RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null, payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
       );
 
       const updatedRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });

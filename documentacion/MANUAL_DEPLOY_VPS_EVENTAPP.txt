@@ -1,0 +1,103 @@
+MANUAL DEPLOY Y ACTUALIZACION VPS - EVENTAPP
+
+OBJETIVO
+- Dejar un procedimiento completo para conectarse a la VPS, actualizar el backend de EventApp y validar que la API publica quede funcionando.
+- Este documento esta pensado para una persona o para un agente que se haya quedado sin contexto.
+
+ADVERTENCIA
+- ESTE ARCHIVO CONTIENE CREDENCIALES REALES. No compartir fuera del equipo.
+- Si se rotan contraseñas o cambia la IP, actualizar este documento inmediatamente.
+
+DATOS DE LA VPS
+- Proveedor: Contabo
+- IP publica: 66.94.101.47
+- Host HTTPS API: https://66.94.101.47.sslip.io/api
+- Healthcheck publico: https://66.94.101.47.sslip.io/api/health
+- Usuario SSH: root
+- Password SSH: hLhlT2x2zv6qUl3mU9
+- Ruta del proyecto en la VPS: /root/projects/eventapp
+
+STACK DESPLEGADO
+- Contenedor backend: eventapp-backend
+- Contenedor postgres: eventapp-postgres
+- Compose file: /root/projects/eventapp/deploy/docker-compose.vps.yml
+- Env real: /root/projects/eventapp/deploy/eventapp.vps.env
+
+METODOS DE CONEXION
+1) SSH directo desde terminal
+   ssh root@66.94.101.47
+   Password: hLhlT2x2zv6qUl3mU9
+
+2) Conexion desde PowerShell con Paramiko (util si el cliente SSH local falla o pide interaccion)
+   python -c "import paramiko; c=paramiko.SSHClient(); c.set_missing_host_key_policy(paramiko.AutoAddPolicy()); c.connect('66.94.101.47', username='root', password='hLhlT2x2zv6qUl3mU9', timeout=20); stdin, stdout, stderr = c.exec_command('pwd'); print(stdout.read().decode()); c.close()"
+
+3) Verificacion rapida de acceso
+   Una vez adentro:
+   cd /root/projects/eventapp
+   docker compose -f deploy/docker-compose.vps.yml --env-file deploy/eventapp.vps.env ps
+
+ARCHIVOS BACKEND QUE NORMALMENTE CAMBIAN
+- backend/server.js
+- backend/utils/validation.js
+- backend/utils/adminRecords.js
+- backend/repositories/eventAppRepository.js
+- backend/repositories/postgresEventAppRepository.js
+
+DESPLIEGUE / ACTUALIZACION DEL BACKEND
+1) Conectarse a la VPS y ubicarse en el proyecto:
+   cd /root/projects/eventapp
+
+2) Subir los archivos modificados del backend.
+   Opciones:
+   - git pull, si el repo remoto esta al dia
+   - SFTP/SCP, si se esta sincronizando desde local
+   - script Python + Paramiko, si hace falta automatizar la carga
+
+3) Reconstruir solo el backend:
+   docker compose -f deploy/docker-compose.vps.yml --env-file deploy/eventapp.vps.env up -d --build eventapp-backend
+
+4) Confirmar que el stack quede arriba:
+   docker compose -f deploy/docker-compose.vps.yml --env-file deploy/eventapp.vps.env ps
+
+5) Validar salud desde la VPS o desde local:
+   curl https://66.94.101.47.sslip.io/api/health
+   Respuesta esperada:
+   {"status":"ok","repositoryDriver":"postgres"}
+
+6) Si hace falta revisar logs del backend:
+   docker logs eventapp-backend --tail 200
+
+7) Si el problema parece de datos o migracion:
+   docker exec -it eventapp-backend npm run db:init
+   OJO: usar esto solo cuando realmente haga falta reaplicar schema/seed.
+
+FLUJO SEGURO USADO EN ESTA ETAPA
+- Sincronizar los archivos cambiados a /root/projects/eventapp
+- Rebuild del contenedor eventapp-backend
+- Validar https://66.94.101.47.sslip.io/api/health
+- Recien despues avisar que la VPS esta lista para QA
+
+COMANDOS DE DIAGNOSTICO UTILES
+- Estado del compose:
+  docker compose -f deploy/docker-compose.vps.yml --env-file deploy/eventapp.vps.env ps
+
+- Logs backend:
+  docker logs eventapp-backend --tail 200
+
+- Logs postgres:
+  docker logs eventapp-postgres --tail 200
+
+- Verificar carpeta remota:
+  ls /root/projects/eventapp
+
+CHECKLIST FINAL VPS
+- [ ] Se pudo entrar por SSH
+- [ ] Los archivos backend nuevos quedaron en /root/projects/eventapp
+- [ ] eventapp-backend fue reconstruido
+- [ ] eventapp-postgres sigue healthy
+- [ ] /api/health responde ok por HTTPS
+- [ ] El equipo ya puede probar contra la VPS
+
+NOTA DE RECUPERACION DE CONTEXTO
+- Si un agente pierde contexto, este documento + `documentacion/Datos VPS.txt` alcanzan para volver a conectarse y redeployar.
+- La verdad operativa actual es: backend aislado en Docker, proyecto remoto en `/root/projects/eventapp`, API publica en `https://66.94.101.47.sslip.io/api`.

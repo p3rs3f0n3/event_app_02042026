@@ -4,6 +4,12 @@
     "slug": "eventapp",
     "owner": "mojarras",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9b5ef2b5-01a3-44ef-b8d3-db9adf3cf8d2"
+    },
     "scheme": "eventapp",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

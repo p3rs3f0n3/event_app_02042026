@@ -97,3 +97,10 @@ Clientes
 - contraseña: 123
 - usuario: cliente.nutresa
 - contraseña: 123
+
+app expo go
+PS D:\Desarrollos\claude_code\event_app\mobile> npx expo start --clear
+
+back
+PS D:\Desarrollos\claude_code\event_app\backend> npm run db:init
+PS D:\Desarrollos\claude_code\event_app\backend> npm run dev

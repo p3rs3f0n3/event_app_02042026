@@ -147,6 +147,47 @@ const validateCoordinatorPhotoPayload = (payload) => {
   return null;
 };
 
+const validateOptionalAdminPhotoPayload = (payload) => {
+  if (payload == null) {
+    return null;
+  }
+
+  if (typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'La foto debe enviarse como objeto válido';
+  }
+
+  if (!isNonEmptyString(payload.uri)) {
+    return 'La foto debe incluir una uri válida';
+  }
+
+  const normalizedUri = normalizeString(payload.uri);
+  const isAllowedUri = normalizedUri.startsWith('http://')
+    || normalizedUri.startsWith('https://')
+    || normalizedUri.startsWith('data:image/');
+
+  if (!isAllowedUri) {
+    return 'La foto debe ser una URL válida o una imagen en base64';
+  }
+
+  const normalizedMimeType = normalizeString(payload.mimeType).toLowerCase();
+  if (normalizedMimeType && !ALLOWED_COORDINATOR_PHOTO_MIME_TYPES.has(normalizedMimeType)) {
+    return 'Formato de foto no soportado. Usá JPG, PNG, WEBP o HEIC';
+  }
+
+  if (payload.fileSize != null) {
+    const fileSize = Number(payload.fileSize);
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return 'El tamaño de la foto es inválido';
+    }
+
+    if (fileSize > MAX_COORDINATOR_PHOTO_SIZE_BYTES) {
+      return 'La foto supera el límite de 10 MB';
+    }
+  }
+
+  return null;
+};
+
 const validateCoordinatorReportPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de informe inválido';
@@ -219,6 +260,25 @@ const validateExecutiveReportPayload = (payload) => {
   return null;
 };
 
+const validateAdminPhoneField = ({ value, label, required = false }) => {
+  const normalizedValue = normalizeString(value);
+  const normalizedDigits = normalizePhoneDigits(normalizedValue);
+
+  if (!normalizedValue) {
+    return required ? `El ${label} es obligatorio` : null;
+  }
+
+  if (normalizedDigits !== normalizedValue) {
+    return `El ${label} solo puede contener números`;
+  }
+
+  if (normalizedDigits.length > 10) {
+    return `El ${label} no puede superar 10 dígitos`;
+  }
+
+  return null;
+};
+
 const validateAdminClientBasePayload = (payload, { requirePassword }) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de cliente inválido';
@@ -230,10 +290,16 @@ const validateAdminClientBasePayload = (payload, { requirePassword }) => {
   if (!isNonEmptyString(payload.nit)) return 'El NIT es obligatorio';
   if (!isNonEmptyString(payload.contactFullName)) return 'El nombre del contacto es obligatorio';
   if (!isNonEmptyString(payload.contactRole)) return 'El cargo del contacto es obligatorio';
-  if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
+  const phoneError = validateAdminPhoneField({ value: payload.phone, label: 'teléfono', required: true });
+  if (phoneError) return phoneError;
+
+  const whatsappPhoneError = validateAdminPhoneField({ value: payload.whatsappPhone, label: 'WhatsApp', required: requirePassword });
+  if (whatsappPhoneError) return whatsappPhoneError;
+
   const email = normalizeEmail(payload.email);
+  if (requirePassword && !email) return 'El email es obligatorio';
   if (email && !isValidEmail(email)) return 'El email no es válido';
 
   return null;
@@ -252,11 +318,17 @@ const validateAdminCoordinatorPayload = (payload) => {
   if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
   if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
   if (!isNonEmptyString(payload.address)) return 'La dirección es obligatoria';
-  if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
+  const phoneError = validateAdminPhoneField({ value: payload.phone, label: 'teléfono', required: true });
+  if (phoneError) return phoneError;
+
+  const whatsappPhoneError = validateAdminPhoneField({ value: payload.whatsappPhone, label: 'WhatsApp', required: true });
+  if (whatsappPhoneError) return whatsappPhoneError;
+
   const email = normalizeEmail(payload.email);
+  if (!email) return 'El email es obligatorio';
   if (email && !isValidEmail(email)) return 'El email no es válido';
 
   return null;
@@ -270,9 +342,14 @@ const validateAdminCoordinatorUpdatePayload = (payload) => {
   if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
   if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
   if (!isNonEmptyString(payload.address)) return 'La dirección es obligatoria';
-  if (!isNonEmptyString(payload.phone)) return 'El teléfono es obligatorio';
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
+
+  const phoneError = validateAdminPhoneField({ value: payload.phone, label: 'teléfono', required: true });
+  if (phoneError) return phoneError;
+
+  const whatsappPhoneError = validateAdminPhoneField({ value: payload.whatsappPhone, label: 'WhatsApp' });
+  if (whatsappPhoneError) return whatsappPhoneError;
 
   const email = normalizeEmail(payload.email);
   if (email && !isValidEmail(email)) return 'El email no es válido';
@@ -291,6 +368,9 @@ const validateAdminStaffPayload = (payload) => {
   if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
+  const photoError = validateOptionalAdminPhotoPayload(payload.photo);
+  if (photoError) return photoError;
+
   return null;
 };
 
@@ -305,6 +385,9 @@ const validateAdminStaffUpdatePayload = (payload) => {
   if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
+  const photoError = validateOptionalAdminPhotoPayload(payload.photo);
+  if (photoError) return photoError;
+
   return null;
 };
 
@@ -313,12 +396,14 @@ module.exports = {
   MAX_COORDINATOR_PHOTO_SIZE_BYTES,
   badRequest: (res, message) => res.status(400).json({ message }),
   normalizeString,
+  normalizePhoneDigits,
   validateAdminClientPayload,
   validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
   validateAdminCoordinatorUpdatePayload,
   validateAdminStaffPayload,
   validateAdminStaffUpdatePayload,
+  validateOptionalAdminPhotoPayload,
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
   validateChangePasswordPayload,

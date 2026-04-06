@@ -1,5 +1,97 @@
 const DEFAULT_PROFILE_PHOTO = 'https://i.pravatar.cc/150?u=eventapp';
 
+const normalizePhotoMetadataValue = (value) => {
+  const normalizedValue = String(value || '').trim();
+  return normalizedValue || null;
+};
+
+const normalizePhotoFileSize = (value) => {
+  const normalizedValue = Number(value);
+  return Number.isFinite(normalizedValue) && normalizedValue > 0 ? normalizedValue : null;
+};
+
+const normalizeStoredProfilePhoto = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const uri = normalizePhotoMetadataValue(value.uri || value.url || value.photoUrl || value.src);
+    if (!uri) {
+      return null;
+    }
+
+    return {
+      uri,
+      mimeType: normalizePhotoMetadataValue(value.mimeType || value.mime_type),
+      fileName: normalizePhotoMetadataValue(value.fileName || value.file_name),
+      fileSize: normalizePhotoFileSize(value.fileSize || value.file_size),
+      source: normalizePhotoMetadataValue(value.source) || 'admin',
+    };
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return null;
+  }
+
+  if (trimmedValue.startsWith('{')) {
+    try {
+      return normalizeStoredProfilePhoto(JSON.parse(trimmedValue));
+    } catch (error) {
+      return { uri: trimmedValue, mimeType: null, fileName: null, fileSize: null, source: 'legacy' };
+    }
+  }
+
+  return {
+    uri: trimmedValue,
+    mimeType: null,
+    fileName: null,
+    fileSize: null,
+    source: 'legacy',
+  };
+};
+
+const normalizeProfilePhotoField = (value) => {
+  const normalizedPhoto = normalizeStoredProfilePhoto(value);
+  const photo = normalizedPhoto?.uri || DEFAULT_PROFILE_PHOTO;
+  const hasMetadata = Boolean(
+    normalizedPhoto?.mimeType
+      || normalizedPhoto?.fileName
+      || normalizedPhoto?.fileSize
+      || (normalizedPhoto?.source && normalizedPhoto.source !== 'legacy'),
+  );
+
+  return {
+    photo,
+    photoMetadata: hasMetadata
+      ? {
+        mimeType: normalizedPhoto.mimeType,
+        fileName: normalizedPhoto.fileName,
+        fileSize: normalizedPhoto.fileSize,
+        source: normalizedPhoto.source,
+      }
+      : null,
+  };
+};
+
+const serializeProfilePhotoField = (value) => {
+  const normalizedPhoto = normalizeStoredProfilePhoto(value);
+  if (!normalizedPhoto?.uri) {
+    return DEFAULT_PROFILE_PHOTO;
+  }
+
+  if (!normalizedPhoto.mimeType && !normalizedPhoto.fileName && !normalizedPhoto.fileSize && (!normalizedPhoto.source || normalizedPhoto.source === 'legacy')) {
+    return normalizedPhoto.uri;
+  }
+
+  return JSON.stringify(normalizedPhoto);
+};
+
 const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '');
 const normalizeDocumentValue = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -81,6 +173,7 @@ const sanitizeUserRecord = (user) => ({
 });
 
 const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
+  ...normalizeProfilePhotoField(coordinator.photoMetadata ? { uri: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
   id: Number(coordinator.id),
   userId: Number(coordinator.userId || coordinator.user_id || user?.id || 0) || null,
   username: user?.username || null,
@@ -92,16 +185,15 @@ const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
   email: user?.email || null,
   city: coordinator.city,
   rating: Number(coordinator.rating || 0),
-  photo: coordinator.photo || DEFAULT_PROFILE_PHOTO,
 });
 
 const sanitizeStaffAdminRecord = (staffMember) => ({
+  ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
   id: Number(staffMember.id),
   fullName: staffMember.name || staffMember.fullName || staffMember.full_name,
   cedula: staffMember.cedula,
   city: staffMember.city,
   category: staffMember.category,
-  photo: staffMember.photo || DEFAULT_PROFILE_PHOTO,
   clothingSize: staffMember.clothingSize || staffMember.clothing_size || null,
   shoeSize: staffMember.shoeSize || staffMember.shoe_size || null,
   measurements: staffMember.measurements || null,
@@ -119,4 +211,7 @@ module.exports = {
   sanitizeCoordinatorAdminRecord,
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
+  normalizeProfilePhotoField,
+  normalizeStoredProfilePhoto,
+  serializeProfilePhotoField,
 };
