@@ -307,6 +307,28 @@ const getEntityStatusLabel = (record) => (record?.isActive === false ? 'INACTIVO
 const getEntityStatusTone = (record) => (record?.isActive === false ? 'warning' : 'success');
 const countInactiveRecords = (records = []) => records.filter((record) => record?.isActive === false).length;
 
+const getCreateFeedbackFromEmailDelivery = (entityLabel, createdRecord) => {
+  const emailDelivery = createdRecord?.emailDelivery;
+  if (!emailDelivery) {
+    return {
+      tone: 'success',
+      message: `${entityLabel} creado correctamente.`,
+    };
+  }
+
+  if (emailDelivery.status === 'sent') {
+    return {
+      tone: 'success',
+      message: `${entityLabel} creado correctamente. ${emailDelivery.message}`,
+    };
+  }
+
+  return {
+    tone: 'warning',
+    message: `${entityLabel} creado correctamente. ${emailDelivery.message}`,
+  };
+};
+
 const getAdminAuditSummary = ({ entityType, values, fallbackTitle }) => {
   if (!values) {
     return 'sin registro';
@@ -548,7 +570,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         });
         setLists((current) => ({ clients: [created, ...current.clients], coordinators: current.coordinators, staff: current.staff }));
         resetClientForm();
-        applyFeedback('success', 'Cliente creado correctamente.');
+        const creationFeedback = getCreateFeedbackFromEmailDelivery('Cliente', created);
+        applyFeedback(creationFeedback.tone, creationFeedback.message);
       }
     } catch (error) {
       applyFeedback('error', typeof error === 'string' ? error : 'No se pudo guardar el cliente.');
@@ -736,7 +759,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         });
         setExecutives((current) => [created, ...current]);
         resetExecutiveForm();
-        applyFeedback('success', 'Ejecutivo creado correctamente.');
+        const creationFeedback = getCreateFeedbackFromEmailDelivery('Ejecutivo', created);
+        applyFeedback(creationFeedback.tone, creationFeedback.message);
       }
     } catch (error) {
       applyFeedback('error', typeof error === 'string' ? error : 'No se pudo guardar el ejecutivo.');
@@ -954,7 +978,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         });
         setLists((current) => ({ clients: current.clients, coordinators: [created, ...current.coordinators], staff: current.staff }));
         resetCoordinatorForm();
-        applyFeedback('success', 'Coordinador creado correctamente.');
+        const creationFeedback = getCreateFeedbackFromEmailDelivery('Coordinador', created);
+        applyFeedback(creationFeedback.tone, creationFeedback.message);
       }
     } catch (error) {
       applyFeedback('error', typeof error === 'string' ? error : 'No se pudo registrar el coordinador.');
@@ -1766,7 +1791,14 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       </SurfaceCard>
 
       {feedback.message ? (
-        <SurfaceCard style={[styles.feedbackCard, feedback.tone === 'error' ? styles.feedbackError : styles.feedbackSuccess]}>
+        <SurfaceCard style={[
+          styles.feedbackCard,
+          feedback.tone === 'error'
+            ? styles.feedbackError
+            : feedback.tone === 'warning'
+              ? styles.feedbackWarning
+              : styles.feedbackSuccess,
+        ]}>
           <Text style={styles.feedbackText}>{feedback.message}</Text>
         </SurfaceCard>
       ) : null}
@@ -1853,10 +1885,11 @@ const createStyles = (palette) => StyleSheet.create({
   loaderWrap: { justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   loaderText: { color: '#FFFFFF', fontWeight: '700' },
   heroCard: { backgroundColor: palette.surfaceMuted },
-  heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, alignItems: 'center' },
   heroText: { color: palette.textMuted, lineHeight: 20 },
   feedbackCard: { borderWidth: 1 },
   feedbackSuccess: { borderColor: palette.successText, backgroundColor: palette.successBg },
+  feedbackWarning: { borderColor: '#D97706', backgroundColor: '#FFFBEB' },
   feedbackError: { borderColor: palette.errorText, backgroundColor: palette.errorBg },
   feedbackText: { color: '#223548', fontWeight: '700' },
   tabRow: { flexDirection: 'row', gap: SPACING.sm },

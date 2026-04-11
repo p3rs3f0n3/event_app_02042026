@@ -3,6 +3,7 @@ const cors = require('cors');
 const { config } = require('./config/env');
 const { getRoleConfig, getRoleConfigList } = require('./config/roles');
 const { createRepository } = require('./repositories');
+const { createWelcomeEmailService } = require('./utils/mailer');
 const {
   collectScheduledAssignments,
   normalizePointOriginalRef,
@@ -60,6 +61,21 @@ const normalizeAdminPhotoPayload = (photo) => {
     fileName: normalizeString(photo.fileName) || null,
     source: normalizeString(photo.source) || 'admin',
   };
+};
+
+const appendEmailDeliveryMetadata = (record, emailDelivery) => ({
+  ...record,
+  emailDelivery,
+});
+
+const sendProfileWelcomeEmail = async (req, { email, recipientName, roleLabel, username, password }) => {
+  return req.app.locals.welcomeEmailService.sendWelcomeCredentialsEmail({
+    to: email,
+    recipientName,
+    roleLabel,
+    username,
+    password,
+  });
 };
 
 app.use(cors());
@@ -222,7 +238,15 @@ app.post('/api/admin/executives', asyncHandler(async (req, res) => {
     return badRequest(res, result.message);
   }
 
-  return res.status(201).json(result);
+  const emailDelivery = await sendProfileWelcomeEmail(req, {
+    email: normalizeString(req.body.email).toLowerCase(),
+    recipientName: normalizeString(req.body.fullName),
+    roleLabel: 'ejecutivo',
+    username: normalizeString(req.body.username),
+    password: normalizeString(req.body.password),
+  });
+
+  return res.status(201).json(appendEmailDeliveryMetadata(result, emailDelivery));
 }));
 
 app.put('/api/admin/executives/:id', asyncHandler(async (req, res) => {
@@ -308,7 +332,15 @@ app.post('/api/admin/clients', asyncHandler(async (req, res) => {
     return res.status(409).json({ message: result.message });
   }
 
-  return res.status(201).json(result);
+  const emailDelivery = await sendProfileWelcomeEmail(req, {
+    email: normalizeString(req.body.email).toLowerCase(),
+    recipientName: normalizeString(req.body.contactFullName),
+    roleLabel: 'cliente',
+    username: normalizeString(req.body.username),
+    password: normalizeString(req.body.password),
+  });
+
+  return res.status(201).json(appendEmailDeliveryMetadata(result, emailDelivery));
 }));
 
 app.put('/api/admin/clients/:id', asyncHandler(async (req, res) => {
@@ -452,7 +484,15 @@ app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
     return badRequest(res, result.message);
   }
 
-  return res.status(201).json(result);
+  const emailDelivery = await sendProfileWelcomeEmail(req, {
+    email: normalizeString(req.body.email).toLowerCase(),
+    recipientName: normalizeString(req.body.fullName),
+    roleLabel: 'coordinador',
+    username: normalizeString(req.body.username),
+    password: normalizeString(req.body.password),
+  });
+
+  return res.status(201).json(appendEmailDeliveryMetadata(result, emailDelivery));
 }));
 
 app.put('/api/admin/coordinators/:id', asyncHandler(async (req, res) => {
@@ -898,7 +938,9 @@ app.use((error, req, res, next) => {
 
 const bootstrap = async () => {
   const repository = createRepository();
+  const welcomeEmailService = createWelcomeEmailService({ smtpConfig: config.smtp });
   app.locals.repository = repository;
+  app.locals.welcomeEmailService = welcomeEmailService;
 
   if (typeof repository.ping === 'function') {
     await repository.ping();
