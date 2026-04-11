@@ -5,7 +5,7 @@
 -- coord / 123
 -- cliente, cliente.alpina, cliente.colcafe, cliente.nutresa / 123
 
-TRUNCATE TABLE audit_logs, event_cities, events, clients RESTART IDENTITY CASCADE;
+TRUNCATE TABLE audit_logs, event_cities, events, clients, executives RESTART IDENTITY CASCADE;
 
 INSERT INTO roles (code, description)
 VALUES
@@ -90,6 +90,21 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 SELECT setval('cities_id_seq', (SELECT MAX(id) FROM cities));
+
+INSERT INTO executives (user_id, full_name, cedula, address, phone, whatsapp_phone, email, city_id, is_active)
+VALUES
+  ((SELECT id FROM users WHERE username = 'ejecutivo.ana'), 'Ana Torres', '1010101010', 'Cra 11 No 93-21', '3005550202', '3005550202', 'ana.torres@eventapp.local', (SELECT id FROM cities WHERE name = 'Bogotá'), TRUE),
+  ((SELECT id FROM users WHERE username = 'ejecutivo.bruno'), 'Bruno Diaz', '2020202020', 'Calle 7 No 45-18', '3005550203', '3005550203', 'bruno.diaz@eventapp.local', (SELECT id FROM cities WHERE name = 'Medellín'), TRUE)
+ON CONFLICT (user_id) DO UPDATE SET
+  full_name = EXCLUDED.full_name,
+  cedula = EXCLUDED.cedula,
+  address = EXCLUDED.address,
+  phone = EXCLUDED.phone,
+  whatsapp_phone = EXCLUDED.whatsapp_phone,
+  email = EXCLUDED.email,
+  city_id = EXCLUDED.city_id,
+  is_active = TRUE,
+  updated_at = NOW();
 
 INSERT INTO coordinators (user_id, full_name, cedula, address, phone, rating, photo, city_id)
 VALUES

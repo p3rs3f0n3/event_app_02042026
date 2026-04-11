@@ -359,6 +359,35 @@ const validateAdminCoordinatorUpdatePayload = (payload) => {
   return null;
 };
 
+const validateAdminExecutiveBasePayload = (payload, { requirePassword }) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de ejecutivo inválido';
+  }
+
+  if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
+  if (!isNonEmptyString(payload.username)) return 'El usuario es obligatorio';
+  if (requirePassword && !isNonEmptyString(payload.password)) return 'La contraseña es obligatoria';
+  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
+  if (!isNonEmptyString(payload.address)) return 'La dirección es obligatoria';
+  if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
+
+  const phoneError = validateAdminPhoneField({ value: payload.phone, label: 'teléfono', required: true });
+  if (phoneError) return phoneError;
+
+  const whatsappPhoneError = validateAdminPhoneField({ value: payload.whatsappPhone, label: 'WhatsApp', required: true });
+  if (whatsappPhoneError) return whatsappPhoneError;
+
+  const email = normalizeEmail(payload.email);
+  if (!email) return 'El email es obligatorio';
+  if (!isValidEmail(email)) return 'El email no es válido';
+
+  return null;
+};
+
+const validateAdminExecutivePayload = (payload) => validateAdminExecutiveBasePayload(payload, { requirePassword: true });
+const validateAdminExecutiveUpdatePayload = (payload) => validateAdminExecutiveBasePayload(payload, { requirePassword: false });
+
 const validateStaffMeasurementField = ({ value, label, required = false }) => {
   const normalizedValue = normalizeString(value);
 
@@ -461,6 +490,8 @@ module.exports = {
   validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
   validateAdminCoordinatorUpdatePayload,
+  validateAdminExecutivePayload,
+  validateAdminExecutiveUpdatePayload,
   validateAdminEntityInactivationPayload,
   validateAdminStaffPayload,
   validateAdminStaffUpdatePayload,

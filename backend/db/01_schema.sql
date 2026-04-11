@@ -30,6 +30,41 @@ CREATE TABLE IF NOT EXISTS cities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS executives (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL UNIQUE REFERENCES users(id),
+  full_name VARCHAR(160) NOT NULL,
+  cedula VARCHAR(30) NOT NULL UNIQUE,
+  address VARCHAR(255),
+  phone VARCHAR(40),
+  whatsapp_phone VARCHAR(40),
+  email VARCHAR(160),
+  city_id BIGINT REFERENCES cities(id),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS address VARCHAR(255);
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS phone VARCHAR(40);
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS whatsapp_phone VARCHAR(40);
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS email VARCHAR(160);
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS city_id BIGINT REFERENCES cities(id);
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE executives ADD COLUMN IF NOT EXISTS cedula VARCHAR(30);
+
+UPDATE executives
+SET cedula = CONCAT('AUTOE', LPAD(COALESCE(NULLIF(user_id, 0), id)::text, 10, '0'))
+WHERE cedula IS NULL OR TRIM(cedula) = '';
+
+INSERT INTO executives (user_id, full_name, cedula, address, phone, whatsapp_phone, email, city_id, is_active)
+SELECT u.id, u.full_name, CONCAT('AUTOE', LPAD(u.id::text, 10, '0')), NULL, u.phone, u.whatsapp_phone, u.email, NULL, u.is_active
+FROM users u
+INNER JOIN roles r ON r.id = u.role_id
+LEFT JOIN executives e ON e.user_id = u.id
+WHERE r.code = 'EJECUTIVO'
+  AND e.user_id IS NULL;
+
 CREATE TABLE IF NOT EXISTS coordinators (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT REFERENCES users(id),
@@ -157,6 +192,10 @@ CREATE TABLE IF NOT EXISTS event_cities (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username));
+CREATE INDEX IF NOT EXISTS idx_executives_user_id ON executives (user_id);
+CREATE INDEX IF NOT EXISTS idx_executives_full_name_lower ON executives (LOWER(full_name));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_executives_cedula_unique ON executives (LOWER(cedula));
+CREATE INDEX IF NOT EXISTS idx_executives_city_id ON executives (city_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_nit_unique ON clients (LOWER(nit)) WHERE nit IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_clients_razon_social_lower ON clients (LOWER(razon_social));
 CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients (user_id);

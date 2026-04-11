@@ -8,6 +8,7 @@ const { matchesClientIdentityConflict, normalizeClientMutationPayload } = requir
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const {
   DEFAULT_PROFILE_PHOTO,
+  buildFallbackExecutiveCedula,
   isDocumentEquivalent,
   isNitEquivalent,
   normalizeComparableValue,
@@ -16,6 +17,7 @@ const {
   resolveStaffSizeFields,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
+  sanitizeExecutiveAdminRecord,
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
 } = require('../utils/adminRecords');
@@ -134,6 +136,20 @@ const normalizeCoordinator = (coordinator) => ({
   ...normalizeProfilePhotoField(coordinator.photoMetadata ? { uri: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
 });
 
+const normalizeExecutive = (executive) => ({
+  ...executive,
+  id: Number(executive.id),
+  userId: Number(executive.userId || executive.user_id || 0) || null,
+  cedula: executive.cedula || null,
+  fullName: executive.fullName || executive.full_name || null,
+  address: executive.address || null,
+  phone: executive.phone || null,
+  whatsappPhone: executive.whatsappPhone || executive.whatsapp_phone || null,
+  email: executive.email || null,
+  city: executive.city || executive.city_name || null,
+  isActive: executive.isActive ?? executive.is_active ?? true,
+});
+
 const normalizeStaffMember = (staffMember) => ({
   ...staffMember,
   ...resolveStaffSizeFields(staffMember),
@@ -146,6 +162,7 @@ const normalizeDb = (db, initialDb) => ({
   ...clone(initialDb),
   ...db,
   users: Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users),
+  executives: buildExecutivesDb({ db, initialDb }),
   clients: buildClientsDb({ db, initialDb }),
   coordinators: Array.isArray(db?.coordinators) && db.coordinators.length > 0 ? db.coordinators.map(normalizeCoordinator) : clone(initialDb.coordinators).map(normalizeCoordinator),
   staff: Array.isArray(db?.staff) && db.staff.length > 0 ? db.staff.map(normalizeStaffMember) : clone(initialDb.staff).map(normalizeStaffMember),
@@ -154,6 +171,55 @@ const normalizeDb = (db, initialDb) => ({
   auditLogs: Array.isArray(db?.auditLogs) ? db.auditLogs.map((auditLog) => sanitizeAuditLogRecord({ auditLog })) : [],
   events: Array.isArray(db?.events) ? db.events : [],
 });
+
+function buildExecutivesDb({ db, initialDb }) {
+  const users = Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users);
+  const sourceExecutives = Array.isArray(db?.executives) && db.executives.length > 0
+    ? db.executives
+    : (Array.isArray(initialDb?.executives) ? clone(initialDb.executives) : []);
+  const executivesByUserId = new Map(
+    sourceExecutives
+      .map((executive) => ({
+        ...normalizeExecutive(executive),
+      }))
+      .filter((executive) => Number.isInteger(executive.userId) && executive.userId > 0)
+      .map((executive) => [executive.userId, executive]),
+  );
+  let nextId = sourceExecutives.reduce((max, executive) => Math.max(max, Number(executive.id) || 0), 0);
+
+  return users
+    .filter((user) => String(user.role || '').toUpperCase() === 'EJECUTIVO')
+    .map((user) => {
+      const existingExecutive = executivesByUserId.get(Number(user.id));
+      if (existingExecutive) {
+        return {
+          ...existingExecutive,
+          cedula: existingExecutive.cedula || buildFallbackExecutiveCedula(existingExecutive.userId || user.id),
+          fullName: existingExecutive.fullName || user.fullName,
+          address: existingExecutive.address || null,
+          phone: existingExecutive.phone || user.phone || null,
+          whatsappPhone: existingExecutive.whatsappPhone || user.whatsappPhone || user.whatsapp_phone || user.phone || null,
+          email: existingExecutive.email || user.email || null,
+          city: existingExecutive.city || null,
+          isActive: (existingExecutive.isActive ?? true) !== false && user.isActive !== false,
+        };
+      }
+
+      nextId += 1;
+      return {
+        id: nextId,
+        userId: Number(user.id),
+        cedula: buildFallbackExecutiveCedula(user.id),
+        fullName: user.fullName,
+        address: null,
+        phone: user.phone || null,
+        whatsappPhone: user.whatsappPhone || user.whatsapp_phone || user.phone || null,
+        email: user.email || null,
+        city: null,
+        isActive: user.isActive !== false,
+      };
+    });
+}
 
 function buildClientsDb({ db, initialDb }) {
   const users = Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users);
@@ -343,6 +409,38 @@ class EventAppRepository {
       client.email,
       client.nit,
     ].some((value) => String(value || '').trim().toLowerCase().includes(normalizedSearch)));
+  }
+
+  getAdminExecutives({ search } = {}) {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    const executives = this.db.executives
+      .map((executive) => sanitizeExecutiveAdminRecord(executive, this.findUserById(executive.userId)))
+      .filter((executive) => executive.userId)
+      .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
+
+    if (!normalizedSearch) {
+      return executives;
+    }
+
+    return executives.filter((executive) => [
+      executive.fullName,
+      executive.username,
+      executive.cedula,
+      executive.email,
+      executive.address,
+      executive.city,
+      executive.phone,
+      executive.whatsappPhone,
+    ].some((value) => String(value || '').trim().toLowerCase().includes(normalizedSearch)));
+  }
+
+  findAdminExecutiveByCedula(cedula) {
+    const normalizedCedula = String(cedula || '').trim();
+    if (!normalizedCedula) {
+      return null;
+    }
+
+    return this.getAdminExecutives().find((executive) => isDocumentEquivalent(executive.cedula, normalizedCedula)) || null;
   }
 
   findAdminClientByNit(nit) {
@@ -551,6 +649,160 @@ class EventAppRepository {
     });
     this.save();
     return createdRecord;
+  }
+
+  createExecutive(payload) {
+    const city = this.findCityByName(payload.city);
+    if (!city) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const normalizedUsername = normalizeComparableValue(payload.username);
+    const normalizedCedula = payload.cedula ? String(payload.cedula).trim() : '';
+    const normalizedEmail = normalizeComparableValue(payload.email);
+    const normalizedPhone = normalizePhoneValue(payload.phone);
+    const normalizedWhatsappPhone = normalizePhoneValue(payload.whatsappPhone);
+    const normalizedFullName = normalizeComparableValue(payload.fullName);
+
+    const duplicateUser = this.db.users.find((user) => {
+      if (normalizeComparableValue(user.username) === normalizedUsername) return true;
+      if (normalizedEmail && normalizeComparableValue(user.email) === normalizedEmail) return true;
+      if (normalizedPhone && normalizePhoneValue(user.phone) === normalizedPhone) return true;
+      if (normalizedWhatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === normalizedWhatsappPhone) return true;
+      return false;
+    });
+    const duplicateExecutive = this.db.executives.find((executive) => (
+      (normalizedCedula && isDocumentEquivalent(executive.cedula, normalizedCedula))
+      ||
+      normalizeComparableValue(executive.fullName || executive.full_name) === normalizedFullName
+      || (normalizedPhone && normalizePhoneValue(executive.phone) === normalizedPhone)
+      || (normalizedWhatsappPhone && normalizePhoneValue(executive.whatsappPhone || executive.whatsapp_phone) === normalizedWhatsappPhone)
+      || (normalizedEmail && normalizeComparableValue(executive.email) === normalizedEmail)
+    ));
+
+    if (duplicateUser || duplicateExecutive) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    }
+
+    const newUser = {
+      id: this.#nextId(this.db.users),
+      username: payload.username,
+      password: payload.password,
+      fullName: payload.fullName,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      role: 'EJECUTIVO',
+      isActive: true,
+    };
+    const newExecutive = {
+      id: this.#nextId(this.db.executives),
+      userId: newUser.id,
+      cedula: payload.cedula,
+      fullName: payload.fullName,
+      address: payload.address,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      city: city.name,
+      isActive: true,
+    };
+
+    this.db.users.push(newUser);
+    this.db.executives.push(newExecutive);
+    const createdRecord = sanitizeExecutiveAdminRecord(newExecutive, newUser);
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'executive',
+      entityId: newExecutive.id,
+      action: 'create',
+      previousValues: null,
+      newValues: createdRecord,
+    });
+    this.save();
+
+    return createdRecord;
+  }
+
+  updateExecutive(executiveId, payload) {
+    const normalizedExecutiveId = Number(executiveId);
+    const executiveIndex = this.db.executives.findIndex((executive) => Number(executive.id) === normalizedExecutiveId);
+    if (executiveIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const city = this.findCityByName(payload.city);
+    if (!city) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const currentExecutive = this.db.executives[executiveIndex];
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(currentExecutive.userId) && String(user.role || '').toUpperCase() === 'EJECUTIVO');
+    if (userIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const normalizedUsername = normalizeComparableValue(payload.username);
+    const normalizedCedula = payload.cedula ? String(payload.cedula).trim() : '';
+    const normalizedEmail = normalizeComparableValue(payload.email);
+    const normalizedPhone = normalizePhoneValue(payload.phone);
+    const normalizedWhatsappPhone = normalizePhoneValue(payload.whatsappPhone);
+    const normalizedFullName = normalizeComparableValue(payload.fullName);
+
+    const duplicateUser = this.db.users.find((user) => {
+      if (Number(user.id) === Number(currentExecutive.userId)) return false;
+      if (normalizedUsername && normalizeComparableValue(user.username) === normalizedUsername) return true;
+      if (normalizedEmail && normalizeComparableValue(user.email) === normalizedEmail) return true;
+      if (normalizedPhone && normalizePhoneValue(user.phone) === normalizedPhone) return true;
+      if (normalizedWhatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === normalizedWhatsappPhone) return true;
+      return false;
+    });
+    const duplicateExecutive = this.db.executives.find((executive) => {
+      if (Number(executive.id) === normalizedExecutiveId) return false;
+      return (normalizedCedula && isDocumentEquivalent(executive.cedula, normalizedCedula))
+        || normalizeComparableValue(executive.fullName || executive.full_name) === normalizedFullName
+        || (normalizedPhone && normalizePhoneValue(executive.phone) === normalizedPhone)
+        || (normalizedWhatsappPhone && normalizePhoneValue(executive.whatsappPhone || executive.whatsapp_phone) === normalizedWhatsappPhone)
+        || (normalizedEmail && normalizeComparableValue(executive.email) === normalizedEmail);
+    });
+
+    if (duplicateUser || duplicateExecutive) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    }
+
+    const previousRecord = sanitizeExecutiveAdminRecord(currentExecutive, this.db.users[userIndex]);
+    this.db.users[userIndex] = {
+      ...this.db.users[userIndex],
+      username: payload.username,
+      fullName: payload.fullName,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+    };
+    this.db.executives[executiveIndex] = {
+      ...this.db.executives[executiveIndex],
+      cedula: payload.cedula,
+      fullName: payload.fullName,
+      address: payload.address,
+      phone: payload.phone,
+      whatsappPhone: payload.whatsappPhone || payload.phone,
+      email: payload.email || null,
+      city: city.name,
+      isActive: currentExecutive.isActive !== false,
+    };
+
+    const updatedRecord = sanitizeExecutiveAdminRecord(this.db.executives[executiveIndex], this.db.users[userIndex]);
+    this.#recordAuditLog({
+      actorUserId: payload.actorUserId,
+      entityType: 'executive',
+      entityId: normalizedExecutiveId,
+      action: 'update',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
   }
 
   updateClient(clientId, payload) {
@@ -1040,6 +1292,43 @@ class EventAppRepository {
       actorUserId,
       entityType: 'client',
       entityId: normalizedClientId,
+      action: 'inactivate',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
+  }
+
+  inactivateExecutive(executiveId, { actorUserId }) {
+    const normalizedExecutiveId = Number(executiveId);
+    const executiveIndex = this.db.executives.findIndex((executive) => Number(executive.id) === normalizedExecutiveId);
+    if (executiveIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentExecutive = this.db.executives[executiveIndex];
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(currentExecutive.userId) && String(user.role || '').toUpperCase() === 'EJECUTIVO');
+    if (userIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const previousRecord = sanitizeExecutiveAdminRecord(currentExecutive, this.db.users[userIndex]);
+    this.db.users[userIndex] = {
+      ...this.db.users[userIndex],
+      isActive: false,
+    };
+    this.db.executives[executiveIndex] = {
+      ...this.db.executives[executiveIndex],
+      isActive: false,
+    };
+
+    const updatedRecord = sanitizeExecutiveAdminRecord(this.db.executives[executiveIndex], this.db.users[userIndex]);
+    this.#recordAuditLog({
+      actorUserId,
+      entityType: 'executive',
+      entityId: normalizedExecutiveId,
       action: 'inactivate',
       previousValues: previousRecord,
       newValues: updatedRecord,

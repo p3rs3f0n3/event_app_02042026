@@ -6,20 +6,25 @@ import {
   createAdminStaffCategory,
   createAdminClient,
   createAdminCoordinator,
+  createAdminExecutive,
   createAdminStaff,
   findAdminClientByNit,
   findAdminCoordinatorByCedula,
+  findAdminExecutiveByCedula,
   findAdminStaffByCedula,
   inactivateAdminClient,
   inactivateAdminCoordinator,
+  inactivateAdminExecutive,
   inactivateAdminStaff,
   getAdminStaffCategories,
   getAdminClients,
   getAdminCoordinators,
+  getAdminExecutives,
   getAdminStaff,
   getColombiaCities,
   updateAdminClient,
   updateAdminCoordinator,
+  updateAdminExecutive,
   updateAdminStaff,
 } from '../api/api';
 import UserProfileCard from '../components/UserProfileCard';
@@ -59,6 +64,18 @@ const INITIAL_COORDINATOR_FORM = {
   city: '',
 };
 
+const INITIAL_EXECUTIVE_FORM = {
+  cedula: '',
+  fullName: '',
+  address: '',
+  phone: '',
+  whatsappPhone: '',
+  email: '',
+  city: '',
+  username: '',
+  password: '',
+};
+
 const INITIAL_STAFF_FORM = {
   fullName: '',
   cedula: '',
@@ -81,6 +98,7 @@ const STAFF_SEXO_OPTIONS = [
 
 const TABS = [
   { key: 'clients', label: 'Clientes' },
+  { key: 'executives', label: 'Ejecutivos' },
   { key: 'coordinators', label: 'Coordinadores' },
   { key: 'staff', label: 'Staff' },
 ];
@@ -169,6 +187,19 @@ const getCoordinatorCreateValidationMessage = (form) => {
   return null;
 };
 
+const getExecutiveCreateValidationMessage = (form) => {
+  if (!hasTextValue(form.cedula)) return 'La cédula es obligatoria en el alta.';
+  if (!hasTextValue(form.fullName)) return 'El nombre completo es obligatorio en el alta.';
+  if (!hasTextValue(form.address)) return 'La dirección es obligatoria en el alta.';
+  if (!hasTextValue(form.phone)) return 'El teléfono es obligatorio en el alta.';
+  if (!hasTextValue(form.whatsappPhone)) return 'El WhatsApp es obligatorio en el alta.';
+  if (!hasTextValue(form.email)) return 'El email es obligatorio en el alta.';
+  if (!hasTextValue(form.city)) return 'La ciudad es obligatoria en el alta.';
+  if (!hasTextValue(form.username)) return 'El usuario es obligatorio en el alta.';
+  if (!hasTextValue(form.password)) return 'La contraseña es obligatoria en el alta.';
+  return null;
+};
+
 const getStaffValidationMessage = (form) => {
   if (!hasTextValue(form.cedula)) return 'La cédula es obligatoria.';
   if (!hasTextValue(form.fullName)) return 'El nombre completo es obligatorio.';
@@ -212,6 +243,18 @@ const buildCoordinatorFormFromRecord = (coordinator) => ({
   whatsappPhone: normalizePhoneValue(coordinator?.whatsappPhone),
   email: normalizeEmailValue(coordinator?.email),
   city: coordinator?.city || '',
+});
+
+const buildExecutiveFormFromRecord = (executive) => ({
+  cedula: executive?.cedula || '',
+  fullName: executive?.fullName || '',
+  address: executive?.address || '',
+  phone: normalizePhoneValue(executive?.phone),
+  whatsappPhone: normalizePhoneValue(executive?.whatsappPhone),
+  email: normalizeEmailValue(executive?.email),
+  city: executive?.city || '',
+  username: executive?.username || '',
+  password: '',
 });
 
 const buildStaffFormFromRecord = (staffMember) => ({
@@ -277,6 +320,10 @@ const getAdminAuditSummary = ({ entityType, values, fallbackTitle }) => {
     return `${values.fullName || fallbackTitle || '-'} · ${values.city || '-'} · ${values.email || values.phone || 'sin dato'}`;
   }
 
+  if (entityType === 'executive') {
+    return `${values.fullName || fallbackTitle || '-'} · ${values.cedula || '-'} · @${values.username || '-'} · ${values.email || values.phone || 'sin dato'}`;
+  }
+
   return `${values.fullName || fallbackTitle || '-'} · ${values.city || '-'} · ${values.category || 'sin categoría'}`;
 };
 
@@ -287,9 +334,11 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [cities, setCities] = useState([]);
   const [staffCategories, setStaffCategories] = useState([]);
   const [lists, setLists] = useState({ clients: [], coordinators: [], staff: [] });
+  const [executives, setExecutives] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [checkingNit, setCheckingNit] = useState(false);
+  const [checkingExecutiveCedula, setCheckingExecutiveCedula] = useState(false);
   const [checkingCoordinatorCedula, setCheckingCoordinatorCedula] = useState(false);
   const [checkingStaffCedula, setCheckingStaffCedula] = useState(false);
   const [feedback, setFeedback] = useState({ tone: 'muted', message: '' });
@@ -300,6 +349,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [clientForm, setClientForm] = useState(INITIAL_CLIENT_FORM);
   const [clientLookup, setClientLookup] = useState(LOOKUP_INITIAL_STATE);
+  const [executiveForm, setExecutiveForm] = useState(INITIAL_EXECUTIVE_FORM);
+  const [executiveLookup, setExecutiveLookup] = useState(LOOKUP_INITIAL_STATE);
   const [coordinatorForm, setCoordinatorForm] = useState(INITIAL_COORDINATOR_FORM);
   const [coordinatorLookup, setCoordinatorLookup] = useState(LOOKUP_INITIAL_STATE);
   const [staffForm, setStaffForm] = useState(INITIAL_STAFF_FORM);
@@ -315,6 +366,11 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     setClientLookup(LOOKUP_INITIAL_STATE);
   }, []);
 
+  const resetExecutiveForm = useCallback(() => {
+    setExecutiveForm(INITIAL_EXECUTIVE_FORM);
+    setExecutiveLookup(LOOKUP_INITIAL_STATE);
+  }, []);
+
   const resetCoordinatorForm = useCallback(() => {
     setCoordinatorForm(INITIAL_COORDINATOR_FORM);
     setCoordinatorLookup(LOOKUP_INITIAL_STATE);
@@ -327,6 +383,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   }, []);
 
   const isEditingClient = clientLookup.status === 'exists' && Boolean(clientLookup.result?.clientId);
+  const isEditingExecutive = executiveLookup.status === 'exists' && Boolean(executiveLookup.result?.id);
   const isEditingCoordinator = coordinatorLookup.status === 'exists' && Boolean(coordinatorLookup.result?.id);
   const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
   const shouldRequestDetailedMeasurements = staffForm.sexo === 'mujer';
@@ -334,15 +391,17 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const staffPhotoPreviewUri = getStaffPhotoPreviewUri({ draftPhoto: staffPhotoDraft, staffLookup });
   const inactiveCounts = useMemo(() => ({
     clients: countInactiveRecords(lists.clients),
+    executives: countInactiveRecords(executives),
     coordinators: countInactiveRecords(lists.coordinators),
     staff: countInactiveRecords(lists.staff),
-  }), [lists]);
+  }), [executives, lists]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [clientList, coordinatorList, staffList, categoryList, cityList] = await Promise.all([
+      const [clientList, executiveList, coordinatorList, staffList, categoryList, cityList] = await Promise.all([
         getAdminClients(),
+        getAdminExecutives(),
         getAdminCoordinators(),
         getAdminStaff(),
         getAdminStaffCategories(),
@@ -354,6 +413,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         coordinators: Array.isArray(coordinatorList) ? coordinatorList : [],
         staff: Array.isArray(staffList) ? staffList : [],
       });
+      setExecutives(Array.isArray(executiveList) ? executiveList : []);
       setStaffCategories(Array.isArray(categoryList) ? categoryList : []);
       setCities(Array.isArray(cityList) ? cityList.filter((city) => !city?.isOther) : []);
     } catch (error) {
@@ -379,6 +439,10 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const handleCitySelection = (cityName) => {
     if (cityTarget === 'coordinator') {
       setCoordinatorForm((current) => ({ ...current, city: cityName }));
+    }
+
+    if (cityTarget === 'executive') {
+      setExecutiveForm((current) => ({ ...current, city: cityName }));
     }
 
     if (cityTarget === 'staff') {
@@ -555,6 +619,169 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const handleCoordinatorPhoneChange = (field, value) => {
     const normalizedPhone = normalizePhoneValue(value);
     setCoordinatorForm((current) => ({ ...current, [field]: normalizedPhone }));
+  };
+
+  const handleExecutiveCedulaChange = (value) => {
+    setExecutiveForm((current) => ({ ...current, cedula: value }));
+
+    if (executiveLookup.status !== 'idle') {
+      setExecutiveLookup((current) => ({
+        ...LOOKUP_INITIAL_STATE,
+        searchedValue: current.searchedValue,
+      }));
+    }
+  };
+
+  const handleExecutivePhoneChange = (field, value) => {
+    const normalizedPhone = normalizePhoneValue(value);
+    setExecutiveForm((current) => ({ ...current, [field]: normalizedPhone }));
+  };
+
+  const checkExecutiveCedula = async () => {
+    const cedula = normalizeDocumentSearchValue(executiveForm.cedula);
+    if (!cedula) {
+      setExecutiveLookup({
+        status: 'error',
+        message: 'Primero ingresa una cédula para verificar.',
+        result: null,
+        auditLogs: [],
+        searchedValue: '',
+      });
+      return;
+    }
+
+    setCheckingExecutiveCedula(true);
+
+    try {
+      const response = await findAdminExecutiveByCedula(cedula);
+
+      if (response?.exists && response?.executive) {
+        setExecutiveForm((current) => ({
+          ...buildExecutiveFormFromRecord(response.executive),
+          password: current.password,
+        }));
+        setExecutiveLookup({
+          status: 'exists',
+          message: 'Ese ejecutivo ya existe. Ahora estás en modo de edición para actualizar cualquier dato recuperado.',
+          result: response.executive,
+          auditLogs: Array.isArray(response.auditLogs) ? response.auditLogs : [],
+          searchedValue: cedula,
+        });
+        applyFeedback('success', 'Ejecutivo recuperado. Puedes editarlo o cancelar para volver al modo de alta.');
+        return;
+      }
+
+      setExecutiveForm((current) => ({ ...current, cedula }));
+      setExecutiveLookup({
+        status: 'not-found',
+        message: 'No encontramos un ejecutivo con esa cédula. Puedes continuar con el alta.',
+        result: null,
+        auditLogs: [],
+        searchedValue: cedula,
+      });
+      applyFeedback('success', 'Cédula disponible para alta de ejecutivo.');
+    } catch (error) {
+      setExecutiveLookup({
+        status: 'error',
+        message: typeof error === 'string' ? error : 'No pudimos verificar la cédula ahora.',
+        result: null,
+        auditLogs: [],
+        searchedValue: cedula,
+      });
+    } finally {
+      setCheckingExecutiveCedula(false);
+    }
+  };
+
+  const submitExecutive = async () => {
+    if (!isEditingExecutive) {
+      const validationMessage = getExecutiveCreateValidationMessage(executiveForm);
+      if (validationMessage) {
+        applyFeedback('error', validationMessage);
+        return;
+      }
+    }
+
+    const normalizedEmail = normalizeEmailValue(executiveForm.email);
+    if (!isValidEmailValue(normalizedEmail)) {
+      applyFeedback('error', 'Ingresa un correo electrónico válido.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const editingExecutiveId = Number(executiveLookup.result?.id || 0);
+
+      if (editingExecutiveId > 0) {
+        const updated = await updateAdminExecutive(editingExecutiveId, {
+          ...executiveForm,
+          email: normalizedEmail,
+          actorUserId: user?.id,
+        });
+        setExecutives((current) => current.map((executive) => (Number(executive.id) === editingExecutiveId ? updated : executive)));
+        setExecutiveForm(buildExecutiveFormFromRecord(updated));
+        setExecutiveLookup({
+          status: 'exists',
+          message: 'Ejecutivo recuperado en modo edición. Los cambios ya quedaron persistidos y trazados.',
+          result: updated,
+          auditLogs: Array.isArray(updated.auditLogs) ? updated.auditLogs : [],
+          searchedValue: updated.cedula || executiveLookup.searchedValue,
+        });
+        applyFeedback('success', 'Ejecutivo actualizado correctamente.');
+      } else {
+        const created = await createAdminExecutive({
+          ...executiveForm,
+          email: normalizedEmail,
+          actorUserId: user?.id,
+        });
+        setExecutives((current) => [created, ...current]);
+        resetExecutiveForm();
+        applyFeedback('success', 'Ejecutivo creado correctamente.');
+      }
+    } catch (error) {
+      applyFeedback('error', typeof error === 'string' ? error : 'No se pudo guardar el ejecutivo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleInactivateExecutive = () => {
+    const editingExecutiveId = Number(executiveLookup.result?.id || 0);
+    if (editingExecutiveId <= 0 || executiveLookup.result?.isActive === false) {
+      return;
+    }
+
+    Alert.alert(
+      'Inactivar ejecutivo',
+      'Este ejecutivo dejará de iniciar sesión y de figurar como usuario operativo activo. El registro NO se borra.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Inactivar',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const updated = await inactivateAdminExecutive(editingExecutiveId, { actorUserId: user?.id });
+              setExecutives((current) => current.map((executive) => (Number(executive.id) === editingExecutiveId ? updated : executive)));
+              setExecutiveForm(buildExecutiveFormFromRecord(updated));
+              setExecutiveLookup({
+                status: 'exists',
+                message: 'Ejecutivo inactivado. Conservamos el registro y la trazabilidad, pero ya no puede autenticarse ni operar.',
+                result: updated,
+                auditLogs: Array.isArray(updated.auditLogs) ? updated.auditLogs : [],
+                searchedValue: updated.cedula || executiveLookup.searchedValue,
+              });
+              applyFeedback('success', 'Ejecutivo inactivado correctamente.');
+            } catch (error) {
+              applyFeedback('error', typeof error === 'string' ? error : 'No se pudo inactivar el ejecutivo.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const checkClientNit = async () => {
@@ -1112,6 +1339,122 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     </View>
   );
 
+  const renderExecutiveTab = () => (
+    <View style={styles.tabContent}>
+      <SurfaceCard style={styles.formCard}>
+        <View style={styles.searchHeader}>
+          <Text style={styles.cardTitle}>{isEditingExecutive ? 'Edición de ejecutivo' : 'Alta de ejecutivo'}</Text>
+          <StatusBadge label={isEditingExecutive ? 'Modo actualización' : 'Modo alta'} tone={isEditingExecutive ? 'warning' : 'info'} />
+        </View>
+        <Text style={styles.helperText}>{isEditingExecutive ? 'Estás editando un ejecutivo existente. Puedes actualizar sus datos de acceso y contacto, dejando trazabilidad del cambio.' : 'Comienza por la cédula. La verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
+        <View style={styles.lookupRow}>
+          <View style={styles.lookupInputWrap}>
+            <InputRow label={`Cédula${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.cedula} onChangeText={handleExecutiveCedulaChange} placeholder="Documento" />
+          </View>
+          <View style={styles.lookupButtonWrap}>
+            <AppButton title={checkingExecutiveCedula ? 'VERIFICANDO...' : 'VERIFICAR CÉDULA'} onPress={checkExecutiveCedula} disabled={checkingExecutiveCedula || saving} />
+          </View>
+        </View>
+        {executiveLookup.status !== 'idle' ? (
+          <View style={[
+            styles.lookupCard,
+            executiveLookup.status === 'exists' ? styles.lookupCardExists : null,
+            executiveLookup.status === 'not-found' ? styles.lookupCardAvailable : null,
+            executiveLookup.status === 'error' ? styles.lookupCardError : null,
+          ]}>
+            <Text style={styles.lookupTitle}>
+              {executiveLookup.status === 'exists' ? 'Ejecutivo existente' : executiveLookup.status === 'not-found' ? 'Cédula disponible' : 'Verificación pendiente'}
+            </Text>
+            <Text style={styles.lookupMessage}>{executiveLookup.message}</Text>
+            {executiveLookup.result ? (
+              <View style={styles.lookupResultBlock}>
+                <StatusBadge label={getEntityStatusLabel(executiveLookup.result)} tone={getEntityStatusTone(executiveLookup.result)} />
+                <Text style={styles.listTitle}>{executiveLookup.result.fullName}</Text>
+                <Text style={styles.listMeta}>{executiveLookup.result.city || 'Sin ciudad'} · {executiveLookup.result.cedula}</Text>
+                <Text style={styles.listMeta}>@{executiveLookup.result.username}</Text>
+                <Text style={styles.listMeta}>{executiveLookup.result.email || executiveLookup.result.phone || 'Sin dato adicional'}</Text>
+                <Text style={styles.listMeta}>{executiveLookup.result.address || 'Sin dirección cargada'}</Text>
+                <Text style={styles.listMeta}>{executiveLookup.result.whatsappPhone ? `WhatsApp ${executiveLookup.result.whatsappPhone}` : 'Sin WhatsApp cargado'}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {isEditingExecutive && executiveLookup.result?.isActive === false ? (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>Este ejecutivo está INACTIVO. Conserva historial y auditoría, pero ya no puede autenticarse ni operar.</Text>
+          </View>
+        ) : null}
+        <InputRow label={`Nombre completo${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.fullName} onChangeText={(value) => setExecutiveForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
+        <InputRow label={`Dirección${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.address} onChangeText={(value) => setExecutiveForm((current) => ({ ...current, address: value }))} placeholder="Dirección operativa" multiline />
+        <InputRow label={`Teléfono${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.phone} onChangeText={(value) => handleExecutivePhoneChange('phone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`WhatsApp${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.whatsappPhone} onChangeText={(value) => handleExecutivePhoneChange('whatsappPhone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`Email${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.email} onChangeText={(value) => setExecutiveForm((current) => ({ ...current, email: normalizeEmailValue(value) }))} placeholder="ejecutivo@eventapp.local" keyboardType="email-address" />
+        <InputRow label={`Ciudad${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.city} onPress={() => openCityPicker('executive')} placeholder="Seleccionar ciudad" />
+        <InputRow label={`Usuario${!isEditingExecutive ? ' *' : ''}`} value={executiveForm.username} onChangeText={(value) => setExecutiveForm((current) => ({ ...current, username: value }))} placeholder="ejecutivo.nuevo" />
+        {!isEditingExecutive ? (
+          <InputRow label="Contraseña *" value={executiveForm.password} onChangeText={(value) => setExecutiveForm((current) => ({ ...current, password: value }))} placeholder="mínimo 8 caracteres" />
+        ) : (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>La contraseña no se cambia desde esta ficha. Esa acción pertenece al usuario autenticado en su bloque de perfil.</Text>
+          </View>
+        )}
+        <View style={styles.formActionsRow}>
+          {isEditingExecutive ? <AppButton title="CANCELAR" variant="secondary" style={styles.formActionButton} onPress={resetExecutiveForm} disabled={saving} /> : null}
+          <AppButton title={saving ? 'GUARDANDO...' : isEditingExecutive ? 'ACTUALIZAR' : 'CREAR EJECUTIVO'} style={styles.formActionButton} onPress={submitExecutive} disabled={saving} />
+        </View>
+        {isEditingExecutive ? (
+          <AppButton
+            title={executiveLookup.result?.isActive === false ? 'EJECUTIVO INACTIVO' : 'INACTIVAR EJECUTIVO'}
+            variant="secondary"
+            style={styles.inactivateButton}
+            onPress={handleInactivateExecutive}
+            disabled={saving || executiveLookup.result?.isActive === false}
+          />
+        ) : null}
+      </SurfaceCard>
+
+      {executiveLookup.status !== 'idle' ? (
+        <SurfaceCard>
+          <View style={styles.searchHeader}>
+            <Text style={styles.cardTitle}>Resultado de verificación</Text>
+            <StatusBadge label={executiveLookup.searchedValue || executiveForm.cedula || 'Cédula'} tone={getLookupTone(executiveLookup.status)} />
+          </View>
+          <Text style={styles.heroText}>
+            {executiveLookup.status === 'exists'
+              ? 'Se muestra únicamente el ejecutivo encontrado, con su historial reciente, para mantener foco, homogeneidad y trazabilidad.'
+              : executiveLookup.status === 'not-found'
+                ? 'No hay coincidencias para esa cédula. El formulario queda listo para crear el ejecutivo.'
+                : 'No pudimos obtener un resultado usable para esa cédula.'}
+          </Text>
+          {executiveLookup.result ? (
+            <View style={styles.listCard}>
+              <StatusBadge label={getEntityStatusLabel(executiveLookup.result)} tone={getEntityStatusTone(executiveLookup.result)} />
+              <Text style={styles.listTitle}>{executiveLookup.result.fullName}</Text>
+              <Text style={styles.listMeta}>{executiveLookup.result.city || 'Sin ciudad'} · {executiveLookup.result.cedula}</Text>
+              <Text style={styles.listMeta}>@{executiveLookup.result.username}</Text>
+              <Text style={styles.listMeta}>{executiveLookup.result.email || executiveLookup.result.phone || 'Sin dato adicional'}</Text>
+              <Text style={styles.listMeta}>{executiveLookup.result.address || 'Sin dirección cargada'}</Text>
+              <Text style={styles.listMeta}>{executiveLookup.result.whatsappPhone ? `WhatsApp ${executiveLookup.result.whatsappPhone}` : 'Sin WhatsApp cargado'}</Text>
+            </View>
+          ) : null}
+          {executiveLookup.status === 'exists' ? (
+            <View style={styles.auditSection}>
+              <Text style={styles.auditTitle}>Trazabilidad reciente</Text>
+              {executiveLookup.auditLogs?.length ? executiveLookup.auditLogs.map((auditLog) => (
+                <View key={auditLog.id || `${auditLog.action}-${auditLog.timestamp}`} style={styles.auditItem}>
+                  <Text style={styles.auditItemTitle}>{getAuditActionLabel(auditLog)}</Text>
+                  <Text style={styles.auditItemMeta}>{auditLog.actorFullName || auditLog.actorUsername || 'Sistema'} · {formatAuditTimestamp(auditLog.timestamp)}</Text>
+                  <Text style={styles.auditItemDetail}>Antes: {getAdminAuditSummary({ entityType: 'executive', values: auditLog.previousValues, fallbackTitle: executiveLookup.result?.fullName })}</Text>
+                  <Text style={styles.auditItemDetail}>Después: {getAdminAuditSummary({ entityType: 'executive', values: auditLog.newValues, fallbackTitle: executiveLookup.result?.fullName })}</Text>
+                </View>
+              )) : <Text style={styles.lookupMessage}>Todavía no hay movimientos auditados para este ejecutivo.</Text>}
+            </View>
+          ) : null}
+        </SurfaceCard>
+      ) : null}
+    </View>
+  );
+
   const renderCoordinatorTab = () => (
     <View style={styles.tabContent}>
       <SurfaceCard style={styles.formCard}>
@@ -1386,6 +1729,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   );
 
   const renderActiveTab = () => {
+    if (activeTab === 'executives') return renderExecutiveTab();
     if (activeTab === 'coordinators') return renderCoordinatorTab();
     if (activeTab === 'staff') return renderStaffTab();
     return renderClientTab();
@@ -1413,11 +1757,12 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SurfaceCard style={styles.heroCard}>
         <View style={styles.heroBadges}>
           <StatusBadge label={`${lists.clients.length} clientes`} tone="info" />
+          <StatusBadge label={`${executives.length} ejecutivos`} tone="success" />
           <StatusBadge label={`${lists.coordinators.length} coordinadores`} tone="success" />
           <StatusBadge label={`${lists.staff.length} staff`} tone="warning" />
         </View>
         <Text style={styles.cardTitle}>Control administrativo con persistencia real</Text>
-        <Text style={styles.heroText}>El módulo valida duplicados por NIT o cédula, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar. Inactivos actuales: {inactiveCounts.clients} clientes, {inactiveCounts.coordinators} coordinadores y {inactiveCounts.staff} staff.</Text>
+        <Text style={styles.heroText}>El módulo valida duplicados por identificador principal, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar. Inactivos actuales: {inactiveCounts.clients} clientes, {inactiveCounts.executives} ejecutivos, {inactiveCounts.coordinators} coordinadores y {inactiveCounts.staff} staff.</Text>
       </SurfaceCard>
 
       {feedback.message ? (

@@ -20,6 +20,8 @@ const {
   validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
   validateAdminCoordinatorUpdatePayload,
+  validateAdminExecutivePayload,
+  validateAdminExecutiveUpdatePayload,
   validateAdminEntityInactivationPayload,
   validateAdminStaffPayload,
   validateAdminStaffUpdatePayload,
@@ -170,6 +172,114 @@ app.get('/api/admin/clients/by-nit', asyncHandler(async (req, res) => {
     exists: Boolean(client),
     client: client || null,
     auditLogs: client ? await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'client', entityId: client.clientId, limit: 10 }) : [],
+  });
+}));
+
+app.get('/api/admin/executives', asyncHandler(async (req, res) => {
+  return res.json(await req.app.locals.repository.getAdminExecutives());
+}));
+
+app.get('/api/admin/executives/by-cedula', asyncHandler(async (req, res) => {
+  const cedula = normalizeString(req.query?.cedula);
+  if (!cedula) {
+    return badRequest(res, 'La cédula es obligatoria');
+  }
+
+  const executive = await req.app.locals.repository.findAdminExecutiveByCedula(cedula);
+  return res.json({
+    exists: Boolean(executive),
+    executive: executive || null,
+    auditLogs: executive ? await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'executive', entityId: executive.id, limit: 10 }) : [],
+  });
+}));
+
+app.post('/api/admin/executives', asyncHandler(async (req, res) => {
+  const validationError = validateAdminExecutivePayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const normalizedPhones = normalizeAdminPhonePayload(req.body);
+
+  const result = await req.app.locals.repository.createExecutive({
+    actorUserId: Number(req.body.actorUserId),
+    cedula: normalizeString(req.body.cedula),
+    fullName: normalizeString(req.body.fullName),
+    address: normalizeString(req.body.address),
+    phone: normalizedPhones.phone,
+    whatsappPhone: normalizedPhones.whatsappPhone,
+    email: normalizeString(req.body.email).toLowerCase(),
+    city: normalizeString(req.body.city),
+    username: normalizeString(req.body.username),
+    password: normalizeString(req.body.password),
+  });
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_REFERENCE') {
+    return badRequest(res, result.message);
+  }
+
+  return res.status(201).json(result);
+}));
+
+app.put('/api/admin/executives/:id', asyncHandler(async (req, res) => {
+  const validationError = validateAdminExecutiveUpdatePayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const normalizedPhones = normalizeAdminPhonePayload(req.body);
+
+  const result = await req.app.locals.repository.updateExecutive(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+    cedula: normalizeString(req.body.cedula),
+    fullName: normalizeString(req.body.fullName),
+    address: normalizeString(req.body.address),
+    phone: normalizedPhones.phone,
+    whatsappPhone: normalizedPhones.whatsappPhone,
+    email: normalizeString(req.body.email).toLowerCase(),
+    city: normalizeString(req.body.city),
+    username: normalizeString(req.body.username),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Ejecutivo no encontrado' });
+  }
+
+  if (result?.errorCode === 'DUPLICATE_RECORD') {
+    return res.status(409).json({ message: result.message });
+  }
+
+  if (result?.errorCode === 'INVALID_REFERENCE') {
+    return badRequest(res, result.message);
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'executive', entityId: result.id, limit: 10 }),
+  });
+}));
+
+app.post('/api/admin/executives/:id/inactivate', asyncHandler(async (req, res) => {
+  const validationError = validateAdminEntityInactivationPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.inactivateExecutive(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Ejecutivo no encontrado' });
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'executive', entityId: result.id, limit: 10 }),
   });
 }));
 

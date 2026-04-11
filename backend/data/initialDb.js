@@ -21,6 +21,10 @@ const INITIAL_DB = {
     { id: 7, username: 'cliente.colcafe', password: 'Funcional.EventApp.2026', fullName: 'Santiago Ruiz', phone: '3005550406', whatsappPhone: '3005550406', email: 'colcafe.qa@eventapp.local', role: 'CLIENTE' },
     { id: 8, username: 'cliente.nutresa', password: 'Funcional.EventApp.2026', fullName: 'Valentina Pérez', phone: '3005550407', whatsappPhone: '3005550407', email: 'nutresa.qa@eventapp.local', role: 'CLIENTE' },
   ],
+  executives: [
+    { id: 1, userId: 2, cedula: '1010101010', fullName: 'Ana Torres', address: 'Cra 11 No 93-21', phone: '3005550202', whatsappPhone: '3005550202', email: 'ana.torres@eventapp.local', city: 'Bogotá', isActive: true },
+    { id: 2, userId: 3, cedula: '2020202020', fullName: 'Bruno Diaz', address: 'Calle 7 No 45-18', phone: '3005550203', whatsappPhone: '3005550203', email: 'bruno.diaz@eventapp.local', city: 'Medellín', isActive: true },
+  ],
   clients: [
     { id: 1, userId: 5, razonSocial: 'Cliente Base QA SAS', nit: '900100001-1', contactFullName: 'Laura Gómez', contactRole: 'Brand Manager', phone: '3005550404', whatsappPhone: '3005550404', email: 'cliente.base@eventapp.local', isActive: true },
     { id: 2, userId: 6, razonSocial: 'Alpina QA SAS', nit: '900100002-2', contactFullName: 'Mariana Vélez', contactRole: 'Trade Marketing Lead', phone: '3005550405', whatsappPhone: '3005550405', email: 'alpina.qa@eventapp.local', isActive: true },

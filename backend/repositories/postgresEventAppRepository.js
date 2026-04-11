@@ -16,6 +16,7 @@ const {
   resolveStaffSizeFields,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
+  sanitizeExecutiveAdminRecord,
   sanitizeStaffAdminRecord,
   serializeProfilePhotoField,
   sanitizeUserRecord,
@@ -322,6 +323,48 @@ class PostgresEventAppRepository {
     return this.getClients({ search, includeInactive: true });
   }
 
+  async getAdminExecutives({ search } = {}) {
+    const normalizedSearch = normalizeString(search);
+    const searchPattern = normalizedSearch ? `%${normalizedSearch.toLowerCase()}%` : null;
+    const phonePattern = normalizedSearch ? `%${normalizedSearch}%` : null;
+    const result = await query(
+      `
+        SELECT e.id, e.user_id AS "userId", e.full_name AS "fullName", e.cedula, e.phone, e.whatsapp_phone AS "whatsappPhone", e.email,
+               e.address, ci.name AS city, e.is_active AS "isActive", u.username, u.email AS "userEmail", u.is_active AS "userIsActive"
+        FROM executives e
+        INNER JOIN users u ON u.id = e.user_id
+        INNER JOIN roles r ON r.id = u.role_id
+        LEFT JOIN cities ci ON ci.id = e.city_id
+        WHERE r.code = 'EJECUTIVO'
+          AND (
+            $1::text IS NULL
+            OR LOWER(e.full_name) LIKE $2
+            OR LOWER(COALESCE(e.cedula, '')) LIKE $2
+            OR LOWER(u.username) LIKE $2
+            OR LOWER(COALESCE(e.email, '')) LIKE $2
+            OR LOWER(COALESCE(e.address, '')) LIKE $2
+            OR LOWER(COALESCE(ci.name, '')) LIKE $2
+            OR COALESCE(e.phone, '') LIKE $3
+            OR COALESCE(e.whatsapp_phone, '') LIKE $3
+          )
+        ORDER BY e.full_name ASC, e.id ASC
+      `,
+      [normalizedSearch || null, searchPattern, phonePattern],
+    );
+
+    return result.rows.map(sanitizeExecutiveAdminRecord);
+  }
+
+  async findAdminExecutiveByCedula(cedula) {
+    const normalizedCedula = String(cedula || '').trim();
+    if (!normalizedCedula) {
+      return null;
+    }
+
+    const executives = await this.getAdminExecutives();
+    return executives.find((executive) => isDocumentEquivalent(executive.cedula, normalizedCedula)) || null;
+  }
+
   async findAdminClientByNit(nit) {
     const normalizedNit = String(nit || '').trim();
     if (!normalizedNit) {
@@ -621,6 +664,81 @@ class PostgresEventAppRepository {
     }
   }
 
+  async createExecutive(payload) {
+    const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
+    if (cityResult.rowCount === 0) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const duplicateExecutiveByCedula = payload.cedula ? await this.findAdminExecutiveByCedula(payload.cedula) : null;
+    if (duplicateExecutiveByCedula) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    }
+
+    const duplicateResult = await query(
+      `
+        SELECT u.id
+        FROM users u
+        LEFT JOIN roles r ON r.id = u.role_id
+        LEFT JOIN executives e ON e.user_id = u.id
+        WHERE LOWER(u.username) = LOWER($1)
+           OR ($2::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($2))
+           OR ($3::text IS NOT NULL AND COALESCE(u.phone, '') = $3)
+           OR ($4::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $4)
+           OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.cedula, '')) = LOWER($5))
+           OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.full_name, u.full_name)) = LOWER($6))
+          LIMIT 1
+      `,
+      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.cedula || null, payload.fullName],
+    );
+
+    if (duplicateResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM roles WHERE code = 'EJECUTIVO'), TRUE)
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [payload.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, createPasswordHash(payload.password)],
+      );
+
+      const executiveResult = await client.query(
+        `
+          INSERT INTO executives (user_id, full_name, cedula, address, phone, whatsapp_phone, email, city_id, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+          RETURNING id, user_id AS "userId", full_name AS "fullName", cedula, address, phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [userResult.rows[0].id, payload.fullName, payload.cedula, payload.address, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, cityResult.rows[0].id],
+      );
+
+      const createdRecord = sanitizeExecutiveAdminRecord({ ...executiveResult.rows[0], city: cityResult.rows[0].name }, userResult.rows[0]);
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'executive',
+        entityId: executiveResult.rows[0].id,
+        action: 'create',
+        previousValues: null,
+        newValues: createdRecord,
+      });
+
+      await client.query('COMMIT');
+      return createdRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async updateClient(clientId, payload) {
     const normalizedClientId = Number(clientId);
     const currentClientResult = await query(
@@ -742,6 +860,121 @@ class PostgresEventAppRepository {
         actorUserId: payload.actorUserId,
         entityType: 'client',
         entityId: normalizedClientId,
+        action: 'update',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateExecutive(executiveId, payload) {
+    const normalizedExecutiveId = Number(executiveId);
+    const currentExecutiveResult = await query(
+      `
+        SELECT e.id, e.user_id AS "userId", e.full_name AS "fullName", e.cedula, e.address, e.phone, e.whatsapp_phone AS "whatsappPhone", e.email,
+               ci.id AS "cityId", ci.name AS city, e.is_active AS "isActive", u.username, u.email AS "userEmail", u.is_active AS "userIsActive"
+        FROM executives e
+        INNER JOIN users u ON u.id = e.user_id
+        INNER JOIN roles r ON r.id = u.role_id
+        LEFT JOIN cities ci ON ci.id = e.city_id
+        WHERE r.code = 'EJECUTIVO'
+          AND e.id = $1
+        LIMIT 1
+      `,
+      [normalizedExecutiveId],
+    );
+
+    if (currentExecutiveResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const duplicateExecutiveByCedula = payload.cedula ? await this.findAdminExecutiveByCedula(payload.cedula) : null;
+    if (duplicateExecutiveByCedula && Number(duplicateExecutiveByCedula.id) !== normalizedExecutiveId) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    }
+
+    const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
+    if (cityResult.rowCount === 0) {
+      return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
+    }
+
+    const duplicateResult = await query(
+      `
+        SELECT u.id
+        FROM users u
+        LEFT JOIN roles r ON r.id = u.role_id
+        LEFT JOIN executives e ON e.user_id = u.id
+        WHERE u.id <> $1
+          AND COALESCE(e.id, 0) <> $2
+          AND (
+            LOWER(u.username) = LOWER($3)
+            OR ($4::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($4))
+            OR ($5::text IS NOT NULL AND COALESCE(u.phone, '') = $5)
+            OR ($6::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $6)
+            OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.cedula, '')) = LOWER($7))
+            OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.full_name, u.full_name)) = LOWER($8))
+          )
+        LIMIT 1
+      `,
+      [currentExecutiveResult.rows[0].userId, normalizedExecutiveId, payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.cedula || null, payload.fullName],
+    );
+
+    if (duplicateResult.rowCount > 0) {
+      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    }
+
+    const previousRecord = sanitizeExecutiveAdminRecord(currentExecutiveResult.rows[0]);
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          UPDATE users
+          SET username = $2,
+              full_name = $3,
+              phone = $4,
+              whatsapp_phone = $5,
+              email = $6,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [currentExecutiveResult.rows[0].userId, payload.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
+      );
+
+      const executiveResult = await client.query(
+        `
+          UPDATE executives
+          SET full_name = $2,
+              cedula = $3,
+              address = $4,
+              phone = $5,
+              whatsapp_phone = $6,
+              email = $7,
+              city_id = $8,
+              is_active = $9,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, user_id AS "userId", full_name AS "fullName", cedula, address, phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [normalizedExecutiveId, payload.fullName, payload.cedula, payload.address, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, cityResult.rows[0].id, currentExecutiveResult.rows[0].isActive !== false],
+      );
+
+      const updatedRecord = sanitizeExecutiveAdminRecord({ ...executiveResult.rows[0], city: cityResult.rows[0].name }, userResult.rows[0]);
+      await this.#insertAuditLog(client, {
+        actorUserId: payload.actorUserId,
+        entityType: 'executive',
+        entityId: normalizedExecutiveId,
         action: 'update',
         previousValues: previousRecord,
         newValues: updatedRecord,
@@ -1490,6 +1723,75 @@ class PostgresEventAppRepository {
         actorUserId,
         entityType: 'client',
         entityId: normalizedClientId,
+        action: 'inactivate',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async inactivateExecutive(executiveId, { actorUserId }) {
+    const normalizedExecutiveId = Number(executiveId);
+    const currentExecutiveResult = await query(
+      `
+        SELECT e.id, e.user_id AS "userId", e.full_name AS "fullName", e.cedula, e.phone, e.whatsapp_phone AS "whatsappPhone", e.email,
+               e.address, ci.name AS city, e.is_active AS "isActive", u.username, u.email AS "userEmail", u.is_active AS "userIsActive"
+        FROM executives e
+        INNER JOIN users u ON u.id = e.user_id
+        INNER JOIN roles r ON r.id = u.role_id
+        LEFT JOIN cities ci ON ci.id = e.city_id
+        WHERE r.code = 'EJECUTIVO'
+          AND e.id = $1
+        LIMIT 1
+      `,
+      [normalizedExecutiveId],
+    );
+
+    if (currentExecutiveResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const previousRecord = sanitizeExecutiveAdminRecord(currentExecutiveResult.rows[0]);
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          UPDATE users
+          SET is_active = FALSE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [currentExecutiveResult.rows[0].userId],
+      );
+
+      const executiveResult = await client.query(
+        `
+          UPDATE executives
+          SET is_active = FALSE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, user_id AS "userId", full_name AS "fullName", cedula, address, phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [normalizedExecutiveId],
+      );
+
+      const updatedRecord = sanitizeExecutiveAdminRecord({ ...executiveResult.rows[0], city: currentExecutiveResult.rows[0].city }, userResult.rows[0]);
+      await this.#insertAuditLog(client, {
+        actorUserId,
+        entityType: 'executive',
+        entityId: normalizedExecutiveId,
         action: 'inactivate',
         previousValues: previousRecord,
         newValues: updatedRecord,

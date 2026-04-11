@@ -71,6 +71,11 @@ export const findAdminClientByNit = async (nit) => withApiErrorHandling(async ()
 export const createAdminClient = async (data) => withApiErrorHandling(async () => (await getAPI().post('/admin/clients', data)).data);
 export const updateAdminClient = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/clients/${id}`, data)).data);
 export const inactivateAdminClient = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/clients/${id}/inactivate`, data)).data);
+export const getAdminExecutives = async () => withApiErrorHandling(async () => (await getAPI().get('/admin/executives')).data);
+export const findAdminExecutiveByCedula = async (cedula) => withApiErrorHandling(async () => (await getAPI().get('/admin/executives/by-cedula', { params: { cedula } })).data);
+export const createAdminExecutive = async (data) => withApiErrorHandling(async () => (await getAPI().post('/admin/executives', data)).data);
+export const updateAdminExecutive = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/executives/${id}`, data)).data);
+export const inactivateAdminExecutive = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/executives/${id}/inactivate`, data)).data);
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
 export const getAdminCoordinators = async () => withApiErrorHandling(async () => (await getAPI().get('/admin/coordinators')).data);
 export const findAdminCoordinatorByCedula = async (cedula) => withApiErrorHandling(async () => (await getAPI().get('/admin/coordinators/by-cedula', { params: { cedula } })).data);

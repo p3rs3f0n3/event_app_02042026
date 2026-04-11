@@ -119,6 +119,14 @@ const serializeProfilePhotoField = (value) => {
 const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '');
 const normalizeDocumentValue = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+const buildFallbackExecutiveCedula = (value) => {
+  const normalizedValue = Number(value);
+  const numericSuffix = Number.isInteger(normalizedValue) && normalizedValue > 0
+    ? String(normalizedValue).padStart(10, '0')
+    : '0000000000';
+
+  return `AUTOE${numericSuffix}`;
+};
 const normalizeNitValue = (value) => {
   const rawValue = String(value || '').trim().toLowerCase();
   if (!rawValue) {
@@ -197,6 +205,28 @@ const sanitizeUserRecord = (user) => ({
   isActive: user.isActive ?? user.is_active ?? true,
 });
 
+const sanitizeExecutiveAdminRecord = (value, linkedUser = null) => {
+  const executive = linkedUser ? value : null;
+  const user = linkedUser || value;
+
+  return {
+    id: Number(executive?.id || executive?.executiveId || executive?.executive_id || user?.id || user?.userId || user?.user_id || 0) || null,
+    executiveId: Number(executive?.id || executive?.executiveId || executive?.executive_id || user?.id || user?.userId || user?.user_id || 0) || null,
+    userId: Number(executive?.userId || executive?.user_id || user?.userId || user?.user_id || user?.id || 0) || null,
+    cedula: executive?.cedula || executive?.document || user?.cedula || buildFallbackExecutiveCedula(executive?.userId || executive?.user_id || user?.userId || user?.user_id || user?.id || executive?.id || executive?.executiveId || executive?.executive_id),
+    username: user?.username || executive?.username || null,
+    fullName: executive?.fullName || executive?.full_name || user?.fullName || user?.full_name || null,
+    address: executive?.address || user?.address || null,
+    phone: executive?.phone || executive?.userPhone || user?.phone || null,
+    whatsappPhone: executive?.whatsappPhone || executive?.whatsapp_phone || executive?.userWhatsappPhone || user?.whatsappPhone || user?.whatsapp_phone || null,
+    email: executive?.email || executive?.userEmail || user?.email || null,
+    city: executive?.city || executive?.city_name || user?.city || user?.city_name || null,
+    role: 'EJECUTIVO',
+    isActive: (executive?.isActive ?? executive?.is_active ?? user?.isActive ?? user?.is_active ?? true) !== false
+      && (user?.userIsActive ?? user?.user_is_active ?? user?.isActive ?? user?.is_active ?? true) !== false,
+  };
+};
+
 const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
   ...normalizeProfilePhotoField(coordinator.photoMetadata ? { uri: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
   id: Number(coordinator.id),
@@ -245,12 +275,14 @@ module.exports = {
   DEFAULT_PROFILE_PHOTO,
   isDocumentEquivalent,
   normalizeComparableValue,
+  buildFallbackExecutiveCedula,
   normalizeDocumentValue,
   normalizeNitValue,
   normalizePhoneValue,
   isNitEquivalent,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
+  sanitizeExecutiveAdminRecord,
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
   normalizeProfilePhotoField,
