@@ -68,6 +68,7 @@ const INITIAL_STAFF_FORM = {
   shirtSize: '',
   pantsSize: '',
   shoeSize: '',
+  altura: '',
   busto: '',
   cintura: '',
   cadera: '',
@@ -133,12 +134,13 @@ const getStaffSizeSummary = (staffMember) => {
   const shirtSize = staffMember?.shirtSize || staffMember?.clothingSize || 'N/D';
   const pantsSize = staffMember?.pantsSize || staffMember?.clothingSize || 'N/D';
   const shoeSize = staffMember?.shoeSize || 'N/D';
+  const altura = staffMember?.altura || 'N/D';
 
-  if (shirtSize === 'N/D' && pantsSize === 'N/D' && shoeSize === 'N/D') {
-    return 'Sin talles cargados';
+  if (shirtSize === 'N/D' && pantsSize === 'N/D' && shoeSize === 'N/D' && altura === 'N/D') {
+    return 'Sin talles ni altura cargados';
   }
 
-  return `Camisa ${shirtSize} · Pantalón ${pantsSize} · Calzado ${shoeSize}`;
+  return `Camisa ${shirtSize} · Pantalón ${pantsSize} · Calzado ${shoeSize} · Altura ${altura}`;
 };
 
 const getClientCreateValidationMessage = (form) => {
@@ -173,6 +175,8 @@ const getStaffValidationMessage = (form) => {
   if (!hasTextValue(form.city)) return 'La ciudad es obligatoria.';
   if (!hasTextValue(form.category)) return 'La categoría es obligatoria.';
   if (!hasTextValue(form.sexo)) return 'El sexo es obligatorio.';
+
+  if (form.altura && !isValidStaffMeasurementValue(form.altura)) return 'La altura debe ser una medida válida.';
 
   if (form.sexo === 'mujer') {
     if (!hasTextValue(form.busto)) return 'El busto es obligatorio cuando el sexo es mujer.';
@@ -219,6 +223,7 @@ const buildStaffFormFromRecord = (staffMember) => ({
   shirtSize: staffMember?.shirtSize || staffMember?.clothingSize || '',
   pantsSize: staffMember?.pantsSize || staffMember?.clothingSize || '',
   shoeSize: staffMember?.shoeSize || '',
+  altura: staffMember?.altura || '',
   busto: staffMember?.busto || '',
   cintura: staffMember?.cintura || '',
   cadera: staffMember?.cadera || '',
@@ -1312,6 +1317,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <InputRow label="Talla de camisa" value={staffForm.shirtSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, shirtSize: normalizeStaffSizeInputValue(value) }))} placeholder="S, M, L..." />
         <InputRow label="Talla de pantalón" value={staffForm.pantsSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, pantsSize: normalizeStaffSizeInputValue(value) }))} placeholder="S, M, L..." />
         <InputRow label="Talla de calzado" value={staffForm.shoeSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, shoeSize: value }))} placeholder="36, 37, 38..." />
+        <InputRow label="Altura" value={staffForm.altura} onChangeText={(value) => handleStaffMeasurementChange('altura', value)} placeholder="1.70" keyboardType="decimal-pad" maxLength={6} />
         {shouldRequestDetailedMeasurements ? (
           <>
             <InputRow label="Busto" value={staffForm.busto} onChangeText={(value) => handleStaffMeasurementChange('busto', value)} placeholder="90" keyboardType="decimal-pad" maxLength={6} />

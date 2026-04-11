@@ -19,10 +19,12 @@ const resolveStaffSizeFields = (value = {}) => {
   const clothingSize = normalizeStaffSizeValue(value.clothingSize || value.clothing_size);
   const shirtSize = normalizeStaffSizeValue(value.shirtSize || value.shirt_size) || clothingSize;
   const pantsSize = normalizeStaffSizeValue(value.pantsSize || value.pants_size) || clothingSize;
+  const altura = normalizeStaffSizeValue(value.altura || value.height);
 
   return {
     shirtSize,
     pantsSize,
+    altura,
     clothingSize: clothingSize || shirtSize || pantsSize || null,
   };
 };
@@ -228,6 +230,7 @@ const sanitizeStaffAdminRecord = (staffMember) => {
     pantsSize: sizes.pantsSize,
     clothingSize: sizes.clothingSize,
     shoeSize: staffMember.shoeSize || staffMember.shoe_size || null,
+    altura: staffMember.altura || staffMember.height || null,
     busto: parsedMeasurements.busto,
     cintura: parsedMeasurements.cintura,
     cadera: parsedMeasurements.cadera,

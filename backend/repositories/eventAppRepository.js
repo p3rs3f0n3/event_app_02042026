@@ -814,6 +814,7 @@ class EventAppRepository {
       pantsSize: sizes.pantsSize,
       clothingSize: sizes.clothingSize,
       shoeSize: payload.shoeSize || null,
+      altura: payload.altura || null,
       measurements: serializeStaffMeasurements(payload),
     });
 
@@ -877,6 +878,7 @@ class EventAppRepository {
       pantsSize: sizes.pantsSize,
       clothingSize: sizes.clothingSize,
       shoeSize: payload.shoeSize || null,
+      altura: payload.altura || null,
       measurements: serializeStaffMeasurements(payload),
     });
 

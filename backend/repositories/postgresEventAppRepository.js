@@ -399,7 +399,7 @@ class PostgresEventAppRepository {
     const result = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.height AS altura, s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         ORDER BY s.full_name ASC, s.id ASC
@@ -498,7 +498,7 @@ class PostgresEventAppRepository {
     const result = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.height AS altura, s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE ($1::text IS NULL OR LOWER(ci.name) = LOWER($1))
@@ -1015,11 +1015,11 @@ class PostgresEventAppRepository {
 
       const result = await client.query(
         `
-          INSERT INTO staff (full_name, cedula, city_id, category, photo, is_active, sex, shirt_size, pants_size, clothing_size, shoe_size, measurements)
-          VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $10, $11)
-          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          INSERT INTO staff (full_name, cedula, city_id, category, photo, is_active, sex, shirt_size, pants_size, clothing_size, shoe_size, height, measurements)
+          VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $10, $11, $12)
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", height AS altura, measurements
         `,
-        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, payload.sexo, sizes.shirtSize, sizes.pantsSize, sizes.clothingSize, payload.shoeSize || null, serializeStaffMeasurements(payload)],
+        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, payload.sexo, sizes.shirtSize, sizes.pantsSize, sizes.clothingSize, payload.shoeSize || null, payload.altura || null, serializeStaffMeasurements(payload)],
       );
 
       const createdRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
@@ -1047,7 +1047,7 @@ class PostgresEventAppRepository {
     const currentStaffResult = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.id AS "cityId", ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.height AS altura, s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE s.id = $1
@@ -1112,13 +1112,14 @@ class PostgresEventAppRepository {
               pants_size = $9,
               clothing_size = $10,
               shoe_size = $11,
-              measurements = $12,
-              photo = $13,
+              height = $12,
+              measurements = $13,
+              photo = $14,
               updated_at = NOW()
           WHERE id = $1
-          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", height AS altura, measurements
         `,
-        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, currentRow.isActive !== false, payload.sexo, sizes.shirtSize, sizes.pantsSize, sizes.clothingSize, payload.shoeSize || null, serializeStaffMeasurements(payload), payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
+        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, currentRow.isActive !== false, payload.sexo, sizes.shirtSize, sizes.pantsSize, sizes.clothingSize, payload.shoeSize || null, payload.altura || null, serializeStaffMeasurements(payload), payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
       );
 
       const updatedRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });

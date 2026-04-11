@@ -416,6 +416,9 @@ const validateAdminStaffBasePayload = (payload) => {
   const shoeSizeError = validateStaffSizeField({ value: payload.shoeSize, label: 'talla de calzado' });
   if (shoeSizeError) return shoeSizeError;
 
+  const heightError = validateStaffSizeField({ value: payload.altura, label: 'altura' });
+  if (heightError) return heightError;
+
   if (normalizedSexo === 'mujer') {
     const bustoError = validateStaffMeasurementField({ value: payload.busto, label: 'busto', required: true });
     if (bustoError) return bustoError;
