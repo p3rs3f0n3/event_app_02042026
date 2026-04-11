@@ -20,6 +20,7 @@ const {
   validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
   validateAdminCoordinatorUpdatePayload,
+  validateAdminEntityInactivationPayload,
   validateAdminStaffPayload,
   validateAdminStaffUpdatePayload,
   validateChangePasswordPayload,
@@ -233,6 +234,26 @@ app.put('/api/admin/clients/:id', asyncHandler(async (req, res) => {
   });
 }));
 
+app.post('/api/admin/clients/:id/inactivate', asyncHandler(async (req, res) => {
+  const validationError = validateAdminEntityInactivationPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.inactivateClient(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Cliente no encontrado' });
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'client', entityId: result.clientId, limit: 10 }),
+  });
+}));
+
 app.get('/api/staff', asyncHandler(async (req, res) => {
   const { city, category, startTime, endTime, eventStartDate, eventEndDate, selectedStaffIds, excludeEventId, excludeCityIndex, excludePointIndex } = req.query;
   const repository = req.app.locals.repository;
@@ -361,6 +382,26 @@ app.put('/api/admin/coordinators/:id', asyncHandler(async (req, res) => {
   });
 }));
 
+app.post('/api/admin/coordinators/:id/inactivate', asyncHandler(async (req, res) => {
+  const validationError = validateAdminEntityInactivationPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.inactivateCoordinator(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Coordinador no encontrado' });
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'coordinator', entityId: result.id, limit: 10 }),
+  });
+}));
+
 app.get('/api/admin/staff', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getAdminStaff());
 }));
@@ -460,6 +501,26 @@ app.put('/api/admin/staff/:id', asyncHandler(async (req, res) => {
 
   if (result?.errorCode === 'INVALID_REFERENCE') {
     return badRequest(res, result.message);
+  }
+
+  return res.json({
+    ...result,
+    auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'staff', entityId: result.id, limit: 10 }),
+  });
+}));
+
+app.post('/api/admin/staff/:id/inactivate', asyncHandler(async (req, res) => {
+  const validationError = validateAdminEntityInactivationPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.inactivateStaff(req.params.id, {
+    actorUserId: Number(req.body.actorUserId),
+  });
+
+  if (result?.errorCode === 'NOT_FOUND') {
+    return res.status(404).json({ message: 'Staff no encontrado' });
   }
 
   return res.json({

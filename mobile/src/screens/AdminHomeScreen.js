@@ -10,6 +10,9 @@ import {
   findAdminClientByNit,
   findAdminCoordinatorByCedula,
   findAdminStaffByCedula,
+  inactivateAdminClient,
+  inactivateAdminCoordinator,
+  inactivateAdminStaff,
   getAdminStaffCategories,
   getAdminClients,
   getAdminCoordinators,
@@ -200,7 +203,15 @@ const formatAuditTimestamp = (value) => {
   });
 };
 
-const getAuditActionLabel = (auditLog) => (auditLog.action === 'create' ? 'Alta registrada' : 'Actualización registrada');
+const getAuditActionLabel = (auditLog) => {
+  if (auditLog.action === 'create') return 'Alta registrada';
+  if (auditLog.action === 'inactivate') return 'Inactivación registrada';
+  return 'Actualización registrada';
+};
+
+const getEntityStatusLabel = (record) => (record?.isActive === false ? 'INACTIVO' : 'ACTIVO');
+const getEntityStatusTone = (record) => (record?.isActive === false ? 'warning' : 'success');
+const countInactiveRecords = (records = []) => records.filter((record) => record?.isActive === false).length;
 
 const getAdminAuditSummary = ({ entityType, values, fallbackTitle }) => {
   if (!values) {
@@ -269,6 +280,11 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
   const canEditCoordinatorUserFields = !isEditingCoordinator || Boolean(coordinatorLookup.result?.userId);
   const staffPhotoPreviewUri = getStaffPhotoPreviewUri({ draftPhoto: staffPhotoDraft, staffLookup });
+  const inactiveCounts = useMemo(() => ({
+    clients: countInactiveRecords(lists.clients),
+    coordinators: countInactiveRecords(lists.coordinators),
+    staff: countInactiveRecords(lists.staff),
+  }), [lists]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -298,6 +314,10 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    setFeedback({ tone: 'muted', message: '' });
+  }, [activeTab]);
 
   const openCityPicker = (target) => {
     setCityTarget(target);
@@ -419,6 +439,49 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleInactivateClient = () => {
+    const editingClientId = Number(clientLookup.result?.clientId || 0);
+    if (editingClientId <= 0 || clientLookup.result?.isActive === false) {
+      return;
+    }
+
+    Alert.alert(
+      'Inactivar cliente',
+      'Este cliente dejará de iniciar sesión y de aparecer en los flujos operativos. El registro NO se borra.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Inactivar',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const updated = await inactivateAdminClient(editingClientId, { actorUserId: user?.id });
+              setLists((current) => ({
+                clients: current.clients.map((client) => (Number(client.clientId) === editingClientId ? updated : client)),
+                coordinators: current.coordinators,
+                staff: current.staff,
+              }));
+              setClientForm(buildClientFormFromRecord(updated));
+              setClientLookup({
+                status: 'exists',
+                message: 'Cliente inactivado. Conservamos el registro y la trazabilidad, pero ya no participa en los flujos activos.',
+                result: updated,
+                auditLogs: Array.isArray(updated.auditLogs) ? updated.auditLogs : [],
+                searchedValue: updated.nit || clientLookup.searchedValue,
+              });
+              applyFeedback('success', 'Cliente inactivado correctamente.');
+            } catch (error) {
+              applyFeedback('error', typeof error === 'string' ? error : 'No se pudo inactivar el cliente.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleNitChange = (value) => {
@@ -621,6 +684,49 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     }
   };
 
+  const handleInactivateCoordinator = () => {
+    const editingCoordinatorId = Number(coordinatorLookup.result?.id || 0);
+    if (editingCoordinatorId <= 0 || coordinatorLookup.result?.isActive === false) {
+      return;
+    }
+
+    Alert.alert(
+      'Inactivar coordinador',
+      'Este coordinador dejará de iniciar sesión y de estar disponible para asignaciones. El registro NO se borra.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Inactivar',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const updated = await inactivateAdminCoordinator(editingCoordinatorId, { actorUserId: user?.id });
+              setLists((current) => ({
+                clients: current.clients,
+                coordinators: current.coordinators.map((coordinator) => (Number(coordinator.id) === editingCoordinatorId ? updated : coordinator)),
+                staff: current.staff,
+              }));
+              setCoordinatorForm(buildCoordinatorFormFromRecord(updated));
+              setCoordinatorLookup({
+                status: 'exists',
+                message: 'Coordinador inactivado. Conservamos la ficha y la auditoría, pero ya no puede operar ni asignarse.',
+                result: updated,
+                auditLogs: Array.isArray(updated.auditLogs) ? updated.auditLogs : [],
+                searchedValue: updated.cedula || coordinatorLookup.searchedValue,
+              });
+              applyFeedback('success', 'Coordinador inactivado correctamente.');
+            } catch (error) {
+              applyFeedback('error', typeof error === 'string' ? error : 'No se pudo inactivar el coordinador.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleStaffCedulaChange = (value) => {
     setStaffForm((current) => ({ ...current, cedula: value }));
 
@@ -777,6 +883,50 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     }
   };
 
+  const handleInactivateStaff = () => {
+    const editingStaffId = Number(staffLookup.result?.id || 0);
+    if (editingStaffId <= 0 || staffLookup.result?.isActive === false) {
+      return;
+    }
+
+    Alert.alert(
+      'Inactivar staff',
+      'Esta persona dejará de aparecer para asignaciones activas. El registro NO se borra.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Inactivar',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const updated = await inactivateAdminStaff(editingStaffId, { actorUserId: user?.id });
+              setLists((current) => ({
+                clients: current.clients,
+                coordinators: current.coordinators,
+                staff: current.staff.map((staffMember) => (Number(staffMember.id) === editingStaffId ? updated : staffMember)),
+              }));
+              setStaffForm(buildStaffFormFromRecord(updated));
+              setStaffPhotoDraft(null);
+              setStaffLookup({
+                status: 'exists',
+                message: 'Staff inactivado. Conservamos la ficha y la trazabilidad, pero deja de estar disponible operativamente.',
+                result: updated,
+                auditLogs: Array.isArray(updated.auditLogs) ? updated.auditLogs : [],
+                searchedValue: updated.cedula || staffLookup.searchedValue,
+              });
+              applyFeedback('success', 'Staff inactivado correctamente.');
+            } catch (error) {
+              applyFeedback('error', typeof error === 'string' ? error : 'No se pudo inactivar el staff.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderClientTab = () => (
     <View style={styles.tabContent}>
       <SurfaceCard style={styles.formCard}>
@@ -806,12 +956,18 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             <Text style={styles.lookupMessage}>{clientLookup.message}</Text>
             {clientLookup.result ? (
               <View style={styles.lookupResultBlock}>
+                <StatusBadge label={getEntityStatusLabel(clientLookup.result)} tone={getEntityStatusTone(clientLookup.result)} />
                 <Text style={styles.listTitle}>{clientLookup.result.razonSocial || clientLookup.result.fullName}</Text>
                 <Text style={styles.listMeta}>{clientLookup.result.contactFullName}{clientLookup.result.contactRole ? ` · ${clientLookup.result.contactRole}` : ''}</Text>
                 <Text style={styles.listMeta}>@{clientLookup.result.username}{clientLookup.result.nit ? ` · NIT ${clientLookup.result.nit}` : ''}</Text>
                 <Text style={styles.listMeta}>{clientLookup.result.email || clientLookup.result.phone || 'Sin dato adicional'}</Text>
               </View>
             ) : null}
+          </View>
+        ) : null}
+        {isEditingClient && clientLookup.result?.isActive === false ? (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>Este cliente está INACTIVO. Conserva historial y auditoría, pero no puede autenticarse ni entrar a flujos operativos.</Text>
           </View>
         ) : null}
         <InputRow label={`Razón social${!isEditingClient ? ' *' : ''}`} value={clientForm.razonSocial} onChangeText={(value) => setClientForm((current) => ({ ...current, razonSocial: value }))} placeholder="Empresa SAS" />
@@ -832,6 +988,15 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           {isEditingClient ? <AppButton title="CANCELAR" variant="secondary" style={styles.formActionButton} onPress={resetClientForm} disabled={saving} /> : null}
           <AppButton title={saving ? 'GUARDANDO...' : isEditingClient ? 'ACTUALIZAR' : 'CREAR CLIENTE'} style={styles.formActionButton} onPress={submitClient} disabled={saving} />
         </View>
+        {isEditingClient ? (
+          <AppButton
+            title={clientLookup.result?.isActive === false ? 'CLIENTE INACTIVO' : 'INACTIVAR CLIENTE'}
+            variant="secondary"
+            style={styles.inactivateButton}
+            onPress={handleInactivateClient}
+            disabled={saving || clientLookup.result?.isActive === false}
+          />
+        ) : null}
       </SurfaceCard>
 
       {clientLookup.status !== 'idle' ? (
@@ -849,6 +1014,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           </Text>
           {clientLookup.result ? (
             <View style={styles.listCard}>
+              <StatusBadge label={getEntityStatusLabel(clientLookup.result)} tone={getEntityStatusTone(clientLookup.result)} />
               <Text style={styles.listTitle}>{clientLookup.result.razonSocial || clientLookup.result.fullName}</Text>
               <Text style={styles.listMeta}>{clientLookup.result.contactFullName}{clientLookup.result.contactRole ? ` · ${clientLookup.result.contactRole}` : ''}</Text>
               <Text style={styles.listMeta}>@{clientLookup.result.username}{clientLookup.result.nit ? ` · NIT ${clientLookup.result.nit}` : ''}</Text>
@@ -860,7 +1026,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
               <Text style={styles.auditTitle}>Trazabilidad reciente</Text>
               {clientLookup.auditLogs?.length ? clientLookup.auditLogs.map((auditLog) => (
                 <View key={auditLog.id || `${auditLog.action}-${auditLog.timestamp}`} style={styles.auditItem}>
-                  <Text style={styles.auditItemTitle}>{auditLog.action === 'create' ? 'Alta registrada' : 'Actualización registrada'}</Text>
+                  <Text style={styles.auditItemTitle}>{getAuditActionLabel(auditLog)}</Text>
                   <Text style={styles.auditItemMeta}>{auditLog.actorFullName || auditLog.actorUsername || 'Sistema'} · {formatAuditTimestamp(auditLog.timestamp)}</Text>
                   <Text style={styles.auditItemDetail}>Antes: {auditLog.previousValues ? `${auditLog.previousValues.razonSocial || '-'} · ${auditLog.previousValues.contactFullName || '-'} · ${auditLog.previousValues.email || auditLog.previousValues.phone || 'sin dato'}` : 'sin registro previo'}</Text>
                   <Text style={styles.auditItemDetail}>Después: {auditLog.newValues ? `${auditLog.newValues.razonSocial || '-'} · ${auditLog.newValues.contactFullName || '-'} · ${auditLog.newValues.email || auditLog.newValues.phone || 'sin dato'}` : 'sin registro nuevo'}</Text>
@@ -902,12 +1068,18 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             <Text style={styles.lookupMessage}>{coordinatorLookup.message}</Text>
             {coordinatorLookup.result ? (
               <View style={styles.lookupResultBlock}>
+                <StatusBadge label={getEntityStatusLabel(coordinatorLookup.result)} tone={getEntityStatusTone(coordinatorLookup.result)} />
                 <Text style={styles.listTitle}>{coordinatorLookup.result.fullName}</Text>
                 <Text style={styles.listMeta}>{coordinatorLookup.result.city} · {coordinatorLookup.result.cedula}</Text>
                 <Text style={styles.listMeta}>{coordinatorLookup.result.username ? `@${coordinatorLookup.result.username}` : 'Sin usuario vinculado'}</Text>
                 <Text style={styles.listMeta}>{coordinatorLookup.result.email || coordinatorLookup.result.phone || 'Sin dato adicional'}</Text>
               </View>
             ) : null}
+          </View>
+        ) : null}
+        {isEditingCoordinator && coordinatorLookup.result?.isActive === false ? (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>Este coordinador está INACTIVO. Conserva su historial, pero ya no puede autenticarse ni ser asignado.</Text>
           </View>
         ) : null}
         <InputRow label={`Nombre completo${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.fullName} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
@@ -933,6 +1105,15 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           {isEditingCoordinator ? <AppButton title="CANCELAR" variant="secondary" style={styles.formActionButton} onPress={resetCoordinatorForm} disabled={saving} /> : null}
           <AppButton title={saving ? 'GUARDANDO...' : isEditingCoordinator ? 'ACTUALIZAR' : 'CREAR COORDINADOR'} style={styles.formActionButton} onPress={submitCoordinator} disabled={saving} />
         </View>
+        {isEditingCoordinator ? (
+          <AppButton
+            title={coordinatorLookup.result?.isActive === false ? 'COORDINADOR INACTIVO' : 'INACTIVAR COORDINADOR'}
+            variant="secondary"
+            style={styles.inactivateButton}
+            onPress={handleInactivateCoordinator}
+            disabled={saving || coordinatorLookup.result?.isActive === false}
+          />
+        ) : null}
       </SurfaceCard>
 
       {coordinatorLookup.status !== 'idle' ? (
@@ -950,6 +1131,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           </Text>
           {coordinatorLookup.result ? (
             <View style={styles.listCard}>
+              <StatusBadge label={getEntityStatusLabel(coordinatorLookup.result)} tone={getEntityStatusTone(coordinatorLookup.result)} />
               <Text style={styles.listTitle}>{coordinatorLookup.result.fullName}</Text>
               <Text style={styles.listMeta}>{coordinatorLookup.result.city} · {coordinatorLookup.result.cedula}</Text>
               <Text style={styles.listMeta}>{coordinatorLookup.result.username ? `@${coordinatorLookup.result.username}` : 'Sin usuario vinculado'}</Text>
@@ -1003,12 +1185,18 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             <Text style={styles.lookupMessage}>{staffLookup.message}</Text>
             {staffLookup.result ? (
               <View style={styles.lookupResultBlock}>
+                <StatusBadge label={getEntityStatusLabel(staffLookup.result)} tone={getEntityStatusTone(staffLookup.result)} />
                 <Text style={styles.listTitle}>{staffLookup.result.fullName}</Text>
                 <Text style={styles.listMeta}>{staffLookup.result.city} · {staffLookup.result.category}</Text>
                 <Text style={styles.listMeta}>{staffLookup.result.cedula}</Text>
                 <Text style={styles.listMeta}>{staffLookup.result.clothingSize || staffLookup.result.shoeSize || 'Sin talles cargados'}</Text>
               </View>
             ) : null}
+          </View>
+        ) : null}
+        {isEditingStaff && staffLookup.result?.isActive === false ? (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>Esta persona de staff está INACTIVA. Conserva la ficha y la auditoría, pero deja de figurar para asignaciones activas.</Text>
           </View>
         ) : null}
         <View style={styles.photoCard}>
@@ -1047,6 +1235,15 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           {isEditingStaff ? <AppButton title="CANCELAR" variant="secondary" style={styles.formActionButton} onPress={resetStaffForm} disabled={saving} /> : null}
           <AppButton title={saving ? 'GUARDANDO...' : isEditingStaff ? 'ACTUALIZAR' : 'CREAR STAFF'} style={styles.formActionButton} onPress={submitStaff} disabled={saving} />
         </View>
+        {isEditingStaff ? (
+          <AppButton
+            title={staffLookup.result?.isActive === false ? 'STAFF INACTIVO' : 'INACTIVAR STAFF'}
+            variant="secondary"
+            style={styles.inactivateButton}
+            onPress={handleInactivateStaff}
+            disabled={saving || staffLookup.result?.isActive === false}
+          />
+        ) : null}
       </SurfaceCard>
 
       {staffLookup.status !== 'idle' ? (
@@ -1064,6 +1261,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           </Text>
           {staffLookup.result ? (
             <View style={styles.listCard}>
+              <StatusBadge label={getEntityStatusLabel(staffLookup.result)} tone={getEntityStatusTone(staffLookup.result)} />
               <Text style={styles.listTitle}>{staffLookup.result.fullName}</Text>
               <Text style={styles.listMeta}>{staffLookup.result.city} · {staffLookup.result.category}</Text>
               <Text style={styles.listMeta}>{staffLookup.result.cedula}</Text>
@@ -1108,7 +1306,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Módulo administrador"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${getUserDisplayName(user)}. Desde este panel puedes gestionar altas administrativas, actualizar clientes existentes y mantener la trazabilidad sin afectar los flujos operativos vigentes.`}
+        subtitle={`Hola, ${getUserDisplayName(user)}. Desde este panel puedes gestionar altas, actualizaciones e inactivaciones administrativas sin borrar registros y manteniendo la trazabilidad sin romper los flujos vigentes.`}
       />
 
       <UserProfileCard user={user} palette={palette} title="Perfil administrativo" buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />
@@ -1119,8 +1317,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <StatusBadge label={`${lists.coordinators.length} coordinadores`} tone="success" />
           <StatusBadge label={`${lists.staff.length} staff`} tone="warning" />
         </View>
-        <Text style={styles.cardTitle}>Control de altas operativas</Text>
-        <Text style={styles.heroText}>El módulo valida duplicados desde el identificador principal: NIT para clientes y cédula para coordinadores y staff. En los tres casos, el hallazgo permite pasar al modo actualización con historial visible y trazabilidad reciente.</Text>
+        <Text style={styles.cardTitle}>Control administrativo con persistencia real</Text>
+        <Text style={styles.heroText}>El módulo valida duplicados por NIT o cédula, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar. Inactivos actuales: {inactiveCounts.clients} clientes, {inactiveCounts.coordinators} coordinadores y {inactiveCounts.staff} staff.</Text>
       </SurfaceCard>
 
       {feedback.message ? (
@@ -1300,6 +1498,7 @@ const createStyles = (palette) => StyleSheet.create({
   categoryOptionCode: { color: palette.textMuted, fontSize: 12 },
   formActionsRow: { flexDirection: 'row', gap: SPACING.sm },
   formActionButton: { flex: 1 },
+  inactivateButton: { marginTop: SPACING.xs },
   inlineNotice: {
     borderRadius: RADII.md,
     backgroundColor: palette.surfaceMuted,

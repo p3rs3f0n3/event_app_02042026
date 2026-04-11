@@ -159,7 +159,7 @@ const sanitizeClientRecord = ({ client, user = null }) => ({
   whatsappPhone: client.whatsappPhone || client.whatsapp_phone || user?.whatsappPhone || user?.whatsapp_phone || null,
   email: client.email || user?.email || null,
   role: 'CLIENTE',
-  isActive: client.isActive ?? client.is_active ?? user?.isActive ?? true,
+  isActive: (client.isActive ?? client.is_active ?? true) !== false && (user?.isActive ?? user?.is_active ?? true) !== false,
 });
 
 const sanitizeUserRecord = (user) => ({
@@ -170,6 +170,7 @@ const sanitizeUserRecord = (user) => ({
   whatsappPhone: user.whatsappPhone || user.whatsapp_phone || null,
   email: user.email || null,
   role: user.role,
+  isActive: user.isActive ?? user.is_active ?? true,
 });
 
 const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
@@ -185,6 +186,7 @@ const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
   email: user?.email || null,
   city: coordinator.city,
   rating: Number(coordinator.rating || 0),
+  isActive: (coordinator.isActive ?? coordinator.is_active ?? true) !== false && (user?.isActive ?? user?.is_active ?? true) !== false,
 });
 
 const sanitizeStaffAdminRecord = (staffMember) => ({
@@ -197,6 +199,7 @@ const sanitizeStaffAdminRecord = (staffMember) => ({
   clothingSize: staffMember.clothingSize || staffMember.clothing_size || null,
   shoeSize: staffMember.shoeSize || staffMember.shoe_size || null,
   measurements: staffMember.measurements || null,
+  isActive: (staffMember.isActive ?? staffMember.is_active ?? true) !== false,
 });
 
 module.exports = {

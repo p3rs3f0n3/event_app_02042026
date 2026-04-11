@@ -391,6 +391,16 @@ const validateAdminStaffUpdatePayload = (payload) => {
   return null;
 };
 
+const validateAdminEntityInactivationPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de inactivación inválido';
+  }
+
+  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
+
+  return null;
+};
+
 module.exports = {
   ALLOWED_COORDINATOR_PHOTO_MIME_TYPES,
   MAX_COORDINATOR_PHOTO_SIZE_BYTES,
@@ -401,6 +411,7 @@ module.exports = {
   validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,
   validateAdminCoordinatorUpdatePayload,
+  validateAdminEntityInactivationPayload,
   validateAdminStaffPayload,
   validateAdminStaffUpdatePayload,
   validateOptionalAdminPhotoPayload,

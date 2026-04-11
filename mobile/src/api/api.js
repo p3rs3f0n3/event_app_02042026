@@ -2,8 +2,7 @@ import axios from 'axios';
 
 // Singleton for API URL Management
 let apiInstance = null;
-const DEFAULT_API_URL = 'https://66.94.101.47.sslip.io/api';
-let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || '';
 
 const extractApiErrorMessage = (error) => {
   const responseMessage = error?.response?.data?.message;
@@ -71,11 +70,13 @@ export const getAdminClients = async () => withApiErrorHandling(async () => (awa
 export const findAdminClientByNit = async (nit) => withApiErrorHandling(async () => (await getAPI().get('/admin/clients/by-nit', { params: { nit } })).data);
 export const createAdminClient = async (data) => withApiErrorHandling(async () => (await getAPI().post('/admin/clients', data)).data);
 export const updateAdminClient = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/clients/${id}`, data)).data);
+export const inactivateAdminClient = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/clients/${id}/inactivate`, data)).data);
 export const getCoordinators = async (params = {}) => (await getAPI().get('/coordinators', { params })).data;
 export const getAdminCoordinators = async () => withApiErrorHandling(async () => (await getAPI().get('/admin/coordinators')).data);
 export const findAdminCoordinatorByCedula = async (cedula) => withApiErrorHandling(async () => (await getAPI().get('/admin/coordinators/by-cedula', { params: { cedula } })).data);
 export const createAdminCoordinator = async (data) => withApiErrorHandling(async () => (await getAPI().post('/admin/coordinators', data)).data);
 export const updateAdminCoordinator = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/coordinators/${id}`, data)).data);
+export const inactivateAdminCoordinator = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/coordinators/${id}/inactivate`, data)).data);
 export const getStaff = async (params = {}) => (await getAPI().get('/staff', { params })).data;
 export const getStaffCategories = async (params = {}) => (await getAPI().get('/staff-categories', { params })).data;
 export const getAdminStaff = async () => withApiErrorHandling(async () => (await getAPI().get('/admin/staff')).data);
@@ -84,6 +85,7 @@ export const getAdminStaffCategories = async (params = {}) => withApiErrorHandli
 export const createAdminStaffCategory = async (name) => withApiErrorHandling(async () => (await getAPI().post('/admin/staff-categories', { name })).data);
 export const createAdminStaff = async (data) => withApiErrorHandling(async () => (await getAPI().post('/admin/staff', data)).data);
 export const updateAdminStaff = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/staff/${id}`, data)).data);
+export const inactivateAdminStaff = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/staff/${id}/inactivate`, data)).data);
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
 export const addColombiaCity = async (name) => (await getAPI().post('/colombia-cities', { name })).data;
 export const createEvent = async (data) => (await getAPI().post('/events', data)).data;

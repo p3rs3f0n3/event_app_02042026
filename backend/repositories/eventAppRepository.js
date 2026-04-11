@@ -128,11 +128,13 @@ const normalizeEvent = (event, clients = []) => ({
 const normalizeCoordinator = (coordinator) => ({
   ...coordinator,
   userId: Number(coordinator.userId || coordinator.user_id || 0) || null,
+  isActive: coordinator.isActive ?? coordinator.is_active ?? true,
   ...normalizeProfilePhotoField(coordinator.photoMetadata ? { uri: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
 });
 
 const normalizeStaffMember = (staffMember) => ({
   ...staffMember,
+  isActive: staffMember.isActive ?? staffMember.is_active ?? true,
   ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
 });
 
@@ -186,7 +188,7 @@ function buildClientsDb({ db, initialDb }) {
           phone: existingClient.phone || user.phone || null,
           whatsappPhone: existingClient.whatsappPhone || user.whatsappPhone || user.whatsapp_phone || user.phone || null,
           email: existingClient.email || user.email || null,
-          isActive: existingClient.isActive ?? user.isActive !== false,
+          isActive: (existingClient.isActive ?? true) !== false && user.isActive !== false,
         };
       }
 
@@ -315,8 +317,28 @@ class EventAppRepository {
     ].some((value) => String(value || '').trim().toLowerCase().includes(normalizedSearch)));
   }
 
-  getAdminClients() {
-    return this.getClients();
+  getAdminClients({ search } = {}) {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    const clients = this.db.clients
+      .map((client) => sanitizeClientRecord({
+        client,
+        user: this.findUserById(client.userId),
+      }))
+      .filter((client) => client.userId)
+      .sort((left, right) => String(left.fullName || '').localeCompare(String(right.fullName || ''), 'es'));
+
+    if (!normalizedSearch) {
+      return clients;
+    }
+
+    return clients.filter((client) => [
+      client.fullName,
+      client.razonSocial,
+      client.contactFullName,
+      client.username,
+      client.email,
+      client.nit,
+    ].some((value) => String(value || '').trim().toLowerCase().includes(normalizedSearch)));
   }
 
   findAdminClientByNit(nit) {
@@ -325,7 +347,7 @@ class EventAppRepository {
       return null;
     }
 
-    return this.getClients().find((client) => isNitEquivalent(client.nit, normalizedNit)) || null;
+    return this.getAdminClients().find((client) => isNitEquivalent(client.nit, normalizedNit)) || null;
   }
 
   getAuditLogsForEntity({ entityType, entityId, limit = 10 }) {
@@ -379,17 +401,21 @@ class EventAppRepository {
       return null;
     }
 
-    return this.db.coordinators.find((coordinator) => Number(coordinator.userId) === normalizedUserId)
-      || this.db.coordinators.find((coordinator) => Number(coordinator.id) === normalizedUserId)
+    return this.db.coordinators.find((coordinator) => Number(coordinator.userId) === normalizedUserId && coordinator.isActive !== false && (!coordinator.userId || this.findUserById(coordinator.userId)?.isActive !== false))
+      || this.db.coordinators.find((coordinator) => Number(coordinator.id) === normalizedUserId && coordinator.isActive !== false && (!coordinator.userId || this.findUserById(coordinator.userId)?.isActive !== false))
       || null;
   }
 
   getCoordinators({ city } = {}) {
+    let result = this.db.coordinators
+      .map(normalizeCoordinator)
+      .filter((coordinator) => coordinator.isActive !== false && (!coordinator.userId || this.findUserById(coordinator.userId)?.isActive !== false));
+
     if (!city) {
-      return this.db.coordinators;
+      return result;
     }
 
-    return this.db.coordinators.filter((coordinator) => coordinator.city.toLowerCase() === city.toLowerCase());
+    return result.filter((coordinator) => coordinator.city.toLowerCase() === city.toLowerCase());
   }
 
   getCoordinatorEvents({ userId }) {
@@ -417,7 +443,7 @@ class EventAppRepository {
   }
 
   getStaff({ city, category } = {}) {
-    let result = this.db.staff.map(normalizeStaffMember);
+    let result = this.db.staff.map(normalizeStaffMember).filter((staffMember) => staffMember.isActive !== false);
 
     if (city) {
       result = result.filter((staffMember) => staffMember.city.toLowerCase() === city.toLowerCase());
@@ -548,7 +574,7 @@ class EventAppRepository {
       excludeClientId: normalizedClientId,
     }));
     const duplicateNitClient = normalizedPayload.nit
-      ? this.getClients().find((client) => Number(client.clientId) !== normalizedClientId && isNitEquivalent(client.nit, normalizedPayload.nit)) || null
+      ? this.getAdminClients().find((client) => Number(client.clientId) !== normalizedClientId && isNitEquivalent(client.nit, normalizedPayload.nit)) || null
       : null;
 
     if (duplicateUser || duplicateClient || duplicateNitClient) {
@@ -575,7 +601,7 @@ class EventAppRepository {
       phone: payload.phone,
       whatsappPhone: payload.whatsappPhone || payload.phone,
       email: payload.email || null,
-      isActive: true,
+      isActive: currentClient.isActive !== false,
     };
 
     const updatedRecord = sanitizeClientRecord({ client: this.db.clients[clientIndex], user: this.db.users[userIndex] });
@@ -642,6 +668,7 @@ class EventAppRepository {
       phone: payload.phone,
       rating: 5,
       photo: DEFAULT_PROFILE_PHOTO,
+      isActive: true,
       city: city.name,
     });
 
@@ -722,6 +749,7 @@ class EventAppRepository {
       cedula: payload.cedula,
       address: payload.address,
       phone: payload.phone,
+      isActive: currentCoordinator.isActive !== false,
       city: city.name,
     });
 
@@ -775,6 +803,7 @@ class EventAppRepository {
       city: city.name,
       category: categoryRecord.name,
       photo: payload.photo || DEFAULT_PROFILE_PHOTO,
+      isActive: true,
       clothingSize: payload.clothingSize || null,
       shoeSize: payload.shoeSize || null,
       measurements: payload.measurements || null,
@@ -833,6 +862,7 @@ class EventAppRepository {
       city: city.name,
       category: categoryRecord.name,
       photo: payload.photo || this.db.staff[staffIndex].photo,
+      isActive: this.db.staff[staffIndex].isActive !== false,
       clothingSize: payload.clothingSize || null,
       shoeSize: payload.shoeSize || null,
       measurements: payload.measurements || null,
@@ -897,7 +927,7 @@ class EventAppRepository {
       return [];
     }
 
-    const clientProfile = this.db.clients.find((client) => Number(client.userId) === normalizedUserId) || null;
+    const clientProfile = this.db.clients.find((client) => Number(client.userId) === normalizedUserId && client.isActive !== false) || null;
 
     return this.getEvents()
       .filter((event) => Number(event.clientUserId) === normalizedUserId || (clientProfile && Number(event.clientId) === Number(clientProfile.id)))
@@ -965,6 +995,114 @@ class EventAppRepository {
 
     this.save();
     return enrichEventLifecycle(normalizeEvent(this.db.events[eventIndex], this.getClients()));
+  }
+
+  inactivateClient(clientId, { actorUserId }) {
+    const normalizedClientId = Number(clientId);
+    const clientIndex = this.db.clients.findIndex((client) => Number(client.id) === normalizedClientId);
+    if (clientIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentClient = this.db.clients[clientIndex];
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(currentClient.userId));
+    if (userIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const previousRecord = sanitizeClientRecord({ client: currentClient, user: this.db.users[userIndex] });
+
+    this.db.users[userIndex] = {
+      ...this.db.users[userIndex],
+      isActive: false,
+    };
+    this.db.clients[clientIndex] = {
+      ...this.db.clients[clientIndex],
+      isActive: false,
+    };
+
+    const updatedRecord = sanitizeClientRecord({ client: this.db.clients[clientIndex], user: this.db.users[userIndex] });
+    this.#recordAuditLog({
+      actorUserId,
+      entityType: 'client',
+      entityId: normalizedClientId,
+      action: 'inactivate',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
+  }
+
+  inactivateCoordinator(coordinatorId, { actorUserId }) {
+    const normalizedCoordinatorId = Number(coordinatorId);
+    const coordinatorIndex = this.db.coordinators.findIndex((coordinator) => Number(coordinator.id) === normalizedCoordinatorId);
+    if (coordinatorIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentCoordinator = this.db.coordinators[coordinatorIndex];
+    const linkedUser = currentCoordinator.userId ? this.findUserById(currentCoordinator.userId) : null;
+    const previousRecord = sanitizeCoordinatorAdminRecord({ coordinator: currentCoordinator, user: linkedUser });
+
+    if (linkedUser) {
+      const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(linkedUser.id));
+      if (userIndex !== -1) {
+        this.db.users[userIndex] = {
+          ...this.db.users[userIndex],
+          isActive: false,
+        };
+      }
+    }
+
+    this.db.coordinators[coordinatorIndex] = normalizeCoordinator({
+      ...this.db.coordinators[coordinatorIndex],
+      isActive: false,
+    });
+
+    const updatedRecord = sanitizeCoordinatorAdminRecord({
+      coordinator: this.db.coordinators[coordinatorIndex],
+      user: currentCoordinator.userId ? this.findUserById(currentCoordinator.userId) : null,
+    });
+    this.#recordAuditLog({
+      actorUserId,
+      entityType: 'coordinator',
+      entityId: normalizedCoordinatorId,
+      action: 'inactivate',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
+  }
+
+  inactivateStaff(staffId, { actorUserId }) {
+    const normalizedStaffId = Number(staffId);
+    const staffIndex = this.db.staff.findIndex((staffMember) => Number(staffMember.id) === normalizedStaffId);
+    if (staffIndex === -1) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const previousRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
+    this.db.staff[staffIndex] = normalizeStaffMember({
+      ...this.db.staff[staffIndex],
+      isActive: false,
+    });
+
+    const updatedRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
+    this.#recordAuditLog({
+      actorUserId,
+      entityType: 'staff',
+      entityId: normalizedStaffId,
+      action: 'inactivate',
+      previousValues: previousRecord,
+      newValues: updatedRecord,
+    });
+    this.save();
+
+    return updatedRecord;
   }
 
   addCoordinatorPhoto(id, { authorUserId, uri, mimeType, fileSize, fileName }) {

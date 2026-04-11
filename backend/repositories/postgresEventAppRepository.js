@@ -260,7 +260,7 @@ class PostgresEventAppRepository {
     };
   }
 
-  async getClients({ search } = {}) {
+  async getClients({ search, includeInactive = false } = {}) {
     const normalizedSearch = normalizeString(search);
     const searchPattern = normalizedSearch ? `%${normalizedSearch.toLowerCase()}%` : null;
     const result = await query(
@@ -272,22 +272,23 @@ class PostgresEventAppRepository {
                COALESCE(c.email, u.email) AS email,
                COALESCE(c.is_active, u.is_active) AS "isActive",
                u.id, u.username, u.full_name AS "userFullName", u.phone AS "userPhone",
-               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
+               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail", u.is_active AS "userIsActive"
          FROM users u
          INNER JOIN roles r ON r.id = u.role_id
          LEFT JOIN clients c ON c.user_id = u.id
-         WHERE r.code = 'CLIENTE' AND u.is_active = TRUE AND COALESCE(c.is_active, TRUE) = TRUE
-           AND (
-             $1::text IS NULL
-             OR LOWER(COALESCE(c.razon_social, u.full_name)) LIKE $2
-             OR LOWER(COALESCE(c.contact_full_name, u.full_name)) LIKE $2
-             OR LOWER(COALESCE(u.username, '')) LIKE $2
-             OR LOWER(COALESCE(c.email, u.email, '')) LIKE $2
-             OR LOWER(COALESCE(c.nit, '')) LIKE $2
-           )
-         ORDER BY COALESCE(c.razon_social, u.full_name) ASC, COALESCE(c.id, u.id) ASC
-      `,
-      [normalizedSearch || null, searchPattern],
+          WHERE r.code = 'CLIENTE'
+            AND ($1::boolean = TRUE OR (u.is_active = TRUE AND COALESCE(c.is_active, TRUE) = TRUE))
+            AND (
+              $2::text IS NULL
+              OR LOWER(COALESCE(c.razon_social, u.full_name)) LIKE $3
+              OR LOWER(COALESCE(c.contact_full_name, u.full_name)) LIKE $3
+              OR LOWER(COALESCE(u.username, '')) LIKE $3
+              OR LOWER(COALESCE(c.email, u.email, '')) LIKE $3
+              OR LOWER(COALESCE(c.nit, '')) LIKE $3
+            )
+          ORDER BY COALESCE(c.razon_social, u.full_name) ASC, COALESCE(c.id, u.id) ASC
+       `,
+      [includeInactive, normalizedSearch || null, searchPattern],
     );
 
     return result.rows.map((row) => sanitizeClientRecord({
@@ -310,13 +311,13 @@ class PostgresEventAppRepository {
         phone: row.userPhone,
         whatsappPhone: row.userWhatsappPhone,
         email: row.userEmail,
-        isActive: row.isActive,
+        isActive: row.userIsActive,
       },
     }));
   }
 
-  async getAdminClients() {
-    return this.getClients();
+  async getAdminClients({ search } = {}) {
+    return this.getClients({ search, includeInactive: true });
   }
 
   async findAdminClientByNit(nit) {
@@ -325,7 +326,7 @@ class PostgresEventAppRepository {
       return null;
     }
 
-    const clients = await this.getClients();
+    const clients = await this.getAdminClients();
     return clients.find((client) => isNitEquivalent(client.nit, normalizedNit)) || null;
   }
 
@@ -371,8 +372,8 @@ class PostgresEventAppRepository {
   async getAdminCoordinators() {
     const result = await query(
       `
-        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.name AS city,
-               u.id AS user_id_ref, u.username, u.whatsapp_phone AS "whatsappPhone", u.email
+        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, c.is_active AS "isActive", ci.name AS city,
+               u.id AS user_id_ref, u.username, u.whatsapp_phone AS "whatsappPhone", u.email, u.is_active AS "userIsActive"
         FROM coordinators c
         INNER JOIN cities ci ON ci.id = c.city_id
         LEFT JOIN users u ON u.id = c.user_id
@@ -382,19 +383,20 @@ class PostgresEventAppRepository {
 
     return result.rows.map((row) => sanitizeCoordinatorAdminRecord({
       coordinator: row,
-      user: row.username ? {
-        id: row.user_id_ref,
-        username: row.username,
-        whatsappPhone: row.whatsappPhone,
-        email: row.email,
-      } : null,
-    }));
+        user: row.username ? {
+          id: row.user_id_ref,
+          username: row.username,
+          whatsappPhone: row.whatsappPhone,
+          email: row.email,
+          isActive: row.userIsActive,
+        } : null,
+      }));
   }
 
   async getAdminStaff() {
     const result = await query(
       `
-        SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo,
+        SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
                s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
@@ -414,10 +416,13 @@ class PostgresEventAppRepository {
 
     const coordinatorResult = await query(
       `
-        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.name AS city
+        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, c.is_active AS "isActive", ci.name AS city
         FROM coordinators c
         INNER JOIN cities ci ON ci.id = c.city_id
-        WHERE c.user_id = $1 OR c.id = $1
+        LEFT JOIN users u ON u.id = c.user_id
+        WHERE (c.user_id = $1 OR c.id = $1)
+          AND c.is_active = TRUE
+          AND COALESCE(u.is_active, TRUE) = TRUE
         ORDER BY CASE WHEN c.user_id = $1 THEN 0 ELSE 1 END, c.id ASC
         LIMIT 1
       `,
@@ -430,10 +435,13 @@ class PostgresEventAppRepository {
   async getCoordinators({ city } = {}) {
     const result = await query(
       `
-        SELECT c.id, c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.name AS city
+        SELECT c.id, c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, c.is_active AS "isActive", ci.name AS city
         FROM coordinators c
         INNER JOIN cities ci ON ci.id = c.city_id
+        LEFT JOIN users u ON u.id = c.user_id
         WHERE ($1::text IS NULL OR LOWER(ci.name) = LOWER($1))
+          AND c.is_active = TRUE
+          AND COALESCE(u.is_active, TRUE) = TRUE
         ORDER BY c.full_name ASC
       `,
       [normalizeString(city) || null],
@@ -487,12 +495,13 @@ class PostgresEventAppRepository {
 
     const result = await query(
       `
-        SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo,
+        SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
                s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE ($1::text IS NULL OR LOWER(ci.name) = LOWER($1))
           AND ($2::text IS NULL OR UPPER(s.category) = UPPER($2))
+          AND s.is_active = TRUE
         ORDER BY s.full_name ASC
       `,
       [normalizeString(city) || null, normalizeString(category) || null],
@@ -618,7 +627,7 @@ class PostgresEventAppRepository {
                c.contact_full_name AS "contactFullName", c.contact_role AS "contactRole",
                c.phone, c.whatsapp_phone AS "whatsappPhone", c.email, c.is_active AS "isActive",
                u.id, u.username, u.full_name AS "fullName", u.phone AS "userPhone",
-               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
+               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail", u.is_active AS "userIsActive"
         FROM clients c
         INNER JOIN users u ON u.id = c.user_id
         WHERE c.id = $1
@@ -682,7 +691,7 @@ class PostgresEventAppRepository {
         phone: currentRow.userPhone,
         whatsappPhone: currentRow.userWhatsappPhone,
         email: currentRow.userEmail,
-        isActive: currentRow.isActive,
+        isActive: currentRow.userIsActive,
       },
     });
 
@@ -701,7 +710,7 @@ class PostgresEventAppRepository {
               email = $6,
               updated_at = NOW()
           WHERE id = $1
-          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
         `,
         [currentRow.userId, payload.username, payload.contactFullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
       );
@@ -716,14 +725,14 @@ class PostgresEventAppRepository {
               phone = $6,
               whatsapp_phone = $7,
               email = $8,
-              is_active = TRUE,
+              is_active = $9,
               updated_at = NOW()
           WHERE id = $1
           RETURNING id, user_id AS "userId", razon_social AS "razonSocial", nit,
                     contact_full_name AS "contactFullName", contact_role AS "contactRole",
                     phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
         `,
-        [normalizedClientId, payload.razonSocial, payload.nit, payload.contactFullName, payload.contactRole, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
+        [normalizedClientId, payload.razonSocial, payload.nit, payload.contactFullName, payload.contactRole, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, currentRow.isActive !== false],
       );
 
       const updatedRecord = sanitizeClientRecord({ client: clientResult.rows[0], user: userResult.rows[0] });
@@ -790,16 +799,16 @@ class PostgresEventAppRepository {
         `
           INSERT INTO users (username, full_name, phone, whatsapp_phone, email, password_hash, role_id, is_active)
           VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM roles WHERE code = 'COORDINADOR'), TRUE)
-          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
         `,
         [payload.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null, createPasswordHash(payload.password)],
       );
 
       const coordinatorResult = await client.query(
         `
-          INSERT INTO coordinators (user_id, full_name, cedula, address, phone, rating, photo, city_id)
-          VALUES ($1, $2, $3, $4, $5, 5, $6, $7)
-          RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo
+          INSERT INTO coordinators (user_id, full_name, cedula, address, phone, rating, photo, is_active, city_id)
+          VALUES ($1, $2, $3, $4, $5, 5, $6, TRUE, $7)
+          RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo, is_active AS "isActive"
         `,
         [userResult.rows[0].id, payload.fullName, payload.cedula, payload.address, payload.phone, DEFAULT_PROFILE_PHOTO, cityResult.rows[0].id],
       );
@@ -831,9 +840,9 @@ class PostgresEventAppRepository {
     const normalizedCoordinatorId = Number(coordinatorId);
     const currentCoordinatorResult = await query(
       `
-        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, ci.id AS "cityId", ci.name AS city,
-               u.id AS "linkedUserId", u.username, u.full_name AS "userFullName", u.phone AS "userPhone",
-               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail"
+         SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, c.is_active AS "isActive", ci.id AS "cityId", ci.name AS city,
+                u.id AS "linkedUserId", u.username, u.full_name AS "userFullName", u.phone AS "userPhone",
+                u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail", u.is_active AS "userIsActive"
         FROM coordinators c
         INNER JOIN cities ci ON ci.id = c.city_id
         LEFT JOIN users u ON u.id = c.user_id
@@ -894,15 +903,16 @@ class PostgresEventAppRepository {
 
     const previousRecord = sanitizeCoordinatorAdminRecord({
       coordinator: currentRow,
-      user: currentRow.linkedUserId ? {
-        id: currentRow.linkedUserId,
-        username: currentRow.username,
-        fullName: currentRow.userFullName,
-        phone: currentRow.userPhone,
-        whatsappPhone: currentRow.userWhatsappPhone,
-        email: currentRow.userEmail,
-      } : null,
-    });
+        user: currentRow.linkedUserId ? {
+          id: currentRow.linkedUserId,
+          username: currentRow.username,
+          fullName: currentRow.userFullName,
+          phone: currentRow.userPhone,
+          whatsappPhone: currentRow.userWhatsappPhone,
+          email: currentRow.userEmail,
+          isActive: currentRow.userIsActive,
+        } : null,
+      });
 
     const client = await pool.connect();
 
@@ -921,7 +931,7 @@ class PostgresEventAppRepository {
                 email = $6,
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+            RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
           `,
           [currentRow.linkedUserId, payload.username || currentRow.username, payload.fullName, payload.phone, payload.whatsappPhone || payload.phone, payload.email || null],
         );
@@ -936,11 +946,12 @@ class PostgresEventAppRepository {
               address = $4,
               phone = $5,
               city_id = $6,
+              is_active = $7,
               updated_at = NOW()
-          WHERE id = $1
-          RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo
+            WHERE id = $1
+            RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo, is_active AS "isActive"
         `,
-        [normalizedCoordinatorId, payload.fullName, payload.cedula, payload.address, payload.phone, cityResult.rows[0].id],
+        [normalizedCoordinatorId, payload.fullName, payload.cedula, payload.address, payload.phone, cityResult.rows[0].id, currentRow.isActive !== false],
       );
 
       const updatedRecord = sanitizeCoordinatorAdminRecord({
@@ -1001,9 +1012,9 @@ class PostgresEventAppRepository {
 
       const result = await client.query(
         `
-          INSERT INTO staff (full_name, cedula, city_id, category, photo, clothing_size, shoe_size, measurements)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          INSERT INTO staff (full_name, cedula, city_id, category, photo, is_active, clothing_size, shoe_size, measurements)
+          VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8)
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
         [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
       );
@@ -1032,7 +1043,7 @@ class PostgresEventAppRepository {
     const normalizedStaffId = Number(staffId);
     const currentStaffResult = await query(
       `
-        SELECT s.id, s.full_name AS name, s.cedula, ci.id AS "cityId", ci.name AS city, s.category, s.photo,
+        SELECT s.id, s.full_name AS name, s.cedula, ci.id AS "cityId", ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
                s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
@@ -1091,15 +1102,16 @@ class PostgresEventAppRepository {
               cedula = $3,
               city_id = $4,
               category = $5,
-              clothing_size = $6,
-              shoe_size = $7,
-              measurements = $8,
-              photo = $9,
+              is_active = $6,
+              clothing_size = $7,
+              shoe_size = $8,
+              measurements = $9,
+              photo = $10,
               updated_at = NOW()
           WHERE id = $1
-          RETURNING id, full_name AS name, cedula, category, photo, clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null, payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
+        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, currentRow.isActive !== false, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null, payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
       );
 
       const updatedRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
@@ -1365,7 +1377,8 @@ class PostgresEventAppRepository {
       `
         SELECT c.id AS "clientId", c.user_id AS "userId"
         FROM clients c
-        WHERE c.user_id = $1 AND c.is_active = TRUE
+        INNER JOIN users u ON u.id = c.user_id
+        WHERE c.user_id = $1 AND c.is_active = TRUE AND u.is_active = TRUE
         LIMIT 1
       `,
       [normalizedUserId],
@@ -1378,7 +1391,7 @@ class PostgresEventAppRepository {
     const normalizedClientId = Number(clientId);
     if (Number.isInteger(normalizedClientId) && normalizedClientId > 0) {
       const result = await query(
-        'SELECT id AS "clientId", user_id AS "userId" FROM clients WHERE id = $1 AND is_active = TRUE LIMIT 1',
+        'SELECT c.id AS "clientId", c.user_id AS "userId" FROM clients c INNER JOIN users u ON u.id = c.user_id WHERE c.id = $1 AND c.is_active = TRUE AND u.is_active = TRUE LIMIT 1',
         [normalizedClientId],
       );
       if (result.rows[0]) {
@@ -1387,6 +1400,241 @@ class PostgresEventAppRepository {
     }
 
     return this.findClientByUserId(clientUserId);
+  }
+
+  async inactivateClient(clientId, { actorUserId }) {
+    const normalizedClientId = Number(clientId);
+    const currentClientResult = await query(
+      `
+        SELECT c.id AS "clientId", c.user_id AS "userId", c.razon_social AS "razonSocial", c.nit,
+               c.contact_full_name AS "contactFullName", c.contact_role AS "contactRole",
+               c.phone, c.whatsapp_phone AS "whatsappPhone", c.email, c.is_active AS "isActive",
+               u.id, u.username, u.full_name AS "fullName", u.phone AS "userPhone",
+               u.whatsapp_phone AS "userWhatsappPhone", u.email AS "userEmail", u.is_active AS "userIsActive"
+        FROM clients c
+        INNER JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [normalizedClientId],
+    );
+
+    if (currentClientResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentRow = currentClientResult.rows[0];
+    const previousRecord = sanitizeClientRecord({
+      client: {
+        id: currentRow.clientId,
+        userId: currentRow.userId,
+        razonSocial: currentRow.razonSocial,
+        nit: currentRow.nit,
+        contactFullName: currentRow.contactFullName,
+        contactRole: currentRow.contactRole,
+        phone: currentRow.phone,
+        whatsappPhone: currentRow.whatsappPhone,
+        email: currentRow.email,
+        isActive: currentRow.isActive,
+      },
+      user: {
+        id: currentRow.id,
+        username: currentRow.username,
+        fullName: currentRow.fullName,
+        phone: currentRow.userPhone,
+        whatsappPhone: currentRow.userWhatsappPhone,
+        email: currentRow.userEmail,
+        isActive: currentRow.userIsActive,
+      },
+    });
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `
+          UPDATE users
+          SET is_active = FALSE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [currentRow.userId],
+      );
+
+      const clientResult = await client.query(
+        `
+          UPDATE clients
+          SET is_active = FALSE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, user_id AS "userId", razon_social AS "razonSocial", nit,
+                    contact_full_name AS "contactFullName", contact_role AS "contactRole",
+                    phone, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+        `,
+        [normalizedClientId],
+      );
+
+      const updatedRecord = sanitizeClientRecord({ client: clientResult.rows[0], user: userResult.rows[0] });
+      await this.#insertAuditLog(client, {
+        actorUserId,
+        entityType: 'client',
+        entityId: normalizedClientId,
+        action: 'inactivate',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async inactivateCoordinator(coordinatorId, { actorUserId }) {
+    const normalizedCoordinatorId = Number(coordinatorId);
+    const currentCoordinatorResult = await query(
+      `
+        SELECT c.id, c.user_id AS "userId", c.full_name AS name, c.cedula, c.address, c.phone, c.rating, c.photo, c.is_active AS "isActive", ci.name AS city,
+               u.id AS "linkedUserId", u.username, u.whatsapp_phone AS "whatsappPhone", u.email, u.is_active AS "userIsActive"
+        FROM coordinators c
+        INNER JOIN cities ci ON ci.id = c.city_id
+        LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [normalizedCoordinatorId],
+    );
+
+    if (currentCoordinatorResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const currentRow = currentCoordinatorResult.rows[0];
+    const previousRecord = sanitizeCoordinatorAdminRecord({
+      coordinator: currentRow,
+      user: currentRow.linkedUserId ? {
+        id: currentRow.linkedUserId,
+        username: currentRow.username,
+        whatsappPhone: currentRow.whatsappPhone,
+        email: currentRow.email,
+        isActive: currentRow.userIsActive,
+      } : null,
+    });
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      let updatedUser = null;
+      if (currentRow.linkedUserId) {
+        const userResult = await client.query(
+          `
+            UPDATE users
+            SET is_active = FALSE,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, username, whatsapp_phone AS "whatsappPhone", email, is_active AS "isActive"
+          `,
+          [currentRow.linkedUserId],
+        );
+        updatedUser = userResult.rows[0] || null;
+      }
+
+      const coordinatorResult = await client.query(
+        `
+          UPDATE coordinators
+          SET is_active = FALSE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo, is_active AS "isActive"
+        `,
+        [normalizedCoordinatorId],
+      );
+
+      const updatedRecord = sanitizeCoordinatorAdminRecord({
+        coordinator: { ...coordinatorResult.rows[0], city: currentRow.city },
+        user: updatedUser,
+      });
+      await this.#insertAuditLog(client, {
+        actorUserId,
+        entityType: 'coordinator',
+        entityId: normalizedCoordinatorId,
+        action: 'inactivate',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async inactivateStaff(staffId, { actorUserId }) {
+    const normalizedStaffId = Number(staffId);
+    const currentStaffResult = await query(
+      `
+        SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
+               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+        FROM staff s
+        INNER JOIN cities ci ON ci.id = s.city_id
+        WHERE s.id = $1
+        LIMIT 1
+      `,
+      [normalizedStaffId],
+    );
+
+    if (currentStaffResult.rowCount === 0) {
+      return { errorCode: 'NOT_FOUND' };
+    }
+
+    const previousRecord = sanitizeStaffAdminRecord(currentStaffResult.rows[0]);
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const staffResult = await client.query(
+        `
+          UPDATE staff
+          SET is_active = FALSE,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+        `,
+        [normalizedStaffId],
+      );
+
+      const updatedRecord = sanitizeStaffAdminRecord({ ...staffResult.rows[0], city: currentStaffResult.rows[0].city });
+      await this.#insertAuditLog(client, {
+        actorUserId,
+        entityType: 'staff',
+        entityId: normalizedStaffId,
+        action: 'inactivate',
+        previousValues: previousRecord,
+        newValues: updatedRecord,
+      });
+
+      await client.query('COMMIT');
+      return updatedRecord;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async addCoordinatorPhoto(id, { authorUserId, uri, mimeType, fileSize, fileName }) {
