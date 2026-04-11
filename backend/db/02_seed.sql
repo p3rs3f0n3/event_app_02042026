@@ -107,19 +107,21 @@ ON CONFLICT (cedula) DO UPDATE SET
   city_id = EXCLUDED.city_id,
   updated_at = NOW();
 
-INSERT INTO staff (full_name, cedula, city_id, category, photo, clothing_size, shoe_size, measurements)
+INSERT INTO staff (full_name, cedula, city_id, category, photo, shirt_size, pants_size, clothing_size, shoe_size, measurements)
 VALUES
-  ('Juan Perez', '10101010', (SELECT id FROM cities WHERE name = 'Bogotá'), 'BARISTAS', 'https://i.pravatar.cc/150?u=juan', 'S', '38', '90-70-90'),
-  ('Maria Lopez', '20202020', (SELECT id FROM cities WHERE name = 'Bogotá'), 'IMPULSADORES', 'https://i.pravatar.cc/150?u=maria', 'M', '36', '85-60-85'),
-  ('Carlos Ruiz', '30303030', (SELECT id FROM cities WHERE name = 'Bogotá'), 'LOGISTICOS', 'https://i.pravatar.cc/150?u=carlos', 'X', '42', 'N/A'),
-  ('Diana Torres', '60606060', (SELECT id FROM cities WHERE name = 'Medellín'), 'BARISTAS', 'https://i.pravatar.cc/150?u=diana', 'XS', '35', '80-55-80'),
-  ('Pedro Solo', '70707070', (SELECT id FROM cities WHERE name = 'Medellín'), 'IMPULSADORES', 'https://i.pravatar.cc/150?u=pedro', 'L', '41', 'N/A'),
-  ('Elena Nito', '80808080', (SELECT id FROM cities WHERE name = 'Medellín'), 'LOGISTICOS', 'https://i.pravatar.cc/150?u=elena', 'S', '37', '88-62-88')
+  ('Juan Perez', '10101010', (SELECT id FROM cities WHERE name = 'Bogotá'), 'BARISTAS', 'https://i.pravatar.cc/150?u=juan', 'S', 'S', 'S', '38', '90-70-90'),
+  ('Maria Lopez', '20202020', (SELECT id FROM cities WHERE name = 'Bogotá'), 'IMPULSADORES', 'https://i.pravatar.cc/150?u=maria', 'M', 'M', 'M', '36', '85-60-85'),
+  ('Carlos Ruiz', '30303030', (SELECT id FROM cities WHERE name = 'Bogotá'), 'LOGISTICOS', 'https://i.pravatar.cc/150?u=carlos', 'X', 'X', 'X', '42', 'N/A'),
+  ('Diana Torres', '60606060', (SELECT id FROM cities WHERE name = 'Medellín'), 'BARISTAS', 'https://i.pravatar.cc/150?u=diana', 'XS', 'XS', 'XS', '35', '80-55-80'),
+  ('Pedro Solo', '70707070', (SELECT id FROM cities WHERE name = 'Medellín'), 'IMPULSADORES', 'https://i.pravatar.cc/150?u=pedro', 'L', 'L', 'L', '41', 'N/A'),
+  ('Elena Nito', '80808080', (SELECT id FROM cities WHERE name = 'Medellín'), 'LOGISTICOS', 'https://i.pravatar.cc/150?u=elena', 'S', 'S', 'S', '37', '88-62-88')
 ON CONFLICT (cedula) DO UPDATE SET
   full_name = EXCLUDED.full_name,
   city_id = EXCLUDED.city_id,
   category = EXCLUDED.category,
   photo = EXCLUDED.photo,
+  shirt_size = EXCLUDED.shirt_size,
+  pants_size = EXCLUDED.pants_size,
   clothing_size = EXCLUDED.clothing_size,
   shoe_size = EXCLUDED.shoe_size,
   measurements = EXCLUDED.measurements,

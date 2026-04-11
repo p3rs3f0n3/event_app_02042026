@@ -64,10 +64,19 @@ const INITIAL_STAFF_FORM = {
   cedula: '',
   city: '',
   category: '',
-  clothingSize: '',
+  sexo: '',
+  shirtSize: '',
+  pantsSize: '',
   shoeSize: '',
-  measurements: '',
+  busto: '',
+  cintura: '',
+  cadera: '',
 };
+
+const STAFF_SEXO_OPTIONS = [
+  { value: 'mujer', label: 'Mujer' },
+  { value: 'hombre', label: 'Hombre' },
+];
 
 const TABS = [
   { key: 'clients', label: 'Clientes' },
@@ -115,8 +124,22 @@ const normalizeDocumentSearchValue = (value) => String(value || '').trim();
 const normalizeCategoryValue = (value) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
 const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '').slice(0, 10);
 const normalizeEmailValue = (value) => String(value || '').trim().toLowerCase();
+const normalizeStaffSizeInputValue = (value) => String(value || '').replace(/[^A-Za-z0-9./\-\s]/g, '').slice(0, 10);
 const isValidEmailValue = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const hasTextValue = (value) => String(value || '').trim().length > 0;
+const isValidStaffMeasurementValue = (value) => !value || /^\d{1,3}([.,]\d{1,2})?$/.test(String(value || '').trim());
+
+const getStaffSizeSummary = (staffMember) => {
+  const shirtSize = staffMember?.shirtSize || staffMember?.clothingSize || 'N/D';
+  const pantsSize = staffMember?.pantsSize || staffMember?.clothingSize || 'N/D';
+  const shoeSize = staffMember?.shoeSize || 'N/D';
+
+  if (shirtSize === 'N/D' && pantsSize === 'N/D' && shoeSize === 'N/D') {
+    return 'Sin talles cargados';
+  }
+
+  return `Camisa ${shirtSize} · Pantalón ${pantsSize} · Calzado ${shoeSize}`;
+};
 
 const getClientCreateValidationMessage = (form) => {
   if (!hasTextValue(form.nit)) return 'El NIT es obligatorio en el alta.';
@@ -141,6 +164,25 @@ const getCoordinatorCreateValidationMessage = (form) => {
   if (!hasTextValue(form.city)) return 'La ciudad es obligatoria en el alta.';
   if (!hasTextValue(form.username)) return 'El usuario es obligatorio en el alta.';
   if (!hasTextValue(form.password)) return 'La contraseña es obligatoria en el alta.';
+  return null;
+};
+
+const getStaffValidationMessage = (form) => {
+  if (!hasTextValue(form.cedula)) return 'La cédula es obligatoria.';
+  if (!hasTextValue(form.fullName)) return 'El nombre completo es obligatorio.';
+  if (!hasTextValue(form.city)) return 'La ciudad es obligatoria.';
+  if (!hasTextValue(form.category)) return 'La categoría es obligatoria.';
+  if (!hasTextValue(form.sexo)) return 'El sexo es obligatorio.';
+
+  if (form.sexo === 'mujer') {
+    if (!hasTextValue(form.busto)) return 'El busto es obligatorio cuando el sexo es mujer.';
+    if (!hasTextValue(form.cintura)) return 'La cintura es obligatoria cuando el sexo es mujer.';
+    if (!hasTextValue(form.cadera)) return 'La cadera es obligatoria cuando el sexo es mujer.';
+    if (!isValidStaffMeasurementValue(form.busto)) return 'El busto debe ser una medida simple válida.';
+    if (!isValidStaffMeasurementValue(form.cintura)) return 'La cintura debe ser una medida simple válida.';
+    if (!isValidStaffMeasurementValue(form.cadera)) return 'La cadera debe ser una medida simple válida.';
+  }
+
   return null;
 };
 
@@ -173,9 +215,13 @@ const buildStaffFormFromRecord = (staffMember) => ({
   cedula: staffMember?.cedula || '',
   city: staffMember?.city || '',
   category: staffMember?.category || '',
-  clothingSize: staffMember?.clothingSize || '',
+  sexo: staffMember?.sexo || '',
+  shirtSize: staffMember?.shirtSize || staffMember?.clothingSize || '',
+  pantsSize: staffMember?.pantsSize || staffMember?.clothingSize || '',
   shoeSize: staffMember?.shoeSize || '',
-  measurements: staffMember?.measurements || '',
+  busto: staffMember?.busto || '',
+  cintura: staffMember?.cintura || '',
+  cadera: staffMember?.cadera || '',
 });
 
 const getStaffPhotoPreviewUri = ({ draftPhoto, staffLookup }) => draftPhoto?.uri || staffLookup.result?.photo || null;
@@ -278,6 +324,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const isEditingClient = clientLookup.status === 'exists' && Boolean(clientLookup.result?.clientId);
   const isEditingCoordinator = coordinatorLookup.status === 'exists' && Boolean(coordinatorLookup.result?.id);
   const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
+  const shouldRequestDetailedMeasurements = staffForm.sexo === 'mujer';
   const canEditCoordinatorUserFields = !isEditingCoordinator || Boolean(coordinatorLookup.result?.userId);
   const staffPhotoPreviewUri = getStaffPhotoPreviewUri({ draftPhoto: staffPhotoDraft, staffLookup });
   const inactiveCounts = useMemo(() => ({
@@ -840,7 +887,28 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     applyFeedback('success', isEditingStaff ? 'Se descartó el cambio de foto pendiente.' : 'Se quitó la foto seleccionada.');
   };
 
+  const handleStaffSexoChange = (sexo) => {
+    setStaffForm((current) => ({
+      ...current,
+      sexo,
+      busto: sexo === 'mujer' ? current.busto : '',
+      cintura: sexo === 'mujer' ? current.cintura : '',
+      cadera: sexo === 'mujer' ? current.cadera : '',
+    }));
+  };
+
+  const handleStaffMeasurementChange = (field, value) => {
+    const normalizedValue = String(value || '').replace(/[^\d.,]/g, '').slice(0, 6);
+    setStaffForm((current) => ({ ...current, [field]: normalizedValue }));
+  };
+
   const submitStaff = async () => {
+    const validationMessage = getStaffValidationMessage(staffForm);
+    if (validationMessage) {
+      applyFeedback('error', validationMessage);
+      return;
+    }
+
     setSaving(true);
     try {
       const editingStaffId = Number(staffLookup.result?.id || 0);
@@ -1188,8 +1256,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
                 <StatusBadge label={getEntityStatusLabel(staffLookup.result)} tone={getEntityStatusTone(staffLookup.result)} />
                 <Text style={styles.listTitle}>{staffLookup.result.fullName}</Text>
                 <Text style={styles.listMeta}>{staffLookup.result.city} · {staffLookup.result.category}</Text>
-                <Text style={styles.listMeta}>{staffLookup.result.cedula}</Text>
-                <Text style={styles.listMeta}>{staffLookup.result.clothingSize || staffLookup.result.shoeSize || 'Sin talles cargados'}</Text>
+                <Text style={styles.listMeta}>{staffLookup.result.cedula} · Sexo: {staffLookup.result.sexo || 'Sin dato'}</Text>
+                <Text style={styles.listMeta}>{getStaffSizeSummary(staffLookup.result)}</Text>
               </View>
             ) : null}
           </View>
@@ -1228,9 +1296,33 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <InputRow label="Ciudad" value={staffForm.city} onPress={() => openCityPicker('staff')} placeholder="Seleccionar ciudad" />
         <InputRow label="Categoría" value={staffForm.category} onPress={openCategoryPicker} placeholder="Buscar o crear categoría" />
         <Text style={styles.categoryHelperText}>Usamos un catálogo administrable: buscas la categoría y, si no existe, la creas desde el mismo flujo.</Text>
-        <InputRow label="Talla de ropa" value={staffForm.clothingSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, clothingSize: value }))} placeholder="S, M, L..." />
+        <View style={stylesShared.fieldWrap}>
+          <Text style={stylesShared.fieldLabel}>Sexo</Text>
+          <View style={styles.segmentedRow}>
+            {STAFF_SEXO_OPTIONS.map((option) => {
+              const isSelected = staffForm.sexo === option.value;
+              return (
+                <Pressable key={option.value} style={[styles.segmentedButton, isSelected ? styles.segmentedButtonActive : null]} onPress={() => handleStaffSexoChange(option.value)}>
+                  <Text style={[styles.segmentedButtonText, isSelected ? styles.segmentedButtonTextActive : null]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+        <InputRow label="Talla de camisa" value={staffForm.shirtSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, shirtSize: normalizeStaffSizeInputValue(value) }))} placeholder="S, M, L..." />
+        <InputRow label="Talla de pantalón" value={staffForm.pantsSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, pantsSize: normalizeStaffSizeInputValue(value) }))} placeholder="S, M, L..." />
         <InputRow label="Talla de calzado" value={staffForm.shoeSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, shoeSize: value }))} placeholder="36, 37, 38..." />
-        <InputRow label="Medidas" value={staffForm.measurements} onChangeText={(value) => setStaffForm((current) => ({ ...current, measurements: value }))} placeholder="Opcional" />
+        {shouldRequestDetailedMeasurements ? (
+          <>
+            <InputRow label="Busto" value={staffForm.busto} onChangeText={(value) => handleStaffMeasurementChange('busto', value)} placeholder="90" keyboardType="decimal-pad" maxLength={6} />
+            <InputRow label="Cintura" value={staffForm.cintura} onChangeText={(value) => handleStaffMeasurementChange('cintura', value)} placeholder="60" keyboardType="decimal-pad" maxLength={6} />
+            <InputRow label="Cadera" value={staffForm.cadera} onChangeText={(value) => handleStaffMeasurementChange('cadera', value)} placeholder="90" keyboardType="decimal-pad" maxLength={6} />
+          </>
+        ) : (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>Las medidas detalladas solo se solicitan cuando el sexo es mujer.</Text>
+          </View>
+        )}
         <View style={styles.formActionsRow}>
           {isEditingStaff ? <AppButton title="CANCELAR" variant="secondary" style={styles.formActionButton} onPress={resetStaffForm} disabled={saving} /> : null}
           <AppButton title={saving ? 'GUARDANDO...' : isEditingStaff ? 'ACTUALIZAR' : 'CREAR STAFF'} style={styles.formActionButton} onPress={submitStaff} disabled={saving} />
@@ -1264,8 +1356,9 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
               <StatusBadge label={getEntityStatusLabel(staffLookup.result)} tone={getEntityStatusTone(staffLookup.result)} />
               <Text style={styles.listTitle}>{staffLookup.result.fullName}</Text>
               <Text style={styles.listMeta}>{staffLookup.result.city} · {staffLookup.result.category}</Text>
-              <Text style={styles.listMeta}>{staffLookup.result.cedula}</Text>
-              <Text style={styles.listMeta}>Ropa: {staffLookup.result.clothingSize || 'N/D'} · Calzado: {staffLookup.result.shoeSize || 'N/D'}</Text>
+              <Text style={styles.listMeta}>{staffLookup.result.cedula} · Sexo: {staffLookup.result.sexo || 'Sin dato'}</Text>
+              <Text style={styles.listMeta}>{getStaffSizeSummary(staffLookup.result)}</Text>
+              <Text style={styles.listMeta}>{staffLookup.result.sexo === 'mujer' ? `Busto ${staffLookup.result.busto || 'N/D'} · Cintura ${staffLookup.result.cintura || 'N/D'} · Cadera ${staffLookup.result.cadera || 'N/D'}` : 'Medidas detalladas no aplican para hombre.'}</Text>
             </View>
           ) : null}
           {staffLookup.status === 'exists' ? (
@@ -1457,6 +1550,24 @@ const createStyles = (palette) => StyleSheet.create({
   listMeta: { color: palette.textMuted },
   searchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.sm },
   categoryHelperText: { color: palette.textMuted, marginTop: -SPACING.xs, lineHeight: 18 },
+  segmentedRow: { flexDirection: 'row', gap: SPACING.sm },
+  segmentedButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  segmentedButtonActive: {
+    borderColor: palette.primaryButton,
+    backgroundColor: palette.surfaceMuted,
+  },
+  segmentedButtonText: { color: palette.textMuted, fontWeight: '700' },
+  segmentedButtonTextActive: { color: palette.text, fontWeight: '800' },
   photoCard: {
     borderRadius: RADII.md,
     borderWidth: 1,

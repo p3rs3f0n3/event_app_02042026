@@ -13,6 +13,7 @@ const {
   normalizeComparableValue,
   normalizeProfilePhotoField,
   normalizePhoneValue,
+  resolveStaffSizeFields,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
   sanitizeStaffAdminRecord,
@@ -24,6 +25,7 @@ const {
   normalizeStaffCategoryName,
   sanitizeStaffCategoryRecord,
 } = require('../utils/staffCategories');
+const { normalizeStaffSexo, serializeStaffMeasurements } = require('../utils/staffMeasurements');
 
 const DEFAULT_EXECUTIVE_USER_ID = 2;
 
@@ -134,6 +136,8 @@ const normalizeCoordinator = (coordinator) => ({
 
 const normalizeStaffMember = (staffMember) => ({
   ...staffMember,
+  ...resolveStaffSizeFields(staffMember),
+  sexo: normalizeStaffSexo(staffMember.sexo || staffMember.sex),
   isActive: staffMember.isActive ?? staffMember.is_active ?? true,
   ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
 });
@@ -453,7 +457,7 @@ class EventAppRepository {
       result = result.filter((staffMember) => staffMember.category.toUpperCase() === category.toUpperCase());
     }
 
-    return result;
+    return result.map(sanitizeStaffAdminRecord);
   }
 
   getStaffCategories({ search } = {}) {
@@ -796,17 +800,21 @@ class EventAppRepository {
     }
 
     const categoryRecord = this.#ensureStaffCategory(payload.category);
+    const sizes = resolveStaffSizeFields(payload);
     const newStaffMember = normalizeStaffMember({
       id: this.#nextId(this.db.staff),
       name: payload.fullName,
       cedula: payload.cedula,
       city: city.name,
       category: categoryRecord.name,
+      sexo: payload.sexo,
       photo: payload.photo || DEFAULT_PROFILE_PHOTO,
       isActive: true,
-      clothingSize: payload.clothingSize || null,
+      shirtSize: sizes.shirtSize,
+      pantsSize: sizes.pantsSize,
+      clothingSize: sizes.clothingSize,
       shoeSize: payload.shoeSize || null,
-      measurements: payload.measurements || null,
+      measurements: serializeStaffMeasurements(payload),
     });
 
     this.db.staff.push(newStaffMember);
@@ -855,17 +863,21 @@ class EventAppRepository {
 
     const previousRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
     const categoryRecord = this.#ensureStaffCategory(payload.category);
+    const sizes = resolveStaffSizeFields(payload);
     this.db.staff[staffIndex] = normalizeStaffMember({
       ...this.db.staff[staffIndex],
       name: payload.fullName,
       cedula: payload.cedula,
       city: city.name,
       category: categoryRecord.name,
+      sexo: payload.sexo,
       photo: payload.photo || this.db.staff[staffIndex].photo,
       isActive: this.db.staff[staffIndex].isActive !== false,
-      clothingSize: payload.clothingSize || null,
+      shirtSize: sizes.shirtSize,
+      pantsSize: sizes.pantsSize,
+      clothingSize: sizes.clothingSize,
       shoeSize: payload.shoeSize || null,
-      measurements: payload.measurements || null,
+      measurements: serializeStaffMeasurements(payload),
     });
 
     const updatedRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);

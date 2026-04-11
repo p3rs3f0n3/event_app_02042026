@@ -1,8 +1,30 @@
 const DEFAULT_PROFILE_PHOTO = 'https://i.pravatar.cc/150?u=eventapp';
+const {
+  buildLegacyMeasurementSummary,
+  deserializeStaffMeasurements,
+  normalizeStaffSexo,
+} = require('./staffMeasurements');
 
 const normalizePhotoMetadataValue = (value) => {
   const normalizedValue = String(value || '').trim();
   return normalizedValue || null;
+};
+
+const normalizeStaffSizeValue = (value) => {
+  const normalizedValue = String(value || '').trim();
+  return normalizedValue || null;
+};
+
+const resolveStaffSizeFields = (value = {}) => {
+  const clothingSize = normalizeStaffSizeValue(value.clothingSize || value.clothing_size);
+  const shirtSize = normalizeStaffSizeValue(value.shirtSize || value.shirt_size) || clothingSize;
+  const pantsSize = normalizeStaffSizeValue(value.pantsSize || value.pants_size) || clothingSize;
+
+  return {
+    shirtSize,
+    pantsSize,
+    clothingSize: clothingSize || shirtSize || pantsSize || null,
+  };
 };
 
 const normalizePhotoFileSize = (value) => {
@@ -189,18 +211,32 @@ const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
   isActive: (coordinator.isActive ?? coordinator.is_active ?? true) !== false && (user?.isActive ?? user?.is_active ?? true) !== false,
 });
 
-const sanitizeStaffAdminRecord = (staffMember) => ({
-  ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
-  id: Number(staffMember.id),
-  fullName: staffMember.name || staffMember.fullName || staffMember.full_name,
-  cedula: staffMember.cedula,
-  city: staffMember.city,
-  category: staffMember.category,
-  clothingSize: staffMember.clothingSize || staffMember.clothing_size || null,
-  shoeSize: staffMember.shoeSize || staffMember.shoe_size || null,
-  measurements: staffMember.measurements || null,
-  isActive: (staffMember.isActive ?? staffMember.is_active ?? true) !== false,
-});
+const sanitizeStaffAdminRecord = (staffMember) => {
+  const parsedMeasurements = deserializeStaffMeasurements(staffMember.measurements);
+  const sexo = normalizeStaffSexo(staffMember.sexo || staffMember.sex);
+  const sizes = resolveStaffSizeFields(staffMember);
+
+  return {
+    ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
+    id: Number(staffMember.id),
+    fullName: staffMember.name || staffMember.fullName || staffMember.full_name,
+    cedula: staffMember.cedula,
+    city: staffMember.city,
+    category: staffMember.category,
+    sexo,
+    shirtSize: sizes.shirtSize,
+    pantsSize: sizes.pantsSize,
+    clothingSize: sizes.clothingSize,
+    shoeSize: staffMember.shoeSize || staffMember.shoe_size || null,
+    busto: parsedMeasurements.busto,
+    cintura: parsedMeasurements.cintura,
+    cadera: parsedMeasurements.cadera,
+    measurements: sexo === 'mujer'
+      ? buildLegacyMeasurementSummary(parsedMeasurements) || parsedMeasurements.legacyMeasurements
+      : parsedMeasurements.legacyMeasurements,
+    isActive: (staffMember.isActive ?? staffMember.is_active ?? true) !== false,
+  };
+};
 
 module.exports = {
   DEFAULT_PROFILE_PHOTO,
@@ -216,5 +252,7 @@ module.exports = {
   sanitizeUserRecord,
   normalizeProfilePhotoField,
   normalizeStoredProfilePhoto,
+  normalizeStaffSizeValue,
+  resolveStaffSizeFields,
   serializeProfilePhotoField,
 };

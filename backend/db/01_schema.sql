@@ -76,14 +76,30 @@ CREATE TABLE IF NOT EXISTS staff (
   category VARCHAR(50) NOT NULL,
   photo TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  sex VARCHAR(10),
+  shirt_size VARCHAR(10),
+  pants_size VARCHAR(10),
   clothing_size VARCHAR(10),
   shoe_size VARCHAR(10),
-  measurements VARCHAR(60),
+  measurements TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS sex VARCHAR(10);
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS shirt_size VARCHAR(10);
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS pants_size VARCHAR(10);
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS clothing_size VARCHAR(10);
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS shoe_size VARCHAR(10);
+ALTER TABLE staff ALTER COLUMN measurements TYPE TEXT;
+
+UPDATE staff
+SET shirt_size = COALESCE(NULLIF(TRIM(shirt_size), ''), NULLIF(TRIM(clothing_size), '')),
+    pants_size = COALESCE(NULLIF(TRIM(pants_size), ''), NULLIF(TRIM(clothing_size), '')),
+    clothing_size = COALESCE(NULLIF(TRIM(clothing_size), ''), NULLIF(TRIM(shirt_size), ''), NULLIF(TRIM(pants_size), ''))
+WHERE shirt_size IS NULL OR pants_size IS NULL OR clothing_size IS NULL
+   OR TRIM(COALESCE(shirt_size, '')) = '' OR TRIM(COALESCE(pants_size, '')) = '' OR TRIM(COALESCE(clothing_size, '')) = '';
 
 CREATE TABLE IF NOT EXISTS staff_categories (
   id BIGSERIAL PRIMARY KEY,

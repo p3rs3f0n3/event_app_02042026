@@ -29,6 +29,7 @@ const {
   validateManualInactivationPayload,
 } = require('./utils/validation');
 const { normalizeStaffCategoryName } = require('./utils/staffCategories');
+const { normalizeStaffSexo } = require('./utils/staffMeasurements');
 
 const app = express();
 
@@ -456,8 +457,14 @@ app.post('/api/admin/staff', asyncHandler(async (req, res) => {
     cedula: normalizeString(req.body.cedula),
     city: normalizeString(req.body.city),
     category: normalizeStaffCategoryName(req.body.category),
+    sexo: normalizeStaffSexo(req.body.sexo),
+    shirtSize: normalizeString(req.body.shirtSize),
+    pantsSize: normalizeString(req.body.pantsSize),
     clothingSize: normalizeString(req.body.clothingSize),
     shoeSize: normalizeString(req.body.shoeSize),
+    busto: normalizeString(req.body.busto),
+    cintura: normalizeString(req.body.cintura),
+    cadera: normalizeString(req.body.cadera),
     measurements: normalizeString(req.body.measurements),
     photo: normalizeAdminPhotoPayload(req.body.photo),
   });
@@ -485,8 +492,14 @@ app.put('/api/admin/staff/:id', asyncHandler(async (req, res) => {
     cedula: normalizeString(req.body.cedula),
     city: normalizeString(req.body.city),
     category: normalizeStaffCategoryName(req.body.category),
+    sexo: normalizeStaffSexo(req.body.sexo),
+    shirtSize: normalizeString(req.body.shirtSize),
+    pantsSize: normalizeString(req.body.pantsSize),
     clothingSize: normalizeString(req.body.clothingSize),
     shoeSize: normalizeString(req.body.shoeSize),
+    busto: normalizeString(req.body.busto),
+    cintura: normalizeString(req.body.cintura),
+    cadera: normalizeString(req.body.cadera),
     measurements: normalizeString(req.body.measurements),
     photo: normalizeAdminPhotoPayload(req.body.photo),
   });

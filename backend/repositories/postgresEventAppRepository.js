@@ -13,6 +13,7 @@ const {
   normalizeComparableValue,
   normalizeProfilePhotoField,
   normalizePhoneValue,
+  resolveStaffSizeFields,
   sanitizeClientRecord,
   sanitizeCoordinatorAdminRecord,
   sanitizeStaffAdminRecord,
@@ -25,6 +26,7 @@ const {
   normalizeStaffCategoryName,
   sanitizeStaffCategoryRecord,
 } = require('../utils/staffCategories');
+const { serializeStaffMeasurements } = require('../utils/staffMeasurements');
 
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
@@ -397,7 +399,7 @@ class PostgresEventAppRepository {
     const result = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         ORDER BY s.full_name ASC, s.id ASC
@@ -447,7 +449,7 @@ class PostgresEventAppRepository {
       [normalizeString(city) || null],
     );
 
-    return result.rows.map(mapProfilePhotoRow);
+    return result.rows.map(sanitizeStaffAdminRecord);
   }
 
   async getCoordinatorEvents({ userId }) {
@@ -496,7 +498,7 @@ class PostgresEventAppRepository {
     const result = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE ($1::text IS NULL OR LOWER(ci.name) = LOWER($1))
@@ -507,7 +509,7 @@ class PostgresEventAppRepository {
       [normalizeString(city) || null, normalizeString(category) || null],
     );
 
-    return result.rows.map(mapProfilePhotoRow);
+    return result.rows.map(sanitizeStaffAdminRecord);
   }
 
   async getStaffCategories({ search } = {}) {
@@ -765,7 +767,7 @@ class PostgresEventAppRepository {
 
     const duplicateUserResult = await query(
       `
-        SELECT id
+        SELECT s.id
         FROM users
         WHERE LOWER(username) = LOWER($1)
            OR ($2::text IS NOT NULL AND LOWER(COALESCE(email, '')) = LOWER($2))
@@ -777,7 +779,7 @@ class PostgresEventAppRepository {
     );
     const duplicateCoordinatorResult = await query(
       `
-        SELECT id
+        SELECT s.id
         FROM coordinators
         WHERE LOWER(full_name) = LOWER($1)
            OR phone = $2
@@ -987,7 +989,7 @@ class PostgresEventAppRepository {
 
     const duplicateResult = await query(
       `
-        SELECT id
+        SELECT s.id
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE (
@@ -1009,14 +1011,15 @@ class PostgresEventAppRepository {
     try {
       await client.query('BEGIN');
       const categoryRecord = await this.#ensureStaffCategory(payload.category, client);
+      const sizes = resolveStaffSizeFields(payload);
 
       const result = await client.query(
         `
-          INSERT INTO staff (full_name, cedula, city_id, category, photo, is_active, clothing_size, shoe_size, measurements)
-          VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8)
-          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          INSERT INTO staff (full_name, cedula, city_id, category, photo, is_active, sex, shirt_size, pants_size, clothing_size, shoe_size, measurements)
+          VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $10, $11)
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null],
+        [payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, payload.sexo, sizes.shirtSize, sizes.pantsSize, sizes.clothingSize, payload.shoeSize || null, serializeStaffMeasurements(payload)],
       );
 
       const createdRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
@@ -1044,7 +1047,7 @@ class PostgresEventAppRepository {
     const currentStaffResult = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.id AS "cityId", ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE s.id = $1
@@ -1094,6 +1097,7 @@ class PostgresEventAppRepository {
     try {
       await client.query('BEGIN');
       const categoryRecord = await this.#ensureStaffCategory(payload.category, client);
+      const sizes = resolveStaffSizeFields(payload);
 
       const result = await client.query(
         `
@@ -1103,15 +1107,18 @@ class PostgresEventAppRepository {
               city_id = $4,
               category = $5,
               is_active = $6,
-              clothing_size = $7,
-              shoe_size = $8,
-              measurements = $9,
-              photo = $10,
+              sex = $7,
+              shirt_size = $8,
+              pants_size = $9,
+              clothing_size = $10,
+              shoe_size = $11,
+              measurements = $12,
+              photo = $13,
               updated_at = NOW()
           WHERE id = $1
-          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
-        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, currentRow.isActive !== false, payload.clothingSize || null, payload.shoeSize || null, payload.measurements || null, payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
+        [normalizedStaffId, payload.fullName, payload.cedula, cityResult.rows[0].id, categoryRecord.name, currentRow.isActive !== false, payload.sexo, sizes.shirtSize, sizes.pantsSize, sizes.clothingSize, payload.shoeSize || null, serializeStaffMeasurements(payload), payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
       );
 
       const updatedRecord = sanitizeStaffAdminRecord({ ...result.rows[0], city: cityResult.rows[0].name });
@@ -1587,7 +1594,7 @@ class PostgresEventAppRepository {
     const currentStaffResult = await query(
       `
         SELECT s.id, s.full_name AS name, s.cedula, ci.name AS city, s.category, s.photo, s.is_active AS "isActive",
-               s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
+               s.sex AS sexo, s.shirt_size AS "shirtSize", s.pants_size AS "pantsSize", s.clothing_size AS "clothingSize", s.shoe_size AS "shoeSize", s.measurements
         FROM staff s
         INNER JOIN cities ci ON ci.id = s.city_id
         WHERE s.id = $1
@@ -1612,7 +1619,7 @@ class PostgresEventAppRepository {
           SET is_active = FALSE,
               updated_at = NOW()
           WHERE id = $1
-          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
+          RETURNING id, full_name AS name, cedula, category, photo, is_active AS "isActive", sex AS sexo, shirt_size AS "shirtSize", pants_size AS "pantsSize", clothing_size AS "clothingSize", shoe_size AS "shoeSize", measurements
         `,
         [normalizedStaffId],
       );

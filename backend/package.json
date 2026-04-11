@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:init": "node scripts/init-postgres.js",
-    "check": "node --check server.js && node --check config/env.js && node --check config/roles.js && node --check repositories/eventAppRepository.js && node --check repositories/postgresEventAppRepository.js && node --check repositories/index.js && node --check utils/passwords.js && node --check utils/staffCategories.js && node --check utils/validation.js",
+    "check": "node --check server.js && node --check config/env.js && node --check config/roles.js && node --check repositories/eventAppRepository.js && node --check repositories/postgresEventAppRepository.js && node --check repositories/index.js && node --check utils/passwords.js && node --check utils/staffCategories.js && node --check utils/staffMeasurements.js && node --check utils/validation.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

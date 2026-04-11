@@ -34,12 +34,12 @@ const INITIAL_DB = {
     { id: 4, name: 'Roberto Gomez', cedula: '77889900', address: 'Clle 100', phone: '3151112233', rating: 4, photo: 'https://i.pravatar.cc/150?u=robert', city: 'Medellín' },
   ],
   staff: [
-    { id: 101, name: 'Juan Perez', cedula: '10101010', city: 'Bogotá', category: 'BARISTAS', photo: 'https://i.pravatar.cc/150?u=juan', clothingSize: 'S', shoeSize: '38', measurements: '90-70-90' },
-    { id: 102, name: 'Maria Lopez', cedula: '20202020', city: 'Bogotá', category: 'IMPULSADORES', photo: 'https://i.pravatar.cc/150?u=maria', clothingSize: 'M', shoeSize: '36', measurements: '85-60-85' },
-    { id: 103, name: 'Carlos Ruiz', cedula: '30303030', city: 'Bogotá', category: 'LOGISTICOS', photo: 'https://i.pravatar.cc/150?u=carlos', clothingSize: 'X', shoeSize: '42', measurements: 'N/A' },
-    { id: 106, name: 'Diana Torres', cedula: '60606060', city: 'Medellín', category: 'BARISTAS', photo: 'https://i.pravatar.cc/150?u=diana', clothingSize: 'XS', shoeSize: '35', measurements: '80-55-80' },
-    { id: 107, name: 'Pedro Solo', cedula: '70707070', city: 'Medellín', category: 'IMPULSADORES', photo: 'https://i.pravatar.cc/150?u=pedro', clothingSize: 'L', shoeSize: '41', measurements: 'N/A' },
-    { id: 108, name: 'Elena Nito', cedula: '80808080', city: 'Medellín', category: 'LOGISTICOS', photo: 'https://i.pravatar.cc/150?u=elena', clothingSize: 'S', shoeSize: '37', measurements: '88-62-88' },
+    { id: 101, name: 'Juan Perez', cedula: '10101010', city: 'Bogotá', category: 'BARISTAS', sexo: 'hombre', photo: 'https://i.pravatar.cc/150?u=juan', shirtSize: 'S', pantsSize: 'S', clothingSize: 'S', shoeSize: '38', measurements: null },
+    { id: 102, name: 'Maria Lopez', cedula: '20202020', city: 'Bogotá', category: 'IMPULSADORES', sexo: 'mujer', photo: 'https://i.pravatar.cc/150?u=maria', shirtSize: 'M', pantsSize: 'M', clothingSize: 'M', shoeSize: '36', measurements: '{"version":2,"busto":"85","cintura":"60","cadera":"85"}' },
+    { id: 103, name: 'Carlos Ruiz', cedula: '30303030', city: 'Bogotá', category: 'LOGISTICOS', sexo: 'hombre', photo: 'https://i.pravatar.cc/150?u=carlos', shirtSize: 'X', pantsSize: 'X', clothingSize: 'X', shoeSize: '42', measurements: null },
+    { id: 106, name: 'Diana Torres', cedula: '60606060', city: 'Medellín', category: 'BARISTAS', sexo: 'mujer', photo: 'https://i.pravatar.cc/150?u=diana', shirtSize: 'XS', pantsSize: 'XS', clothingSize: 'XS', shoeSize: '35', measurements: '{"version":2,"busto":"80","cintura":"55","cadera":"80"}' },
+    { id: 107, name: 'Pedro Solo', cedula: '70707070', city: 'Medellín', category: 'IMPULSADORES', sexo: 'hombre', photo: 'https://i.pravatar.cc/150?u=pedro', shirtSize: 'L', pantsSize: 'L', clothingSize: 'L', shoeSize: '41', measurements: null },
+    { id: 108, name: 'Elena Nito', cedula: '80808080', city: 'Medellín', category: 'LOGISTICOS', sexo: 'mujer', photo: 'https://i.pravatar.cc/150?u=elena', shirtSize: 'S', pantsSize: 'S', clothingSize: 'S', shoeSize: '37', measurements: '{"version":2,"busto":"88","cintura":"62","cadera":"88"}' },
   ],
   cities: [
     { id: 1, name: 'Arauca', isOther: false }, { id: 2, name: 'Armenia', isOther: false }, { id: 3, name: 'Barranquilla', isOther: false },

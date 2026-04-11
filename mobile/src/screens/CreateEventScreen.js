@@ -781,9 +781,15 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                     <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Cédula</Text><Text style={styles.infoVal}>{staffInDetail.cedula || 'Sin dato'}</Text></View>
                     <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Ciudad</Text><Text style={styles.infoVal}>{staffInDetail.city || 'Sin dato'}</Text></View>
                     <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Categoría</Text><Text style={styles.infoVal}>{staffInDetail.category || 'Sin dato'}</Text></View>
-                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Talla Ropa</Text><Text style={styles.infoVal}>{staffInDetail.clothingSize || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Sexo</Text><Text style={styles.infoVal}>{staffInDetail.sexo || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Talla Camisa</Text><Text style={styles.infoVal}>{staffInDetail.shirtSize || staffInDetail.clothingSize || 'Sin dato'}</Text></View>
+                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Talla Pantalón</Text><Text style={styles.infoVal}>{staffInDetail.pantsSize || staffInDetail.clothingSize || 'Sin dato'}</Text></View>
                     <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Zapatos</Text><Text style={styles.infoVal}>{staffInDetail.shoeSize || 'Sin dato'}</Text></View>
-                    <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Medidas</Text><Text style={styles.infoVal}>{staffInDetail.measurements || 'Sin dato'}</Text></View>
+                    {staffInDetail.sexo === 'mujer' ? (
+                      <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Medidas</Text><Text style={styles.infoVal}>{`Busto ${staffInDetail.busto || 'N/D'} · Cintura ${staffInDetail.cintura || 'N/D'} · Cadera ${staffInDetail.cadera || 'N/D'}`}</Text></View>
+                    ) : (
+                      <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Medidas</Text><Text style={styles.infoVal}>{staffInDetail.sexo === 'hombre' ? 'No aplica' : (staffInDetail.measurements || 'Sin dato')}</Text></View>
+                    )}
                   </View>
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setStaffInDetail(null)}><Text style={styles.closeDetailText}>CERRAR</Text></TouchableOpacity>
                 </>

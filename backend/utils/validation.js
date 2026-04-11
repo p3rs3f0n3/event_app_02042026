@@ -5,6 +5,8 @@ const normalizePhoneDigits = (value) => String(value || '').replace(/\D/g, '');
 const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 const isValidEmail = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const STAFF_MEASUREMENT_PATTERN = /^\d{1,3}([.,]\d{1,2})?$/;
+const STAFF_SIZE_PATTERN = /^[A-Za-z0-9./\-\s]{1,10}$/;
 const MAX_COORDINATOR_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_COORDINATOR_PHOTO_MIME_TYPES = new Set([
   'image/jpeg',
@@ -357,24 +359,37 @@ const validateAdminCoordinatorUpdatePayload = (payload) => {
   return null;
 };
 
-const validateAdminStaffPayload = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return 'Payload de staff inválido';
+const validateStaffMeasurementField = ({ value, label, required = false }) => {
+  const normalizedValue = normalizeString(value);
+
+  if (!normalizedValue) {
+    return required ? `El ${label} es obligatorio` : null;
   }
 
-  if (!isNonEmptyString(payload.fullName)) return 'El nombre completo es obligatorio';
-  if (!isNonEmptyString(payload.cedula)) return 'La cédula es obligatoria';
-  if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
-  if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
-  if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
-
-  const photoError = validateOptionalAdminPhotoPayload(payload.photo);
-  if (photoError) return photoError;
+  if (!STAFF_MEASUREMENT_PATTERN.test(normalizedValue)) {
+    return `El ${label} debe ser una medida simple válida`;
+  }
 
   return null;
 };
 
-const validateAdminStaffUpdatePayload = (payload) => {
+const validateStaffSizeField = ({ value, label }) => {
+  const normalizedValue = normalizeString(value);
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  if (!STAFF_SIZE_PATTERN.test(normalizedValue)) {
+    return `La ${label} debe ser un valor corto válido`;
+  }
+
+  return null;
+};
+
+const validateAdminStaffBasePayload = (payload) => {
+  const normalizedSexo = normalizeString(payload?.sexo).toLowerCase();
+
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de staff inválido';
   }
@@ -384,11 +399,43 @@ const validateAdminStaffUpdatePayload = (payload) => {
   if (!isNonEmptyString(payload.city)) return 'La ciudad es obligatoria';
   if (!isNonEmptyString(payload.category)) return 'La categoría es obligatoria';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
+  if (!['mujer', 'hombre'].includes(normalizedSexo)) return 'El sexo debe ser mujer u hombre';
 
   const photoError = validateOptionalAdminPhotoPayload(payload.photo);
   if (photoError) return photoError;
 
+  const shirtSizeError = validateStaffSizeField({ value: payload.shirtSize, label: 'talla de camisa' });
+  if (shirtSizeError) return shirtSizeError;
+
+  const pantsSizeError = validateStaffSizeField({ value: payload.pantsSize, label: 'talla de pantalón' });
+  if (pantsSizeError) return pantsSizeError;
+
+  const clothingSizeError = validateStaffSizeField({ value: payload.clothingSize, label: 'talla de ropa' });
+  if (clothingSizeError) return clothingSizeError;
+
+  const shoeSizeError = validateStaffSizeField({ value: payload.shoeSize, label: 'talla de calzado' });
+  if (shoeSizeError) return shoeSizeError;
+
+  if (normalizedSexo === 'mujer') {
+    const bustoError = validateStaffMeasurementField({ value: payload.busto, label: 'busto', required: true });
+    if (bustoError) return bustoError;
+
+    const cinturaError = validateStaffMeasurementField({ value: payload.cintura, label: 'cintura', required: true });
+    if (cinturaError) return cinturaError;
+
+    const caderaError = validateStaffMeasurementField({ value: payload.cadera, label: 'cadera', required: true });
+    if (caderaError) return caderaError;
+  }
+
   return null;
+};
+
+const validateAdminStaffPayload = (payload) => {
+  return validateAdminStaffBasePayload(payload);
+};
+
+const validateAdminStaffUpdatePayload = (payload) => {
+  return validateAdminStaffBasePayload(payload);
 };
 
 const validateAdminEntityInactivationPayload = (payload) => {
