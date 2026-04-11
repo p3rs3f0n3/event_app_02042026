@@ -60,7 +60,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
     }
 
     if (!inactivationComment.trim()) {
-      Alert.alert('Comentario obligatorio', 'Debés escribir un comentario para inactivar el evento');
+      Alert.alert('Comentario obligatorio', 'Debes escribir un comentario para inactivar el evento');
       return;
     }
 
@@ -172,7 +172,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
                   style={styles.modalInput}
                   value={inactivationComment}
                   onChangeText={setInactivationComment}
-                  placeholder="Escribí el comentario..."
+                  placeholder="Escribe el comentario..."
                   placeholderTextColor="#888"
                   multiline
                   numberOfLines={4}
@@ -197,7 +197,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>MIS EVENTOS</Text>
-          <Text style={styles.welcome}>Hola, {displayUsername}. Revisá tus eventos creados</Text>
+          <Text style={styles.welcome}>Hola, {displayUsername}. Revisa tus eventos creados</Text>
         </View>
 
         <View style={styles.listContainer}>

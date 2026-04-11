@@ -50,7 +50,7 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Panel coordinador"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${getUserDisplayName(user)}. Revisá puntos asignados, cargá fotos y reportes, y mantené contacto con ejecutivo.`}
+        subtitle={`Hola, ${getUserDisplayName(user)}. Revisa puntos asignados, carga fotos y reportes, y mantén contacto con el ejecutivo.`}
       />
 
       <SurfaceCard style={styles.summaryCard}>
@@ -65,7 +65,7 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
       <SurfaceCard>
         <Text style={styles.cardTitle}>Eventos asignados</Text>
-        <Text style={styles.cardText}>Entrá a la lista para ver detalle, equipo por punto y acciones disponibles.</Text>
+        <Text style={styles.cardText}>Entra en la lista para ver el detalle, el equipo por punto y las acciones disponibles.</Text>
         <AppButton title="VER EVENTOS ASIGNADOS" onPress={() => setCurrentView('events')} />
       </SurfaceCard>
 

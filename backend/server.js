@@ -544,7 +544,7 @@ app.put('/api/events/:id', asyncHandler(async (req, res) => {
   }
 
   if (Number(existingEvent.createdByUserId) !== Number(req.body?.createdByUserId)) {
-    return res.status(403).json({ message: 'No podés editar un evento de otro ejecutivo' });
+    return res.status(403).json({ message: 'No puedes editar un evento de otro ejecutivo' });
   }
 
   if (existingEvent.isInactive) {
@@ -583,7 +583,7 @@ app.post('/api/events/:id/inactivate', asyncHandler(async (req, res) => {
   }
 
   if (Number(existingEvent.createdByUserId) !== Number(req.body.createdByUserId)) {
-    return res.status(403).json({ message: 'No podés inactivar un evento de otro ejecutivo' });
+    return res.status(403).json({ message: 'No puedes inactivar un evento de otro ejecutivo' });
   }
 
   if (existingEvent.isInactive) {
@@ -675,7 +675,7 @@ app.put('/api/events/:id/executive-report', asyncHandler(async (req, res) => {
   });
 
   if (updatedEvent === false) {
-    return res.status(403).json({ message: 'No podés guardar el informe final de un evento de otro ejecutivo' });
+    return res.status(403).json({ message: 'No puedes guardar el informe final de un evento de otro ejecutivo' });
   }
 
   if (updatedEvent?.errorCode === 'EXECUTIVE_REPORT_LOCKED') {

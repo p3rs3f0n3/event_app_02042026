@@ -56,7 +56,7 @@ const validateEventPayload = (payload) => {
 
   if (!isNonEmptyString(name)) return 'El nombre del evento es requerido';
   if (!isNonEmptyString(client)) return 'El cliente es requerido';
-  if (!isValidIdValue(clientUserId)) return 'Debés seleccionar un cliente válido';
+  if (!isValidIdValue(clientUserId)) return 'Debes seleccionar un cliente válido';
   if (!isNonEmptyString(image)) return 'La imagen del evento es requerida';
   if (!isValidIdValue(createdByUserId)) return 'El usuario creador del evento es requerido';
   if (!isValidDateValue(startDate) || !isValidDateValue(endDate)) return 'Las fechas del evento son inválidas';
@@ -130,7 +130,7 @@ const validateCoordinatorPhotoPayload = (payload) => {
 
    const normalizedMimeType = normalizeString(payload.mimeType).toLowerCase();
    if (normalizedMimeType && !ALLOWED_COORDINATOR_PHOTO_MIME_TYPES.has(normalizedMimeType)) {
-    return 'Formato de foto no soportado. Usá JPG, PNG, WEBP o HEIC';
+    return 'Formato de foto no soportado. Usa JPG, PNG, WEBP o HEIC';
    }
 
    if (payload.fileSize != null) {
@@ -171,7 +171,7 @@ const validateOptionalAdminPhotoPayload = (payload) => {
 
   const normalizedMimeType = normalizeString(payload.mimeType).toLowerCase();
   if (normalizedMimeType && !ALLOWED_COORDINATOR_PHOTO_MIME_TYPES.has(normalizedMimeType)) {
-    return 'Formato de foto no soportado. Usá JPG, PNG, WEBP o HEIC';
+    return 'Formato de foto no soportado. Usa JPG, PNG, WEBP o HEIC';
   }
 
   if (payload.fileSize != null) {
@@ -292,7 +292,7 @@ const validateAdminClientBasePayload = (payload, { requirePassword }) => {
   if (!isNonEmptyString(payload.contactRole)) return 'El cargo del contacto es obligatorio';
   if (!isValidIdValue(payload.actorUserId)) return 'El actor administrativo es obligatorio';
 
-  const phoneError = validateAdminPhoneField({ value: payload.phone, label: 'teléfono', required: true });
+  const phoneError = validateAdminPhoneField({ value: payload.phone, label: 'número celular', required: true });
   if (phoneError) return phoneError;
 
   const whatsappPhoneError = validateAdminPhoneField({ value: payload.whatsappPhone, label: 'WhatsApp', required: requirePassword });

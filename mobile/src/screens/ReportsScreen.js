@@ -188,7 +188,7 @@ const ReportsScreen = ({ onBack, user }) => {
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <Text style={styles.title}>INFORME FINAL</Text>
-          <Text style={styles.subtitle}>Abrí uno de tus eventos para revisar insumos del coordinador y redactar el cierre ejecutivo.</Text>
+          <Text style={styles.subtitle}>Abre uno de tus eventos para revisar insumos del coordinador y redactar el cierre ejecutivo.</Text>
 
           <View style={styles.listGap}>
             {events.length === 0 ? <Text style={styles.emptyText}>No hay eventos creados para informar.</Text> : null}
@@ -338,7 +338,7 @@ const ReportsScreen = ({ onBack, user }) => {
         {isPublished ? (
           <View style={styles.lockedBox}>
             <Text style={styles.lockedBoxTitle}>Informe final publicado</Text>
-            <Text style={styles.lockedBoxText}>Quedó bloqueado para proteger lo que ya vio el cliente. Si necesitás cambios, hay que definir otro flujo.</Text>
+            <Text style={styles.lockedBoxText}>Quedó bloqueado para proteger lo que ya vio el cliente. Si necesitas cambios, hay que definir otro flujo.</Text>
           </View>
         ) : (
           <View style={styles.actionRow}>

@@ -121,7 +121,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permiso requerido', 'Necesitás habilitar la galería para cargar fotos.');
+        Alert.alert('Permiso requerido', 'Necesitas habilitar la galería para cargar fotos.');
         return;
       }
 
@@ -167,22 +167,22 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
 
   const handleSaveReport = async () => {
     if (!reportForm.startTime.trim() || !reportForm.endTime.trim()) {
-      Alert.alert('Datos incompletos', 'Completá la hora de inicio y finalización.');
+        Alert.alert('Datos incompletos', 'Completa la hora de inicio y finalización.');
       return;
     }
 
     if (!reportForm.initialInventory.trim() || !reportForm.finalInventory.trim()) {
-      Alert.alert('Datos incompletos', 'Completá el inventario inicial y final.');
+        Alert.alert('Datos incompletos', 'Completa el inventario inicial y final.');
       return;
     }
 
     if (!reportForm.observations.trim()) {
-      Alert.alert('Datos incompletos', 'Contanos el impacto u observaciones del evento.');
+        Alert.alert('Datos incompletos', 'Describe el impacto o las observaciones del evento.');
       return;
     }
 
     if (reportForm.hasRedemptions && reportForm.redemptionsCount.trim() === '') {
-      Alert.alert('Datos incompletos', 'Indicá la cantidad de redenciones.');
+        Alert.alert('Datos incompletos', 'Indica la cantidad de redenciones.');
       return;
     }
 
@@ -250,7 +250,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
         <View style={styles.sectionRow}>
           <View style={styles.assetBox}>
             <Text style={styles.reportTitle}>Fotos del evento ({photos.length})</Text>
-            <Text style={styles.helperText}>Cargá evidencia visual. Queda persistida en backend/base de datos para que el ejecutivo la vea después.</Text>
+            <Text style={styles.helperText}>Carga evidencia visual. Quedará guardada para que el ejecutivo pueda consultarla después.</Text>
             <Text style={styles.helperHint}>Formatos válidos: {VALID_PHOTO_FORMATS_LABEL}.</Text>
             <Text style={styles.helperHint}>Tamaño máximo por foto: {MAX_PHOTO_SIZE_MB} MB.</Text>
             {photos.length > 0 ? (
@@ -270,7 +270,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
 
           <View style={styles.reportBox}>
             <Text style={styles.reportTitle}>Informes del coordinador ({reports.length})</Text>
-            <Text style={styles.helperText}>Registrá el cierre operativo del evento. Podés cargar más de un informe y queda persistido para consulta del ejecutivo.</Text>
+            <Text style={styles.helperText}>Registra el cierre operativo del evento. Puedes cargar más de un informe y quedará guardado para consulta del ejecutivo.</Text>
 
             <Field styles={styles} label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
             <View style={styles.doubleColumn}>

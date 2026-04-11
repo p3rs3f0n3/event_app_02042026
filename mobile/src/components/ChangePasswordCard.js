@@ -34,7 +34,7 @@ const ChangePasswordCard = ({ user, palette, buttonLabel = 'CAMBIAR CONTRASEÑA'
 
   const handleSubmit = async () => {
     if (!form.currentPassword || !form.newPassword) {
-      setFeedback({ tone: 'error', message: 'Completá la contraseña actual y la nueva.' });
+      setFeedback({ tone: 'error', message: 'Completa la contraseña actual y la nueva.' });
       return;
     }
 
@@ -78,7 +78,7 @@ const ChangePasswordCard = ({ user, palette, buttonLabel = 'CAMBIAR CONTRASEÑA'
                 style={styles.input}
                 value={form.currentPassword}
                 onChangeText={(value) => updateField('currentPassword', value)}
-                placeholder="Ingresá tu contraseña actual"
+                placeholder="Ingresa tu contraseña actual"
                 placeholderTextColor={palette.inputPlaceholder}
                 secureTextEntry
               />
@@ -102,7 +102,7 @@ const ChangePasswordCard = ({ user, palette, buttonLabel = 'CAMBIAR CONTRASEÑA'
                 style={styles.input}
                 value={form.confirmPassword}
                 onChangeText={(value) => updateField('confirmPassword', value)}
-                placeholder="Repetí la nueva contraseña"
+                placeholder="Repite la nueva contraseña"
                 placeholderTextColor={palette.inputPlaceholder}
                 secureTextEntry
               />

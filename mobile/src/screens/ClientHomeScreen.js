@@ -45,7 +45,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Portal cliente"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${displayUsername}. Consultá eventos vinculados y el informe final publicado por el ejecutivo.`}
+        subtitle={`Hola, ${displayUsername}. Consulta los eventos vinculados y el informe final publicado por el ejecutivo.`}
       />
 
       <View style={styles.metricsRow}>
@@ -81,10 +81,10 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
   const renderEventList = () => (
     <ScreenShell palette={palette}>
-      <SectionTitle kicker="Eventos" title="Mis eventos" subtitle="Solo vas a ver informes finales publicados. Los borradores no se exponen." />
+      <SectionTitle kicker="Eventos" title="Mis eventos" subtitle="Solo verás informes finales publicados. Los borradores no se muestran." />
 
       {loading ? <ActivityIndicator color="#FFFFFF" size="large" style={styles.loading} /> : null}
-      {!loading && events.length === 0 ? <Text style={styles.emptyText}>Todavía no tenés eventos vinculados.</Text> : null}
+      {!loading && events.length === 0 ? <Text style={styles.emptyText}>Todavía no tienes eventos vinculados.</Text> : null}
 
       <View style={styles.listGap}>
         {events.map((event) => {

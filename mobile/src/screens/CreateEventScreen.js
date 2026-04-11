@@ -213,7 +213,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permiso requerido', 'Necesitás habilitar la galería para cargar la foto del evento.');
+        Alert.alert('Permiso requerido', 'Necesitas habilitar la galería para cargar la foto del evento.');
         return;
       }
 
@@ -595,12 +595,12 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
               <TouchableOpacity style={styles.imageSelector} onPress={handlePickEventImage}>
                 {eventData.image ? <Image source={{ uri: eventData.image }} style={styles.selectedImage} /> : <View style={styles.photoPlaceholder}><Text style={styles.photoText}>FOTO EVENTO *</Text></View>}
               </TouchableOpacity>
-              <Text style={styles.helperText}>{eventData.image ? 'Vista previa lista. Podés usar la foto tal cual, volver a abrir la galería para editar/recortar o quitarla.' : 'Elegí una foto desde la galería para seguir con la carga.'}</Text>
+              <Text style={styles.helperText}>{eventData.image ? 'Vista previa lista. Puedes usar la foto tal cual, volver a abrir la galería para editarla o recortarla, o quitarla.' : 'Elige una foto desde la galería para continuar con la carga.'}</Text>
               {eventData.image ? (
                 <>
                   {showImageActions ? (
                     <View style={styles.imageActionsCard}>
-                      <Text style={styles.imageActionsTitle}>¿Qué querés hacer con esta foto?</Text>
+                      <Text style={styles.imageActionsTitle}>¿Qué quieres hacer con esta foto?</Text>
                       <TouchableOpacity style={styles.secondaryActionButton} onPress={handleUseEventImageAsIs}>
                         <Text style={styles.secondaryActionText}>USAR FOTO TAL CUAL</Text>
                       </TouchableOpacity>
@@ -610,7 +610,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                       <TouchableOpacity style={styles.imageRemoveLink} onPress={handleRemoveEventImage}>
                         <Text style={styles.imageRemoveText}>Cancelar / quitar foto</Text>
                       </TouchableOpacity>
-                      <Text style={styles.helperText}>Si elegís editar, el sistema vuelve a abrir la galería con recorte habilitado.</Text>
+                      <Text style={styles.helperText}>Si eliges editar, el sistema vuelve a abrir la galería con recorte habilitado.</Text>
                     </View>
                   ) : (
                     <View style={styles.imageActionsInline}>
@@ -629,7 +629,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
               ) : null}
             </View>
              <InputField styles={styles} label="Cliente *" value={selectedClient?.fullName || eventData.client} placeholder="Buscar por NIT o nombre..." editable={false} onPress={() => setShowClientSearch(true)} />
-             {selectedClient ? <Text style={styles.helperText}>{getClientDescription(selectedClient)}{selectedClient?.nit ? ` · NIT ${selectedClient.nit}` : ''}</Text> : <Text style={styles.helperText}>Buscá clientes desde la base por NIT o nombre.</Text>}
+             {selectedClient ? <Text style={styles.helperText}>{getClientDescription(selectedClient)}{selectedClient?.nit ? ` · NIT ${selectedClient.nit}` : ''}</Text> : <Text style={styles.helperText}>Busca clientes desde la base por NIT o nombre.</Text>}
             <InputField styles={styles} label="Nombre de evento *" value={eventData.name} onChangeText={(t) => setEventData({...eventData, name: t})} />
             <TouchableOpacity onPress={() => setShowPicker('start_date')}><InputField styles={styles} label="Inicio *" value={eventData.startDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
             <TouchableOpacity onPress={() => setShowPicker('end_date')}><InputField styles={styles} label="Fin *" value={eventData.endDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
@@ -640,7 +640,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
 
         {step === 2 && (
           <View style={styles.form}>
-            <InputField styles={styles} label="Ciudad *" value={resolvedCityName} placeholder={isNewCity ? 'Escriba la ciudad...' : 'Buscar...'} onChangeText={isNewCity ? setManualCityName : undefined} onPress={isNewCity ? undefined : () => setShowCitySearch(true)} />
+             <InputField styles={styles} label="Ciudad *" value={resolvedCityName} placeholder={isNewCity ? 'Escribe la ciudad...' : 'Buscar...'} onChangeText={isNewCity ? setManualCityName : undefined} onPress={isNewCity ? undefined : () => setShowCitySearch(true)} />
             <TouchableOpacity style={styles.secondaryActionButton} onPress={() => setShowCitySearch(true)}>
               <Text style={styles.secondaryActionText}>{isNewCity ? 'CAMBIAR / BUSCAR CIUDAD' : 'BUSCAR CIUDAD'}</Text>
             </TouchableOpacity>
@@ -648,18 +648,18 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 <Text style={styles.pointTitle}>DATOS DEL PUNTO</Text>
                 <InputField styles={styles} label="Nombre establecimiento *" value={currentPoint.establishment} onChangeText={(t) => setCurrentPoint({...currentPoint, establishment: t})} />
                 <InputField styles={styles} label="Dirección *" value={currentPoint.address} onChangeText={(t) => setCurrentPoint({...currentPoint, address: t})} />
-                <Text style={styles.helperText}>Podés escribir la dirección manualmente, pegar un link o abrir una búsqueda externa en Google Maps.</Text>
+                <Text style={styles.helperText}>Puedes escribir la dirección manualmente, pegar un enlace o abrir una búsqueda externa en Google Maps.</Text>
                 <TouchableOpacity style={styles.secondaryActionButton} onPress={openGoogleMapsSearch}><Text style={styles.secondaryActionText}>BUSCAR EN GOOGLE MAPS</Text></TouchableOpacity>
                 <InputField styles={styles} label="Contacto Punto de Venta *" value={currentPoint.contact} onChangeText={(t) => setCurrentPoint({...currentPoint, contact: t})} />
                 <InputField styles={styles} label="Telefono Contacto *" value={currentPoint.phone} onChangeText={(t) => setCurrentPoint({...currentPoint, phone: normalizePhoneValue(t)})} keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'} maxLength={10} autoCapitalize="none" />
                 <Text style={styles.helperText}>Solo números, máximo 10 dígitos.</Text>
-                <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Tocar...'} editable={false} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
+                 <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
                  <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{coordinatorButtonText}</Text></TouchableOpacity>
               <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>{pointActionText}</Text></TouchableOpacity>
              </View>
-            <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => (isEditingEvent ? handleSelectPointForEdit(p, i) : setPointInDetail({ point: p, cityName: resolvedCityName }))}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewHint}>{isEditingEvent ? 'Tocá para cargar este punto y editarlo' : 'Tocá para ver el detalle del punto'}</Text></TouchableOpacity>)}
-              {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => handleSelectCityForEdit(c, i)}><Text style={styles.previewTxt}>🌆 {c.name}</Text><Text style={styles.previewHint}>{editingCityIndex === i ? 'Ciudad en edición' : 'Tocá para cargar ciudad y sus puntos'}</Text></TouchableOpacity>)}</View>
+             <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => (isEditingEvent ? handleSelectPointForEdit(p, i) : setPointInDetail({ point: p, cityName: resolvedCityName }))}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewHint}>{isEditingEvent ? 'Toca para cargar este punto y editarlo' : 'Toca para ver el detalle del punto'}</Text></TouchableOpacity>)}
+              {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => handleSelectCityForEdit(c, i)}><Text style={styles.previewTxt}>🌆 {c.name}</Text><Text style={styles.previewHint}>{editingCityIndex === i ? 'Ciudad en edición' : 'Toca para cargar la ciudad y sus puntos'}</Text></TouchableOpacity>)}</View>
             <View style={styles.footerButtons}><TouchableOpacity style={styles.footerBtn} onPress={() => setStep(1)}><Text style={styles.actionText}>ATRAS</Text></TouchableOpacity><TouchableOpacity style={styles.footerBtn} onPress={handleAddCity}><Text style={styles.actionText}>{cityActionText}</Text></TouchableOpacity></View>
             <TouchableOpacity style={styles.finalSaveBtn} onPress={handleFinalSave}><Text style={styles.finalSaveText}>{eventToEdit ? 'GUARDAR EVENTO' : 'CREAR EVENTO'}</Text></TouchableOpacity>
           </View>
@@ -688,7 +688,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           <View style={styles.form}>
             <Text style={styles.stepTitle}>Apoyo - {currentPoint.coordinator?.name}</Text>
             <View style={styles.categoryPanel}>
-              <Text style={styles.sectionLabel}>1. Elegí una categoría</Text>
+              <Text style={styles.sectionLabel}>1. Elige una categoría</Text>
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar categoría..."
@@ -717,7 +717,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <Text style={styles.helperText}>Seleccioná una categoría para ver el staff asociado.</Text>
+              <Text style={styles.helperText}>Selecciona una categoría para ver el staff asociado.</Text>
             )}
             <View style={styles.staffList}>
               {selectedCategory && apiLists.staff.map(item => {
@@ -774,7 +774,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                   <TouchableOpacity onPress={() => setExpandedStaffPhoto(staffInDetail.photo)}>
                     <Image source={{ uri: staffInDetail.photo }} style={styles.detailPhoto} />
                   </TouchableOpacity>
-                  <Text style={styles.helperTextDark}>Tocá la foto para verla más grande.</Text>
+                  <Text style={styles.helperTextDark}>Toca la foto para verla más grande.</Text>
                   <Text style={styles.detailName}>{staffInDetail.name || staffInDetail.fullName}</Text>
                   <Text style={styles.detailCategory}>{staffInDetail.category || 'Sin categoría'}</Text>
                   <View style={styles.detailInfoList}>
@@ -795,7 +795,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           <View style={styles.overlayCenter}>
             <TouchableOpacity style={styles.photoPreviewOverlay} activeOpacity={1} onPress={() => setExpandedStaffPhoto(null)}>
               {expandedStaffPhoto ? <Image source={{ uri: expandedStaffPhoto }} style={styles.expandedPhoto} resizeMode="contain" /> : null}
-              <Text style={styles.photoPreviewHint}>Tocá para cerrar</Text>
+              <Text style={styles.photoPreviewHint}>Toca para cerrar</Text>
             </TouchableOpacity>
           </View>
         </Modal>

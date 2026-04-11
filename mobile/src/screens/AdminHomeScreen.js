@@ -120,7 +120,7 @@ const getClientCreateValidationMessage = (form) => {
   if (!hasTextValue(form.razonSocial)) return 'La razón social es obligatoria en el alta.';
   if (!hasTextValue(form.contactFullName)) return 'El nombre del contacto es obligatorio en el alta.';
   if (!hasTextValue(form.contactRole)) return 'El cargo del contacto es obligatorio en el alta.';
-  if (!hasTextValue(form.phone)) return 'El teléfono es obligatorio en el alta.';
+  if (!hasTextValue(form.phone)) return 'El número celular es obligatorio en el alta.';
   if (!hasTextValue(form.whatsappPhone)) return 'El WhatsApp es obligatorio en el alta.';
   if (!hasTextValue(form.email)) return 'El email es obligatorio en el alta.';
   if (!hasTextValue(form.username)) return 'El usuario es obligatorio en el alta.';
@@ -342,7 +342,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const handleCreateStaffCategory = async () => {
     const nextCategoryName = normalizeCategoryValue(categorySearch);
     if (!nextCategoryName) {
-      applyFeedback('error', 'Primero escribí el nombre de la categoría.');
+      applyFeedback('error', 'Primero escribe el nombre de la categoría.');
       return;
     }
 
@@ -375,7 +375,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
     const normalizedEmail = normalizeEmailValue(clientForm.email);
     if (!isValidEmailValue(normalizedEmail)) {
-      applyFeedback('error', 'Ingresá un correo electrónico válido.');
+      applyFeedback('error', 'Ingresa un correo electrónico válido.');
       return;
     }
 
@@ -447,7 +447,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     if (!nit) {
       setClientLookup({
         status: 'error',
-        message: 'Primero ingresá un NIT para verificar.',
+        message: 'Primero ingresa un NIT para verificar.',
         result: null,
         auditLogs: [],
         searchedValue: '',
@@ -467,19 +467,19 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         }));
         setClientLookup({
           status: 'exists',
-          message: 'Ese cliente ya existe. Entraste en modo edición para actualizar cualquier dato recuperado.',
+          message: 'Ese cliente ya existe. Ahora estás en modo de edición para actualizar cualquier dato recuperado.',
           result: response.client,
           auditLogs: Array.isArray(response.auditLogs) ? response.auditLogs : [],
           searchedValue: nit,
         });
-        applyFeedback('success', 'Cliente recuperado. Podés editarlo o cancelar para volver al modo alta.');
+        applyFeedback('success', 'Cliente recuperado. Puedes editarlo o cancelar para volver al modo de alta.');
         return;
       }
 
       setClientForm((current) => ({ ...current, nit }));
       setClientLookup({
         status: 'not-found',
-        message: 'No encontramos un cliente con ese NIT. Podés continuar con el alta.',
+        message: 'No encontramos un cliente con ese NIT. Puedes continuar con el alta.',
         result: null,
         auditLogs: [],
         searchedValue: nit,
@@ -514,7 +514,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     if (!cedula) {
       setCoordinatorLookup({
         status: 'error',
-        message: 'Primero ingresá una cédula para verificar.',
+        message: 'Primero ingresa una cédula para verificar.',
         result: null,
         auditLogs: [],
         searchedValue: '',
@@ -534,19 +534,19 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         }));
         setCoordinatorLookup({
           status: 'exists',
-          message: 'Ese coordinador ya existe. Entraste en modo edición para actualizar cualquier dato recuperado.',
+          message: 'Ese coordinador ya existe. Ahora estás en modo de edición para actualizar cualquier dato recuperado.',
           result: response.coordinator,
           auditLogs: Array.isArray(response.auditLogs) ? response.auditLogs : [],
           searchedValue: cedula,
         });
-        applyFeedback('success', 'Coordinador recuperado. Podés editarlo o cancelar para volver al modo alta.');
+        applyFeedback('success', 'Coordinador recuperado. Puedes editarlo o cancelar para volver al modo de alta.');
         return;
       }
 
       setCoordinatorForm((current) => ({ ...current, cedula }));
       setCoordinatorLookup({
         status: 'not-found',
-        message: 'No encontramos un coordinador con esa cédula. Podés continuar con el alta.',
+        message: 'No encontramos un coordinador con esa cédula. Puedes continuar con el alta.',
         result: null,
         auditLogs: [],
         searchedValue: cedula,
@@ -576,7 +576,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
     const normalizedEmail = normalizeEmailValue(coordinatorForm.email);
     if (!isValidEmailValue(normalizedEmail)) {
-      applyFeedback('error', 'Ingresá un correo electrónico válido.');
+      applyFeedback('error', 'Ingresa un correo electrónico válido.');
       return;
     }
 
@@ -637,7 +637,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     if (!cedula) {
       setStaffLookup({
         status: 'error',
-        message: 'Primero ingresá una cédula para verificar.',
+        message: 'Primero ingresa una cédula para verificar.',
         result: null,
         auditLogs: [],
         searchedValue: '',
@@ -655,19 +655,19 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         setStaffPhotoDraft(null);
         setStaffLookup({
           status: 'exists',
-          message: 'Esa persona de staff ya existe. Entraste en modo edición para actualizar cualquier dato recuperado.',
+          message: 'Esa persona de staff ya existe. Ahora estás en modo de edición para actualizar cualquier dato recuperado.',
           result: response.staff,
           auditLogs: Array.isArray(response.auditLogs) ? response.auditLogs : [],
           searchedValue: cedula,
         });
-        applyFeedback('success', 'Staff recuperado. Podés editarlo o cancelar para volver al modo alta.');
+        applyFeedback('success', 'Staff recuperado. Puedes editarlo o cancelar para volver al modo de alta.');
         return;
       }
 
       setStaffForm((current) => ({ ...current, cedula }));
       setStaffLookup({
         status: 'not-found',
-        message: 'No encontramos staff con esa cédula. Podés continuar con el alta.',
+        message: 'No encontramos staff con esa cédula. Puedes continuar con el alta.',
         result: null,
         auditLogs: [],
         searchedValue: cedula,
@@ -690,7 +690,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permiso requerido', 'Necesitás habilitar la galería para seleccionar una foto de staff.');
+        Alert.alert('Permiso requerido', 'Necesitas habilitar la galería para seleccionar una foto de staff.');
         return;
       }
 
@@ -779,12 +779,12 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
   const renderClientTab = () => (
     <View style={styles.tabContent}>
-        <SurfaceCard style={styles.formCard}>
-          <View style={styles.searchHeader}>
-            <Text style={styles.cardTitle}>{isEditingClient ? 'Edición de cliente' : 'Alta de cliente'}</Text>
-            <StatusBadge label={isEditingClient ? 'Modo actualización' : 'Modo alta'} tone={isEditingClient ? 'warning' : 'info'} />
-          </View>
-        <Text style={styles.helperText}>{isEditingClient ? 'Estás editando un cliente existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por el NIT. Lo verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
+      <SurfaceCard style={styles.formCard}>
+        <View style={styles.searchHeader}>
+          <Text style={styles.cardTitle}>{isEditingClient ? 'Edición de cliente' : 'Alta de cliente'}</Text>
+          <StatusBadge label={isEditingClient ? 'Modo actualización' : 'Modo alta'} tone={isEditingClient ? 'warning' : 'info'} />
+        </View>
+        <Text style={styles.helperText}>{isEditingClient ? 'Estás editando un cliente existente. Puedes actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Comienza por el NIT. Lo verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
             <InputRow label={`NIT${!isEditingClient ? ' *' : ''}`} value={clientForm.nit} onChangeText={handleNitChange} placeholder="900123456 o 900123456-7" />
@@ -817,7 +817,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <InputRow label={`Razón social${!isEditingClient ? ' *' : ''}`} value={clientForm.razonSocial} onChangeText={(value) => setClientForm((current) => ({ ...current, razonSocial: value }))} placeholder="Empresa SAS" />
         <InputRow label={`Nombre del contacto${!isEditingClient ? ' *' : ''}`} value={clientForm.contactFullName} onChangeText={(value) => setClientForm((current) => ({ ...current, contactFullName: value }))} placeholder="Nombre y apellido" />
         <InputRow label={`Cargo del contacto${!isEditingClient ? ' *' : ''}`} value={clientForm.contactRole} onChangeText={(value) => setClientForm((current) => ({ ...current, contactRole: value }))} placeholder="Brand Manager" />
-        <InputRow label={`Teléfono${!isEditingClient ? ' *' : ''}`} value={clientForm.phone} onChangeText={(value) => handleClientPhoneChange('phone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
+        <InputRow label={`Número Celular${!isEditingClient ? ' *' : ''}`} value={clientForm.phone} onChangeText={(value) => handleClientPhoneChange('phone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
         <InputRow label={`WhatsApp${!isEditingClient ? ' *' : ''}`} value={clientForm.whatsappPhone} onChangeText={(value) => handleClientPhoneChange('whatsappPhone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />
         <InputRow label={`Email${!isEditingClient ? ' *' : ''}`} value={clientForm.email} onChangeText={(value) => setClientForm((current) => ({ ...current, email: normalizeEmailValue(value) }))} placeholder="cliente@empresa.com" keyboardType="email-address" />
         <InputRow label={`Usuario${!isEditingClient ? ' *' : ''}`} value={clientForm.username} onChangeText={(value) => setClientForm((current) => ({ ...current, username: value }))} placeholder="cliente.nuevo" />
@@ -880,7 +880,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <Text style={styles.cardTitle}>{isEditingCoordinator ? 'Edición de coordinador' : 'Alta de coordinador'}</Text>
           <StatusBadge label={isEditingCoordinator ? 'Modo actualización' : 'Modo alta'} tone={isEditingCoordinator ? 'warning' : 'info'} />
         </View>
-        <Text style={styles.helperText}>{isEditingCoordinator ? 'Estás editando un coordinador existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por la cédula. La verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
+        <Text style={styles.helperText}>{isEditingCoordinator ? 'Estás editando un coordinador existente. Puedes actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Comienza por la cédula. La verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
             <InputRow label={`Cédula${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.cedula} onChangeText={handleCoordinatorCedulaChange} placeholder="Documento" />
@@ -981,7 +981,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <Text style={styles.cardTitle}>{isEditingStaff ? 'Edición de staff' : 'Alta de staff'}</Text>
           <StatusBadge label={isEditingStaff ? 'Modo actualización' : 'Modo alta'} tone={isEditingStaff ? 'warning' : 'info'} />
         </View>
-        <Text style={styles.helperText}>{isEditingStaff ? 'Estás editando una persona de staff existente. Podés actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Arrancá por la cédula. La verificamos y, si ya existe, autocompletamos la ficha.'}</Text>
+        <Text style={styles.helperText}>{isEditingStaff ? 'Estás editando una persona de staff existente. Puedes actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Comienza por la cédula. La verificamos y, si ya existe, autocompletamos la ficha.'}</Text>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
             <InputRow label="Cédula" value={staffForm.cedula} onChangeText={handleStaffCedulaChange} placeholder="Documento" />
@@ -1026,8 +1026,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             {staffPhotoDraft
               ? 'Vista previa lista. Se va a guardar en forma persistente cuando confirmes el alta o la actualización.'
               : isEditingStaff
-                ? 'Si querés reemplazar la foto actual, elegí otra imagen. Si no tocás nada, se conserva la existente.'
-                : 'Podés sumar una foto ahora, verla antes de guardar y quitarla si cambiás de idea.'}
+                ? 'Si quieres reemplazar la foto actual, elige otra imagen. Si no haces cambios, se conserva la existente.'
+                : 'Puedes agregar una foto ahora, verla antes de guardar y quitarla si cambias de idea.'}
           </Text>
           <View style={styles.photoActionsRow}>
             <AppButton title={staffPhotoPreviewUri ? 'CAMBIAR FOTO' : 'SELECCIONAR FOTO'} style={styles.photoActionButton} onPress={handlePickStaffPhoto} disabled={saving} />
@@ -1039,7 +1039,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <InputRow label="Nombre completo" value={staffForm.fullName} onChangeText={(value) => setStaffForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
         <InputRow label="Ciudad" value={staffForm.city} onPress={() => openCityPicker('staff')} placeholder="Seleccionar ciudad" />
         <InputRow label="Categoría" value={staffForm.category} onPress={openCategoryPicker} placeholder="Buscar o crear categoría" />
-        <Text style={styles.categoryHelperText}>Usamos catálogo administrable: buscás la categoría y, si no existe, la creás desde el mismo flujo.</Text>
+        <Text style={styles.categoryHelperText}>Usamos un catálogo administrable: buscas la categoría y, si no existe, la creas desde el mismo flujo.</Text>
         <InputRow label="Talla de ropa" value={staffForm.clothingSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, clothingSize: value }))} placeholder="S, M, L..." />
         <InputRow label="Talla de calzado" value={staffForm.shoeSize} onChangeText={(value) => setStaffForm((current) => ({ ...current, shoeSize: value }))} placeholder="36, 37, 38..." />
         <InputRow label="Medidas" value={staffForm.measurements} onChangeText={(value) => setStaffForm((current) => ({ ...current, measurements: value }))} placeholder="Opcional" />
@@ -1108,7 +1108,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Módulo administrador"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${getUserDisplayName(user)}. Desde acá podés gestionar altas administrativas, actualizar clientes existentes y mantener trazabilidad sin tocar los flujos operativos existentes.`}
+        subtitle={`Hola, ${getUserDisplayName(user)}. Desde este panel puedes gestionar altas administrativas, actualizar clientes existentes y mantener la trazabilidad sin afectar los flujos operativos vigentes.`}
       />
 
       <UserProfileCard user={user} palette={palette} title="Perfil administrativo" buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />

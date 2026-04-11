@@ -40,13 +40,13 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
     <SafeAreaView style={styles.container}> 
       <ScrollView contentContainerStyle={[styles.scrollContent, { padding: metrics.screenPadding }]}> 
         <Text style={[styles.title, { fontSize: metrics.heroTitleSize }]}>MIS EVENTOS</Text>
-        <Text style={styles.subtitle}>Solo ves los eventos donde estás asignado como coordinador.</Text>
+        <Text style={styles.subtitle}>Solo ves los eventos en los que estás asignado como coordinador.</Text>
 
         <View style={styles.listContainer}>
           {events.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>Sin eventos asignados</Text>
-              <Text style={styles.emptyText}>Cuando un ejecutivo te asigne puntos, van a aparecer acá.</Text>
+              <Text style={styles.emptyText}>Cuando un ejecutivo te asigne puntos, aparecerán aquí.</Text>
             </View>
           ) : (
             events.map((event) => (

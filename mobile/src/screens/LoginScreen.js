@@ -41,7 +41,7 @@ const LoginScreen = ({ onLogin, appConfig }) => {
       const user = await login(username, password);
       onLogin(user);
     } catch (err) {
-      const message = typeof err === 'string' ? err : 'No pudimos iniciar sesión. Revisá tus credenciales e intentá de nuevo.';
+      const message = typeof err === 'string' ? err : 'No pudimos iniciar sesión. Revisa tus credenciales e inténtalo de nuevo.';
       const diagnosticSuffix = diagnosticMode ? ` [baseURL=${getBaseUrl()}]` : '';
       setError(`${message}${diagnosticSuffix}`);
     } finally {
@@ -126,8 +126,8 @@ const LoginScreen = ({ onLogin, appConfig }) => {
               <Text style={styles.kicker}>Bienvenido</Text>
               <Text style={styles.kickerMeta}>{activeAccounts.join(' · ')}</Text>
             </View>
-            <Text style={styles.subtitle}>Ingresá a tu espacio de trabajo</Text>
-            <Text style={styles.helperText}>Usá las credenciales asignadas para tu rol y continuá con la operación. Para los usuarios base de prueba, la contraseña es 123.</Text>
+            <Text style={styles.subtitle}>Ingresa a tu espacio de trabajo</Text>
+            <Text style={styles.helperText}>Usa las credenciales asignadas para tu rol y continúa con la operación. Para los usuarios base de prueba, la contraseña es 123.</Text>
 
             <View style={styles.formSection}>
               <Text style={styles.fieldLabel}>Usuario</Text>

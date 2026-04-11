@@ -43,7 +43,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Panel ejecutivo"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${displayUsername}. Gestioná creación, seguimiento y cierre ejecutivo desde un único panel.`}
+        subtitle={`Hola, ${displayUsername}. Gestiona creación, seguimiento y cierre ejecutivo desde un único panel.`}
       />
 
       <SurfaceCard style={styles.heroCard}>
@@ -52,7 +52,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <StatusBadge label="Cobertura multirol" tone="info" />
         </View>
         <Text style={styles.heroTitle}>Centro de control comercial</Text>
-        <Text style={styles.heroText}>Accedé rápido a la creación, revisión y publicación final de cada evento.</Text>
+        <Text style={styles.heroText}>Accede rápidamente a la creación, revisión y publicación final de cada evento.</Text>
       </SurfaceCard>
 
       <UserProfileCard
@@ -67,13 +67,13 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <View style={styles.menuContainer}>
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Crear evento</Text>
-          <Text style={styles.menuText}>Definí cliente, ciudades, puntos operativos, disponibilidad y asignación.</Text>
+          <Text style={styles.menuText}>Define cliente, ciudades, puntos operativos, disponibilidad y asignación.</Text>
           <AppButton title="ABRIR CREACIÓN" onPress={() => setCurrentView('createEvent')} />
         </SurfaceCard>
 
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Revisar eventos</Text>
-          <Text style={styles.menuText}>Hacé seguimiento, edición e inactivación con el flujo actual.</Text>
+          <Text style={styles.menuText}>Haz seguimiento, edición e inactivación con el flujo actual.</Text>
           <AppButton title="ABRIR REVISIÓN" onPress={() => setCurrentView('reviewEvents')} />
         </SurfaceCard>
 
