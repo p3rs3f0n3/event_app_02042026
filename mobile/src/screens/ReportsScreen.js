@@ -7,14 +7,14 @@ import { getInactiveBadgeLabel } from '../utils/eventLifecycle';
 import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
 const FORM_FIELDS = [
-  ['title', 'Título'],
-  ['executiveSummary', 'Resumen ejecutivo'],
-  ['objectivesCompliance', 'Cumplimiento de objetivos'],
-  ['resultsImpact', 'Resultados / impacto'],
-  ['redemptions', 'Redenciones / aclaración'],
-  ['highlights', 'Hallazgos o highlights'],
-  ['incidents', 'Incidentes'],
-  ['recommendations', 'Recomendaciones'],
+  ['title', 'Título *'],
+  ['executiveSummary', 'Resumen ejecutivo *'],
+  ['objectivesCompliance', 'Cumplimiento de objetivos *'],
+  ['resultsImpact', 'Resultados / impacto *'],
+  ['redemptions', 'Redenciones / aclaración *'],
+  ['highlights', 'Hallazgos o highlights *'],
+  ['incidents', 'Incidentes *'],
+  ['recommendations', 'Recomendaciones *'],
 ];
 
 const formatDate = (value) => new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -317,6 +317,7 @@ const ReportsScreen = ({ onBack, user }) => {
 
         <View style={styles.infoCard}>
           <Text style={styles.sectionTitle}>Redacción del informe final</Text>
+          <Text style={styles.infoText}>Los campos marcados con * son obligatorios para publicar el informe final.</Text>
           {FORM_FIELDS.map(([fieldName, label]) => (
             <View key={fieldName} style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>{label}</Text>

@@ -1,5 +1,7 @@
 const { normalizeString } = require('./validation');
 
+const COORDINATOR_REPORT_TIME_TOLERANCE_MINUTES = 5;
+
 const normalizeAuthor = (author) => {
   if (!author || typeof author !== 'object') {
     return null;
@@ -74,6 +76,8 @@ const normalizeReportEntry = (report, index = 0) => {
       endTime: null,
       initialInventory: null,
       finalInventory: null,
+      directImpact: null,
+      indirectImpact: null,
       observations: report,
       redemptionsCount: null,
       relevantAspects: null,
@@ -84,6 +88,8 @@ const normalizeReportEntry = (report, index = 0) => {
     return null;
   }
 
+  const directImpact = Number.isFinite(Number(report.directImpact)) ? Number(report.directImpact) : null;
+  const indirectImpact = Number.isFinite(Number(report.indirectImpact)) ? Number(report.indirectImpact) : null;
   const content = normalizeString(report.content || report.summary || report.impact || report.observations || '');
   const title = normalizeString(report.title) || `Informe ${index + 1}`;
 
@@ -100,6 +106,8 @@ const normalizeReportEntry = (report, index = 0) => {
     endTime: report.endTime || report.end_time || null,
     initialInventory: normalizeString(report.initialInventory || report.initial_inventory || '' ) || null,
     finalInventory: normalizeString(report.finalInventory || report.final_inventory || '' ) || null,
+    directImpact,
+    indirectImpact,
     observations: normalizeString(report.observations || report.impact || report.content || '' ) || null,
     redemptionsCount: Number.isFinite(Number(report.redemptionsCount)) ? Number(report.redemptionsCount) : null,
     relevantAspects: normalizeString(report.relevantAspects || report.otherRelevantAspects || '' ) || null,
@@ -127,7 +135,8 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
   const endTime = payload.endTime;
   const initialInventory = normalizeString(payload.initialInventory);
   const finalInventory = normalizeString(payload.finalInventory);
-  const observations = normalizeString(payload.observations);
+  const directImpact = Number.isFinite(Number(payload.directImpact)) ? Number(payload.directImpact) : 0;
+  const indirectImpact = Number.isFinite(Number(payload.indirectImpact)) ? Number(payload.indirectImpact) : 0;
   const relevantAspects = normalizeString(payload.relevantAspects);
   const hasRedemptions = Boolean(payload.hasRedemptions);
   const redemptionsCount = hasRedemptions ? Number(payload.redemptionsCount || 0) : 0;
@@ -137,7 +146,8 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
     `Finalización: ${endTime}`,
     `Inventario inicial: ${initialInventory}`,
     `Inventario final: ${finalInventory}`,
-    `Impacto / observaciones: ${observations}`,
+    `Impacto directo: ${directImpact}`,
+    `Impacto indirecto: ${indirectImpact}`,
     `Redenciones: ${hasRedemptions ? redemptionsCount : 'No aplica'}`,
     `Otros aspectos relevantes: ${relevantAspects || 'Sin novedades adicionales'}`,
   ];
@@ -158,16 +168,105 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
     endTime,
     initialInventory,
     finalInventory,
-    observations,
+    directImpact,
+    indirectImpact,
+    observations: null,
     hasRedemptions,
     redemptionsCount,
     relevantAspects: relevantAspects || null,
   };
 };
 
+const parseMeridiemTimeToMinutes = (value) => {
+  const normalizedValue = normalizeString(value)
+    .replace(/\u00A0/g, ' ')
+    .replace(/a\.\s*m\./i, 'AM')
+    .replace(/p\.\s*m\./i, 'PM')
+    .replace(/a\.m\./i, 'AM')
+    .replace(/p\.m\./i, 'PM');
+  const match = normalizedValue.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3].toUpperCase();
+  if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  let normalizedHours = hours % 12;
+  if (period === 'PM') {
+    normalizedHours += 12;
+  }
+
+  return (normalizedHours * 60) + minutes;
+};
+
+const getCoordinatorEventTimeRange = (event) => {
+  const ranges = [];
+  for (const city of Array.isArray(event?.cities) ? event.cities : []) {
+    for (const point of Array.isArray(city?.points) ? city.points : []) {
+      const startMinutes = parseMeridiemTimeToMinutes(
+        point?.startTime instanceof Date
+          ? point.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : point?.startTime,
+      );
+      const endMinutes = parseMeridiemTimeToMinutes(
+        point?.endTime instanceof Date
+          ? point.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : point?.endTime,
+      );
+
+      if (startMinutes !== null && endMinutes !== null) {
+        ranges.push({ startMinutes, endMinutes });
+      }
+    }
+  }
+
+  if (!ranges.length) {
+    return null;
+  }
+
+  return {
+    minStartMinutes: Math.min(...ranges.map((item) => item.startMinutes)),
+    maxEndMinutes: Math.max(...ranges.map((item) => item.endMinutes)),
+  };
+};
+
+const validateCoordinatorReportTimeRange = ({ event, startTime, endTime }) => {
+  const startMinutes = parseMeridiemTimeToMinutes(startTime);
+  const endMinutes = parseMeridiemTimeToMinutes(endTime);
+  if (startMinutes === null || endMinutes === null) {
+    return 'La hora de inicio y finalización deben tener formato de hora válido';
+  }
+  if (endMinutes <= startMinutes) {
+    return 'La hora de finalización debe ser posterior a la hora de inicio';
+  }
+
+  const range = getCoordinatorEventTimeRange(event);
+  if (!range) {
+    return null;
+  }
+
+  if ((startMinutes + COORDINATOR_REPORT_TIME_TOLERANCE_MINUTES) < range.minStartMinutes) {
+    return 'La hora de inicio del informe debe ser igual o posterior al inicio del evento';
+  }
+
+  if ((endMinutes + COORDINATOR_REPORT_TIME_TOLERANCE_MINUTES) < range.maxEndMinutes) {
+    return 'La hora de finalización del informe debe ser igual o posterior al fin del evento';
+  }
+
+  return null;
+};
+
 module.exports = {
   buildCoordinatorPhoto,
   buildCoordinatorReport,
+  getCoordinatorEventTimeRange,
   normalizePhotoEntry,
+  parseMeridiemTimeToMinutes,
   normalizeReportEntry,
+  validateCoordinatorReportTimeRange,
 };

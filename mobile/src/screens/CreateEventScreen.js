@@ -9,6 +9,16 @@ const isOtherCityOption = (city) => Boolean(city?.isOther || String(city?.name |
 const normalizeCityName = (value) => String(value || '').trim().toLowerCase();
 const normalizeComparableValue = (value) => String(value || '').trim().toLowerCase();
 const normalizePhoneValue = (value) => String(value || '').replace(/\D/g, '').slice(0, 10);
+const getCoordinatorDisplayName = (coordinator) => coordinator?.name || coordinator?.fullName || 'Sin nombre';
+const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
+const MAX_EVENT_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const getEventImagePreviewUri = (image) => (typeof image === 'string' ? image : image?.uri || null);
+
+const startOfToday = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+};
 
 const getClientDescription = (client) => [client?.username ? `@${client.username}` : null, client?.contactFullName || null, client?.email || null].filter(Boolean).join(' · ');
 
@@ -99,6 +109,26 @@ const getAssignedStaffLabel = (point) => {
   return staffNames.length ? staffNames.join(', ') : 'Sin staff asignado';
 };
 
+const getPointPreviewSummary = (point) => {
+  const parts = [
+    `Coordinador: ${getCoordinatorDisplayName(point?.coordinator)}`,
+    `Staff: ${getAssignedStaffLabel(point)}`,
+  ];
+
+  return parts.join(' · ');
+};
+
+const buildInitialEventData = (eventToEdit = null) => ({
+  name: eventToEdit?.name || '',
+  client: eventToEdit?.client || '',
+  clientId: eventToEdit?.clientId || null,
+  clientUserId: eventToEdit?.clientUserId || null,
+  startDate: eventToEdit?.startDate ? new Date(eventToEdit.startDate) : null,
+  endDate: eventToEdit?.endDate ? new Date(eventToEdit.endDate) : null,
+  image: eventToEdit?.image || null,
+  cities: attachOriginalRefsToCities(eventToEdit?.cities, eventToEdit?.id),
+});
+
 const getUtcMinutes = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -142,12 +172,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const [showPicker, setShowPicker] = useState(null);
   const [apiLists, setApiLists] = useState({ coordinators: [], staff: [], cities: [], clients: [] });
   const [loading, setLoading] = useState(true);
-  const [eventData, setEventData] = useState(() => ({
-    name: eventToEdit?.name || '', client: eventToEdit?.client || '', clientId: eventToEdit?.clientId || null, clientUserId: eventToEdit?.clientUserId || null,
-    startDate: eventToEdit?.startDate ? new Date(eventToEdit.startDate) : null,
-    endDate: eventToEdit?.endDate ? new Date(eventToEdit.endDate) : null,
-    image: eventToEdit?.image || null, cities: attachOriginalRefsToCities(eventToEdit?.cities, eventToEdit?.id)
-  }));
+  const [eventData, setEventData] = useState(() => buildInitialEventData(eventToEdit));
 
   const [currentCityName, setCurrentCityName] = useState('');
   const [cityPoints, setCityPoints] = useState([]);
@@ -173,11 +198,19 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const isEditingEvent = Boolean(eventToEdit);
   const isEditingPoint = editingPointIndex !== null;
   const isEditingCity = editingCityIndex !== null;
-  const coordinatorButtonText = currentPoint.coordinator?.name
-    ? `Coord: ${currentPoint.coordinator.name}`
-    : isEditingPoint
-      ? 'ACTUALIZAR COORDINADOR *'
-      : 'ASIGNAR COORDINADOR *';
+  const minimumEventDate = useMemo(() => startOfToday(), []);
+  const minimumEndDate = useMemo(() => {
+    if (eventData.startDate instanceof Date && !Number.isNaN(eventData.startDate.getTime())) {
+      const startDate = new Date(eventData.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      return startDate < minimumEventDate ? minimumEventDate : startDate;
+    }
+
+    return minimumEventDate;
+  }, [eventData.startDate, minimumEventDate]);
+  const coordinatorButtonText = isEditingPoint
+    ? 'ACTUALIZAR COORDINADOR *'
+    : 'ASIGNAR COORDINADOR *';
   const pointActionText = isEditingPoint ? 'ACTUALIZAR PUNTO' : 'AÑADIR PUNTO';
   const cityActionText = isEditingCity ? 'ACTUALIZAR CIUDAD' : 'AGREGAR CIUDAD';
   const selectedClient = useMemo(
@@ -186,6 +219,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       || null,
     [apiLists.clients, eventData.clientId, eventData.clientUserId],
   );
+  const eventImagePreviewUri = useMemo(() => getEventImagePreviewUri(eventData.image), [eventData.image]);
 
   const resolvedCityName = (isNewCity ? manualCityName : currentCityName).trim();
   const filteredCategories = useMemo(() => {
@@ -221,13 +255,34 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing,
         quality: 1,
+        base64: true,
       });
 
-      if (result.canceled || !result.assets?.[0]?.uri) {
+      if (result.canceled || !result.assets?.[0]) {
         return;
       }
 
-      setEventData((prev) => ({ ...prev, image: result.assets[0].uri }));
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const fileSize = Number(asset.fileSize || 0) || null;
+
+      if (fileSize && fileSize > MAX_EVENT_IMAGE_SIZE_BYTES) {
+        Alert.alert('Archivo demasiado grande', 'La foto del evento supera el límite de 10 MB.');
+        return;
+      }
+
+      const uri = asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri;
+
+      setEventData((prev) => ({
+        ...prev,
+        image: {
+          uri,
+          mimeType,
+          fileSize,
+          fileName: asset.fileName || null,
+          source: 'event',
+        },
+      }));
       setShowImageActions(true);
     } catch (error) {
       Alert.alert('Error', 'No se pudo abrir la galería en este dispositivo.');
@@ -322,6 +377,29 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   };
 
   useEffect(() => {
+    setStep(1);
+    setShowPicker(null);
+    setEventData(buildInitialEventData(eventToEdit));
+    setCurrentCityName('');
+    setCityPoints([]);
+    setEditingCityIndex(null);
+    setEditingPointIndex(null);
+    setIsNewCity(false);
+    setManualCityName('');
+    setShowCitySearch(false);
+    setShowClientSearch(false);
+    setSearchQuery('');
+    setClientSearchQuery('');
+    setShowImageActions(false);
+    setSelectedCategory(null);
+    setCategorySearchQuery('');
+    setStaffInDetail(null);
+    setPointInDetail(null);
+    setExpandedStaffPhoto(null);
+    setCurrentPoint(createEmptyPoint());
+  }, [eventToEdit?.id]);
+
+  useEffect(() => {
     const fetchInitial = async () => {
       try {
         const [cities, clients, staffCategories] = await Promise.all([getColombiaCities(), getClients(), getStaffCategories()]);
@@ -377,6 +455,12 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   const validateEventMetadata = () => {
     if (!eventData.name || !eventData.client || !eventData.clientUserId || !eventData.startDate || !eventData.endDate || !eventData.image) {
       Alert.alert('Incompleto', 'Llene todos los campos técnicos y cargue foto'); return false;
+    }
+    if (new Date(eventData.startDate) < minimumEventDate) {
+      Alert.alert('Fecha inválida', 'La fecha de inicio no puede ser anterior a hoy'); return false;
+    }
+    if (new Date(eventData.endDate) < minimumEndDate) {
+      Alert.alert('Fecha inválida', 'La fecha fin no puede ser anterior a la fecha de inicio'); return false;
     }
     if (new Date(eventData.endDate) <= new Date(eventData.startDate)) {
       Alert.alert('Fecha Inválida', 'La fecha fin debe ser posterior'); return false;
@@ -547,7 +631,13 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
 
   const onPickerChange = (event, selectedDate) => {
     const type = showPicker; setShowPicker(null); if (!selectedDate) return;
-    if (type.includes('date')) setEventData({ ...eventData, [type === 'start_date' ? 'startDate' : 'endDate']: selectedDate });
+    if (type.includes('date')) {
+      const normalizedDate = new Date(selectedDate);
+      normalizedDate.setHours(0, 0, 0, 0);
+      const fallbackMinimumDate = type === 'end_date' ? minimumEndDate : minimumEventDate;
+      const safeDate = normalizedDate < fallbackMinimumDate ? fallbackMinimumDate : normalizedDate;
+      setEventData({ ...eventData, [type === 'start_date' ? 'startDate' : 'endDate']: safeDate });
+    }
       else {
         setCurrentPoint({ ...currentPoint, [type === 'start_time' ? 'startTime' : 'endTime']: selectedDate, coordinator: null, assignedStaff: [] });
         handleClearCategorySelection();
@@ -593,10 +683,10 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           <View style={styles.form}>
             <View style={styles.imageCard}>
               <TouchableOpacity style={styles.imageSelector} onPress={handlePickEventImage}>
-                {eventData.image ? <Image source={{ uri: eventData.image }} style={styles.selectedImage} /> : <View style={styles.photoPlaceholder}><Text style={styles.photoText}>FOTO EVENTO *</Text></View>}
+                {eventImagePreviewUri ? <Image source={{ uri: eventImagePreviewUri }} style={styles.selectedImage} /> : <View style={styles.photoPlaceholder}><Text style={styles.photoText}>FOTO EVENTO *</Text></View>}
               </TouchableOpacity>
-              <Text style={styles.helperText}>{eventData.image ? 'Vista previa lista. Puedes usar la foto tal cual, volver a abrir la galería para editarla o recortarla, o quitarla.' : 'Elige una foto desde la galería para continuar con la carga.'}</Text>
-              {eventData.image ? (
+              <Text style={styles.helperText}>{eventImagePreviewUri ? 'Vista previa lista. Puedes usar la foto tal cual, volver a abrir la galería para editarla o recortarla, o quitarla.' : 'Elige una foto desde la galería para continuar con la carga.'}</Text>
+              {eventImagePreviewUri ? (
                 <>
                   {showImageActions ? (
                     <View style={styles.imageActionsCard}>
@@ -656,9 +746,11 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                   <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
                  <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
                  <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{coordinatorButtonText}</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>{pointActionText}</Text></TouchableOpacity>
+                 {currentPoint.coordinator ? <Text style={styles.helperText}>Coordinador seleccionado: {getCoordinatorDisplayName(currentPoint.coordinator)}</Text> : null}
+                 {currentPoint.assignedStaff.length ? <Text style={styles.helperText}>Staff asignado: {getAssignedStaffLabel(currentPoint)}</Text> : null}
+               <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>{pointActionText}</Text></TouchableOpacity>
              </View>
-             <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => (isEditingEvent ? handleSelectPointForEdit(p, i) : setPointInDetail({ point: p, cityName: resolvedCityName }))}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewHint}>{isEditingEvent ? 'Toca para cargar este punto y editarlo' : 'Toca para ver el detalle del punto'}</Text></TouchableOpacity>)}
+             <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => (isEditingEvent ? handleSelectPointForEdit(p, i) : setPointInDetail({ point: p, cityName: resolvedCityName }))}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewMeta}>{getPointPreviewSummary(p)}</Text><Text style={styles.previewHint}>{isEditingEvent ? 'Toca para cargar este punto y editarlo' : 'Toca para ver el detalle del punto'}</Text></TouchableOpacity>)}
               {eventData.cities.map((c, i) => <TouchableOpacity key={i} style={[styles.previewRow, {backgroundColor: 'rgba(255,255,255,0.2)'}]} onPress={() => handleSelectCityForEdit(c, i)}><Text style={styles.previewTxt}>🌆 {c.name}</Text><Text style={styles.previewHint}>{editingCityIndex === i ? 'Ciudad en edición' : 'Toca para cargar la ciudad y sus puntos'}</Text></TouchableOpacity>)}</View>
             <View style={styles.footerButtons}><TouchableOpacity style={styles.footerBtn} onPress={() => setStep(1)}><Text style={styles.actionText}>ATRAS</Text></TouchableOpacity><TouchableOpacity style={styles.footerBtn} onPress={handleAddCity}><Text style={styles.actionText}>{cityActionText}</Text></TouchableOpacity></View>
             <TouchableOpacity style={styles.finalSaveBtn} onPress={handleFinalSave}><Text style={styles.finalSaveText}>{eventToEdit ? 'GUARDAR EVENTO' : 'CREAR EVENTO'}</Text></TouchableOpacity>
@@ -674,7 +766,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 <TouchableOpacity key={coord.id} disabled={disabled} style={[styles.coordCard, disabled && styles.disabledCard]} onPress={() => { if (disabled) return; setCurrentPoint({...currentPoint, coordinator: coord}); setStep(4); }}>
                   <Image source={{ uri: coord.photo }} style={[styles.coordPhoto, disabled && styles.disabledPhoto]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.coordName, disabled && styles.disabledText]}>{coord.name}</Text>
+                    <Text style={[styles.coordName, disabled && styles.disabledText]}>{getCoordinatorDisplayName(coord)}</Text>
                     {disabled && <Text style={styles.disabledHint}>{coord.unavailableReason || 'No disponible en este horario'}</Text>}
                   </View>
                 </TouchableOpacity>
@@ -686,7 +778,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
 
         {step === 4 && (
           <View style={styles.form}>
-            <Text style={styles.stepTitle}>Apoyo - {currentPoint.coordinator?.name}</Text>
+            <Text style={styles.stepTitle}>Apoyo - {getCoordinatorDisplayName(currentPoint.coordinator)}</Text>
             <View style={styles.categoryPanel}>
               <Text style={styles.sectionLabel}>1. Elige una categoría</Text>
               <TextInput
@@ -711,6 +803,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionLabel}>2. Staff disponible</Text>
                   <Text style={styles.selectedCategoryText}>{selectedCategory}</Text>
+                  {currentPoint.assignedStaff.length ? <Text style={styles.helperText}>Seleccionado: {getAssignedStaffLabel(currentPoint)}</Text> : null}
                 </View>
                 <TouchableOpacity style={styles.categoryClearButton} onPress={handleClearCategorySelection}>
                   <Text style={styles.categoryClearButtonText}>CAMBIAR</Text>
@@ -727,7 +820,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 return (
                 <View key={item.id} style={[styles.staffRow, exists && {backgroundColor: 'rgba(255,179,0,0.4)'}, disabled && styles.disabledCard]}>
                   <TouchableOpacity disabled={disabled} style={{flex: 1}} onPress={() => { if (disabled) return; setCurrentPoint({...currentPoint, assignedStaff: exists ? currentPoint.assignedStaff.filter(p => p.id !== item.id) : [...currentPoint.assignedStaff, item]}); }}>
-                    <Text style={[styles.staffName, disabled && styles.disabledText]}>{item.name}</Text>
+                    <Text style={[styles.staffName, disabled && styles.disabledText]}>{getStaffDisplayName(item)}</Text>
                     {disabled && <Text style={styles.disabledHint}>{item.unavailableReason || 'No disponible en este horario'}</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dotsButton} onPress={() => setStaffInDetail(item)}>
@@ -768,14 +861,14 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         </Modal>
         <Modal visible={!!staffInDetail} transparent animationType="slide">
           <View style={styles.overlayCenter}>
-            <View style={styles.detailPopup}>
+            <ScrollView style={styles.detailPopup} contentContainerStyle={styles.detailPopupContent} showsVerticalScrollIndicator={false}>
               {staffInDetail && (
                 <>
                   <TouchableOpacity onPress={() => setExpandedStaffPhoto(staffInDetail.photo)}>
                     <Image source={{ uri: staffInDetail.photo }} style={styles.detailPhoto} />
                   </TouchableOpacity>
                   <Text style={styles.helperTextDark}>Toca la foto para verla más grande.</Text>
-                  <Text style={styles.detailName}>{staffInDetail.name || staffInDetail.fullName}</Text>
+                  <Text style={styles.detailName}>{getStaffDisplayName(staffInDetail)}</Text>
                   <Text style={styles.detailCategory}>{staffInDetail.category || 'Sin categoría'}</Text>
                   <View style={styles.detailInfoList}>
                     <View style={styles.detailInfoRow}><Text style={styles.infoLabel}>Cédula</Text><Text style={styles.infoVal}>{staffInDetail.cedula || 'Sin dato'}</Text></View>
@@ -794,7 +887,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setStaffInDetail(null)}><Text style={styles.closeDetailText}>CERRAR</Text></TouchableOpacity>
                 </>
               )}
-            </View>
+            </ScrollView>
           </View>
         </Modal>
         <Modal visible={!!expandedStaffPhoto} transparent animationType="fade">
@@ -815,7 +908,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           {clientSearchResults.map((client) => (<TouchableOpacity key={client.clientId || client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: getClientLabel(client), clientId: client.clientId || null, clientUserId: client.userId || client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{getClientLabel(client)}</Text><Text style={styles.clientItemMeta}>{client.nit ? `NIT ${client.nit} · ` : ''}{getClientDescription(client)}</Text></TouchableOpacity>))}
           {!clientSearchLoading && clientSearchResults.length === 0 ? <Text style={styles.emptyModalText}>No encontramos clientes con ese NIT o nombre.</Text> : null}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => { setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
-        {showPicker && <DateTimePicker value={(showPicker === 'start_time' ? currentPoint.startTime : showPicker === 'end_time' ? currentPoint.endTime : showPicker === 'start_date' ? eventData.startDate : eventData.endDate) || new Date()} mode={showPicker.includes('date') ? 'date' : 'time'} is24Hour={false} display="default" onChange={onPickerChange} />}
+        {showPicker && <DateTimePicker value={(showPicker === 'start_time' ? currentPoint.startTime : showPicker === 'end_time' ? currentPoint.endTime : showPicker === 'start_date' ? eventData.startDate : eventData.endDate) || new Date()} mode={showPicker.includes('date') ? 'date' : 'time'} is24Hour={false} display="default" onChange={onPickerChange} minimumDate={showPicker === 'start_date' ? minimumEventDate : showPicker === 'end_date' ? minimumEndDate : undefined} />}
       </ScrollView>
     </SafeAreaView>
   );
@@ -851,6 +944,7 @@ const createStyles = (palette) => StyleSheet.create({
   listPreview: { marginVertical: 15, gap: 6 },
   previewRow: { backgroundColor: palette.panelStrong, padding: 12, borderRadius: 8 },
   previewTxt: { color: palette.onHero },
+  previewMeta: { color: palette.onHero, opacity: 0.9, fontSize: 11, marginTop: 4 },
   previewHint: { color: palette.onHero, opacity: 0.7, fontSize: 11, marginTop: 4 },
   footerButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
   footerBtn: { backgroundColor: palette.secondaryButton, paddingVertical: 12, borderRadius: 30, width: '48%', alignItems: 'center' },
@@ -897,7 +991,8 @@ const createStyles = (palette) => StyleSheet.create({
   dotsButton: { padding: 10, backgroundColor: palette.panel, borderRadius: 20 },
   dotsText: { color: palette.onHero, fontWeight: 'bold', fontSize: 16 },
   overlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
-  detailPopup: { backgroundColor: palette.surface, width: '85%', borderRadius: 30, padding: 25, alignItems: 'center' },
+  detailPopup: { backgroundColor: palette.surface, width: '85%', maxHeight: '80%', borderRadius: 30, padding: 25 },
+  detailPopupContent: { alignItems: 'center', paddingBottom: 28, flexGrow: 1 },
   detailPhoto: { width: 120, height: 120, borderRadius: 60, marginBottom: 15, borderWidth: 3, borderColor: palette.heroSoft },
   helperTextDark: { color: palette.textMuted, fontSize: 12, marginTop: -4, marginBottom: 12 },
   detailName: { fontSize: 22, fontWeight: 'bold', color: palette.text },

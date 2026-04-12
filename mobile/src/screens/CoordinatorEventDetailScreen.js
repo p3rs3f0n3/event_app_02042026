@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Image,
   Modal,
   SafeAreaView,
@@ -14,15 +15,19 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { addCoordinatorEventPhoto, addCoordinatorEventReport } from '../api/api';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { useResponsiveMetrics } from '../utils/responsive';
 import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
+const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
+
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_PHOTO_SIZE_MB = 10;
 const VALID_PHOTO_FORMATS_LABEL = 'JPG, PNG, WEBP y HEIC';
+const REPORT_TIME_TOLERANCE_MINUTES = 5;
 
 const formatDate = (date) => {
   if (!date) return 'Sin fecha';
@@ -45,13 +50,90 @@ const createEmptyReportForm = () => ({
   endTime: '',
   initialInventory: '',
   finalInventory: '',
-  observations: '',
+  directImpact: '',
+  indirectImpact: '',
   hasRedemptions: false,
   redemptionsCount: '0',
   relevantAspects: '',
 });
 
-const Field = ({ styles, label, value, onChangeText, multiline = false, placeholder = '' }) => (
+const parseTimeValue = (value) => {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value
+    .trim()
+    .replace(/\u00A0/g, ' ')
+    .replace(/a\.\s*m\./i, 'AM')
+    .replace(/p\.\s*m\./i, 'PM')
+    .replace(/a\.m\./i, 'AM')
+    .replace(/p\.m\./i, 'PM');
+
+  const match = normalizedValue.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3].toUpperCase();
+
+  if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  const date = new Date();
+  date.setSeconds(0, 0);
+  let normalizedHours = hours % 12;
+  if (period === 'PM') {
+    normalizedHours += 12;
+  }
+  date.setHours(normalizedHours, minutes, 0, 0);
+  return date;
+};
+
+const formatReportTime = (value) => {
+  const parsed = value instanceof Date ? value : parseTimeValue(value);
+  if (!parsed) {
+    return '';
+  }
+
+  return parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
+const getTimeMinutesFromDate = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return (date.getHours() * 60) + date.getMinutes();
+};
+
+const getCoordinatorEventTimeRange = (event) => {
+  const ranges = [];
+  for (const city of Array.isArray(event?.cities) ? event.cities : []) {
+    for (const point of Array.isArray(city?.points) ? city.points : []) {
+      const startMinutes = getTimeMinutesFromDate(point?.startTime);
+      const endMinutes = getTimeMinutesFromDate(point?.endTime);
+      if (startMinutes !== null && endMinutes !== null) {
+        ranges.push({ startMinutes, endMinutes });
+      }
+    }
+  }
+
+  if (!ranges.length) {
+    return null;
+  }
+
+  return {
+    minStartMinutes: Math.min(...ranges.map((item) => item.startMinutes)),
+    maxEndMinutes: Math.max(...ranges.map((item) => item.endMinutes)),
+  };
+};
+
+const Field = ({ styles, label, value, onChangeText, multiline = false, placeholder = '', editable = true }) => (
   <View style={styles.fieldGroup}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <TextInput
@@ -63,6 +145,7 @@ const Field = ({ styles, label, value, onChangeText, multiline = false, placehol
       numberOfLines={multiline ? 4 : 1}
       style={[styles.fieldInput, multiline && styles.fieldInputMultiline]}
       textAlignVertical={multiline ? 'top' : 'center'}
+      editable={editable}
     />
   </View>
 );
@@ -77,6 +160,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
   const [reportForm, setReportForm] = useState(createEmptyReportForm());
+  const [reportTimePicker, setReportTimePicker] = useState(null);
 
   const photos = useMemo(() => normalizePhotos(currentEvent?.photos), [currentEvent?.photos]);
   const reports = useMemo(() => normalizeReports(currentEvent?.reports), [currentEvent?.reports]);
@@ -171,13 +255,40 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
       return;
     }
 
+    const parsedStartTime = parseTimeValue(reportForm.startTime);
+    const parsedEndTime = parseTimeValue(reportForm.endTime);
+    if (!parsedStartTime || !parsedEndTime) {
+      Alert.alert('Hora inválida', 'Selecciona horas válidas para inicio y finalización.');
+      return;
+    }
+    const startMinutes = (parsedStartTime.getHours() * 60) + parsedStartTime.getMinutes();
+    const endMinutes = (parsedEndTime.getHours() * 60) + parsedEndTime.getMinutes();
+    if (endMinutes <= startMinutes) {
+      Alert.alert('Hora inválida', 'La hora de finalización debe ser posterior a la hora de inicio.');
+      return;
+    }
+    const eventTimeRange = getCoordinatorEventTimeRange(currentEvent);
+    if (eventTimeRange && ((startMinutes + REPORT_TIME_TOLERANCE_MINUTES) < eventTimeRange.minStartMinutes)) {
+      Alert.alert('Hora fuera de rango', 'La hora de inicio del informe debe ser igual o posterior al inicio del evento.');
+      return;
+    }
+    if (eventTimeRange && ((endMinutes + REPORT_TIME_TOLERANCE_MINUTES) < eventTimeRange.maxEndMinutes)) {
+      Alert.alert('Hora fuera de rango', 'La hora de finalización del informe debe ser igual o posterior al fin del evento.');
+      return;
+    }
+
     if (!reportForm.initialInventory.trim() || !reportForm.finalInventory.trim()) {
         Alert.alert('Datos incompletos', 'Completa el inventario inicial y final.');
       return;
     }
 
-    if (!reportForm.observations.trim()) {
-        Alert.alert('Datos incompletos', 'Describe el impacto o las observaciones del evento.');
+    if (reportForm.directImpact.trim() === '' || reportForm.indirectImpact.trim() === '') {
+        Alert.alert('Datos incompletos', 'Completa el impacto directo e indirecto.');
+      return;
+    }
+
+    if (!/^\d+$/.test(reportForm.directImpact) || !/^\d+$/.test(reportForm.indirectImpact)) {
+      Alert.alert('Formato inválido', 'El impacto directo e indirecto deben ser numéricos.');
       return;
     }
 
@@ -195,7 +306,8 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
         endTime: reportForm.endTime,
         initialInventory: reportForm.initialInventory,
         finalInventory: reportForm.finalInventory,
-        observations: reportForm.observations,
+        directImpact: Number(reportForm.directImpact),
+        indirectImpact: Number(reportForm.indirectImpact),
         hasRedemptions: reportForm.hasRedemptions,
         redemptionsCount: reportForm.hasRedemptions ? Number(reportForm.redemptionsCount || 0) : 0,
         relevantAspects: reportForm.relevantAspects,
@@ -208,6 +320,21 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
     } finally {
       setSavingReport(false);
     }
+  };
+
+  const handleReportTimeChange = (event, selectedDate) => {
+    const target = reportTimePicker;
+    if (Platform.OS !== 'ios') {
+      setReportTimePicker(null);
+    }
+    if (!selectedDate || !target) {
+      return;
+    }
+
+    setReportForm((current) => ({
+      ...current,
+      [target]: formatReportTime(selectedDate),
+    }));
   };
 
   return (
@@ -258,7 +385,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
             ) : (
               <Text style={styles.emptyText}>Todavía no hay fotos cargadas.</Text>
             )}
-            <View style={styles.rowButtons}>
+            <View style={styles.pointContactButtons}>
               <TouchableOpacity style={styles.secondaryButton} onPress={handlePickPhoto} disabled={uploadingPhoto}>
                 <Text style={styles.secondaryButtonText}>{uploadingPhoto ? 'GUARDANDO...' : 'CARGAR FOTO'}</Text>
               </TouchableOpacity>
@@ -275,15 +402,26 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
             <Field styles={styles} label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
             <View style={styles.doubleColumn}>
               <View style={styles.columnItem}>
-                <Field styles={styles} label="Hora inicio *" value={reportForm.startTime} onChangeText={(value) => setReportForm((current) => ({ ...current, startTime: value }))} placeholder="08:00 AM" />
+              <TouchableOpacity onPress={() => setReportTimePicker('startTime')}>
+                <Field styles={styles} label="Hora inicio *" value={reportForm.startTime} onChangeText={() => {}} placeholder="Seleccionar hora" editable={false} />
+              </TouchableOpacity>
               </View>
               <View style={styles.columnItem}>
-                <Field styles={styles} label="Hora finalización *" value={reportForm.endTime} onChangeText={(value) => setReportForm((current) => ({ ...current, endTime: value }))} placeholder="06:00 PM" />
+                <TouchableOpacity onPress={() => setReportTimePicker('endTime')}>
+                  <Field styles={styles} label="Hora finalización *" value={reportForm.endTime} onChangeText={() => {}} placeholder="Seleccionar hora" editable={false} />
+                </TouchableOpacity>
               </View>
             </View>
             <Field styles={styles} label="Inventario inicial *" value={reportForm.initialInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, initialInventory: value }))} multiline placeholder="Detalle del inventario al inicio" />
             <Field styles={styles} label="Inventario final *" value={reportForm.finalInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, finalInventory: value }))} multiline placeholder="Detalle del inventario al cierre" />
-            <Field styles={styles} label="Impacto / observaciones *" value={reportForm.observations} onChangeText={(value) => setReportForm((current) => ({ ...current, observations: value }))} multiline placeholder="Qué pasó durante el evento" />
+            <View style={styles.doubleColumn}>
+              <View style={styles.columnItem}>
+                <Field styles={styles} label="Impacto directo *" value={reportForm.directImpact} onChangeText={(value) => setReportForm((current) => ({ ...current, directImpact: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
+              </View>
+              <View style={styles.columnItem}>
+                <Field styles={styles} label="Impacto indirecto *" value={reportForm.indirectImpact} onChangeText={(value) => setReportForm((current) => ({ ...current, indirectImpact: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
+              </View>
+            </View>
 
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>¿Hubo redención?</Text>
@@ -317,7 +455,8 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
                   <Text style={styles.reportCardContent}>Finalización: {report.endTime || 'Sin dato'}</Text>
                   <Text style={styles.reportCardContent}>Inventario inicial: {report.initialInventory || 'Sin dato'}</Text>
                   <Text style={styles.reportCardContent}>Inventario final: {report.finalInventory || 'Sin dato'}</Text>
-                  <Text style={styles.reportCardContent}>Observaciones: {report.observations || report.content || 'Sin contenido adicional.'}</Text>
+                  <Text style={styles.reportCardContent}>Impacto directo: {report.directImpact ?? 'Sin dato'}</Text>
+                  <Text style={styles.reportCardContent}>Impacto indirecto: {report.indirectImpact ?? 'Sin dato'}</Text>
                   <Text style={styles.reportCardContent}>Redenciones: {report.hasRedemptions === false ? 'No aplica' : (report.redemptionsCount ?? 'Sin dato')}</Text>
                   {!!report.relevantAspects && <Text style={styles.reportCardContent}>Otros aspectos: {report.relevantAspects}</Text>}
                 </View>
@@ -388,7 +527,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
               <Text style={styles.modalInfoText}>Horario: {formatTimeLabel(selectedPoint?.startTime)} - {formatTimeLabel(selectedPoint?.endTime)}</Text>
               <Text style={styles.modalInfoText}>Equipo asignado: {selectedPoint?.assignedStaff?.length || 0}</Text>
               {(selectedPoint?.assignedStaff || []).map((staffMember) => (
-                <Text key={staffMember.id} style={styles.staffItemDark}>• {staffMember.name} · {staffMember.category}</Text>
+                <Text key={staffMember.id} style={styles.staffItemDark}>• {getStaffDisplayName(staffMember)} · {staffMember.category}</Text>
               ))}
             </View>
 
@@ -409,12 +548,21 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.primaryButton} onPress={() => setSelectedPoint(null)}>
+            <TouchableOpacity style={[styles.primaryButton, styles.closePointDetailButton]} onPress={() => setSelectedPoint(null)}>
               <Text style={styles.primaryButtonText}>CERRAR</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+      {reportTimePicker ? (
+        <DateTimePicker
+          value={parseTimeValue(reportForm[reportTimePicker]) || new Date()}
+          mode="time"
+          is24Hour={false}
+          display="default"
+          onChange={handleReportTimeChange}
+        />
+      ) : null}
     </SafeAreaView>
   );
 };
@@ -445,6 +593,8 @@ const createStyles = (palette) => StyleSheet.create({
   helperText: { color: palette.onHeroMuted, fontSize: 13, lineHeight: 18 },
   helperHint: { color: '#FDE68A', fontSize: 12, lineHeight: 16 },
   rowButtons: { flexDirection: 'row', gap: 10 },
+  pointContactButtons: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  closePointDetailButton: { marginTop: 8 },
   secondaryButton: { flex: 1, backgroundColor: palette.secondaryButton, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   disabledButton: { opacity: 0.55 },
   secondaryButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },

@@ -272,7 +272,7 @@ const buildStaffFormFromRecord = (staffMember) => ({
   cadera: staffMember?.cadera || '',
 });
 
-const getStaffPhotoPreviewUri = ({ draftPhoto, staffLookup }) => draftPhoto?.uri || staffLookup.result?.photo || null;
+const getProfilePhotoPreviewUri = ({ draftPhoto, record }) => draftPhoto?.uri || record?.photo || null;
 
 const getLookupTone = (status) => {
   if (status === 'exists') return 'warning';
@@ -375,6 +375,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [executiveLookup, setExecutiveLookup] = useState(LOOKUP_INITIAL_STATE);
   const [coordinatorForm, setCoordinatorForm] = useState(INITIAL_COORDINATOR_FORM);
   const [coordinatorLookup, setCoordinatorLookup] = useState(LOOKUP_INITIAL_STATE);
+  const [coordinatorPhotoDraft, setCoordinatorPhotoDraft] = useState(null);
   const [staffForm, setStaffForm] = useState(INITIAL_STAFF_FORM);
   const [staffLookup, setStaffLookup] = useState(LOOKUP_INITIAL_STATE);
   const [staffPhotoDraft, setStaffPhotoDraft] = useState(null);
@@ -396,6 +397,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const resetCoordinatorForm = useCallback(() => {
     setCoordinatorForm(INITIAL_COORDINATOR_FORM);
     setCoordinatorLookup(LOOKUP_INITIAL_STATE);
+    setCoordinatorPhotoDraft(null);
   }, []);
 
   const resetStaffForm = useCallback(() => {
@@ -410,7 +412,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const isEditingStaff = staffLookup.status === 'exists' && Boolean(staffLookup.result?.id);
   const shouldRequestDetailedMeasurements = staffForm.sexo === 'mujer';
   const canEditCoordinatorUserFields = !isEditingCoordinator || Boolean(coordinatorLookup.result?.userId);
-  const staffPhotoPreviewUri = getStaffPhotoPreviewUri({ draftPhoto: staffPhotoDraft, staffLookup });
+  const coordinatorPhotoPreviewUri = getProfilePhotoPreviewUri({ draftPhoto: coordinatorPhotoDraft, record: coordinatorLookup.result });
+  const staffPhotoPreviewUri = getProfilePhotoPreviewUri({ draftPhoto: staffPhotoDraft, record: staffLookup.result });
   const inactiveCounts = useMemo(() => ({
     clients: countInactiveRecords(lists.clients),
     executives: countInactiveRecords(executives),
@@ -898,6 +901,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           ...buildCoordinatorFormFromRecord(response.coordinator),
           password: current.password,
         }));
+        setCoordinatorPhotoDraft(null);
         setCoordinatorLookup({
           status: 'exists',
           message: 'Ese coordinador ya existe. Ahora estás en modo de edición para actualizar cualquier dato recuperado.',
@@ -910,6 +914,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       }
 
       setCoordinatorForm((current) => ({ ...current, cedula }));
+      setCoordinatorPhotoDraft(null);
       setCoordinatorLookup({
         status: 'not-found',
         message: 'No encontramos un coordinador con esa cédula. Puedes continuar con el alta.',
@@ -955,6 +960,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           ...coordinatorForm,
           email: normalizedEmail,
           actorUserId: user?.id,
+          ...(coordinatorPhotoDraft ? { photo: coordinatorPhotoDraft } : {}),
         });
         setLists((current) => ({
           clients: current.clients,
@@ -962,6 +968,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           staff: current.staff,
         }));
         setCoordinatorForm(buildCoordinatorFormFromRecord(updated));
+        setCoordinatorPhotoDraft(null);
         setCoordinatorLookup({
           status: 'exists',
           message: 'Coordinador recuperado en modo edición. Los cambios ya quedaron persistidos y trazados.',
@@ -975,6 +982,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           ...coordinatorForm,
           email: normalizedEmail,
           actorUserId: user?.id,
+          ...(coordinatorPhotoDraft ? { photo: coordinatorPhotoDraft } : {}),
         });
         setLists((current) => ({ clients: current.clients, coordinators: [created, ...current.coordinators], staff: current.staff }));
         resetCoordinatorForm();
@@ -986,6 +994,54 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePickCoordinatorPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Necesitas habilitar la galería para seleccionar una foto de coordinador.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.6,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const fileSize = Number(asset.fileSize || 0) || null;
+
+      if (fileSize && fileSize > MAX_ADMIN_STAFF_PHOTO_SIZE_BYTES) {
+        Alert.alert('Archivo demasiado grande', 'La foto supera el límite de 10 MB.');
+        return;
+      }
+
+      const uri = asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri;
+
+      setCoordinatorPhotoDraft({
+        uri,
+        mimeType,
+        fileSize,
+        fileName: asset.fileName || null,
+        source: 'admin',
+      });
+      applyFeedback('success', 'Foto lista para guardar con el alta o la actualización del coordinador.');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo seleccionar la foto ahora.');
+    }
+  };
+
+  const handleClearCoordinatorPhotoDraft = () => {
+    setCoordinatorPhotoDraft(null);
+    applyFeedback('success', isEditingCoordinator ? 'Se descartó el cambio de foto pendiente.' : 'Se quitó la foto seleccionada.');
   };
 
   const handleInactivateCoordinator = () => {
@@ -1523,6 +1579,31 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
             <Text style={styles.inlineNoticeText}>Este coordinador está INACTIVO. Conserva su historial, pero ya no puede autenticarse ni ser asignado.</Text>
           </View>
         ) : null}
+        <View style={styles.photoCard}>
+          <Text style={styles.photoCardTitle}>Foto de perfil opcional</Text>
+          <Pressable style={styles.photoPreviewShell} onPress={handlePickCoordinatorPhoto}>
+            {coordinatorPhotoPreviewUri ? (
+              <Image source={{ uri: coordinatorPhotoPreviewUri }} style={styles.photoPreviewImage} />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Text style={styles.photoPlaceholderText}>SIN FOTO</Text>
+              </View>
+            )}
+          </Pressable>
+          <Text style={styles.photoHelperText}>
+            {coordinatorPhotoDraft
+              ? 'Vista previa lista. Se va a guardar en forma persistente cuando confirmes el alta o la actualización.'
+              : isEditingCoordinator
+                ? 'Si quieres reemplazar la foto actual, elige otra imagen. Si no haces cambios, se conserva la existente.'
+                : 'Puedes agregar una foto ahora, verla antes de guardar y quitarla si cambias de idea.'}
+          </Text>
+          <View style={styles.photoActionsRow}>
+            <AppButton title={coordinatorPhotoPreviewUri ? 'CAMBIAR FOTO' : 'SELECCIONAR FOTO'} style={styles.photoActionButton} onPress={handlePickCoordinatorPhoto} disabled={saving} />
+            {coordinatorPhotoDraft ? (
+              <AppButton title="QUITAR" variant="secondary" style={styles.photoActionButton} onPress={handleClearCoordinatorPhotoDraft} disabled={saving} />
+            ) : null}
+          </View>
+        </View>
         <InputRow label={`Nombre completo${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.fullName} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, fullName: value }))} placeholder="Nombre y apellido" />
         <InputRow label={`Dirección${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.address} onChangeText={(value) => setCoordinatorForm((current) => ({ ...current, address: value }))} placeholder="Dirección operativa" multiline />
         <InputRow label={`Teléfono${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.phone} onChangeText={(value) => handleCoordinatorPhoneChange('phone', value)} placeholder="3001234567" keyboardType="number-pad" maxLength={10} />

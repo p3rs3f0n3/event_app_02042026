@@ -1,6 +1,6 @@
 const { pool, query } = require('../db/postgres/pool');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
-const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
+const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
@@ -11,6 +11,7 @@ const {
   isDocumentEquivalent,
   isNitEquivalent,
   normalizeComparableValue,
+  normalizePhotoAssetField,
   normalizeProfilePhotoField,
   normalizePhoneValue,
   resolveStaffSizeFields,
@@ -18,6 +19,7 @@ const {
   sanitizeCoordinatorAdminRecord,
   sanitizeExecutiveAdminRecord,
   sanitizeStaffAdminRecord,
+  serializePhotoAssetField,
   serializeProfilePhotoField,
   sanitizeUserRecord,
 } = require('../utils/adminRecords');
@@ -143,27 +145,32 @@ const resolveClientId = ({ rawClientId, rawClientUserId, client, clients }) => {
   return matches.length === 1 ? Number(matches[0].clientId || matches[0].id) : null;
 };
 
-const mapEventRow = (row, clients = []) => ({
-  id: row.id,
-  name: row.name,
-  client: row.client,
-  clientId: resolveClientId({ rawClientId: row.client_id, rawClientUserId: row.client_user_id, client: row.client, clients }),
-  clientUserId: resolveClientUserId({ rawClientUserId: row.client_user_id, client: row.client, clients }),
-  image: row.image,
-  startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
-  endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
-  createdByUserId: row.created_by_user_id,
-  status: row.status,
-  reports: Array.isArray(row.reports) ? row.reports.map(normalizeReportEntry).filter(Boolean) : [],
-  photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
-  executiveReport: normalizeExecutiveReportEntry(row.executive_report, {
+const mapEventRow = (row, clients = []) => {
+  const normalizedImage = normalizePhotoAssetField(row.image, { defaultUri: null });
+
+  return {
+    id: row.id,
+    name: row.name,
+    client: row.client,
+    clientId: resolveClientId({ rawClientId: row.client_id, rawClientUserId: row.client_user_id, client: row.client, clients }),
+    clientUserId: resolveClientUserId({ rawClientUserId: row.client_user_id, client: row.client, clients }),
+    image: normalizedImage.uri,
+    imageMetadata: normalizedImage.metadata,
+    startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
+    endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
+    createdByUserId: row.created_by_user_id,
+    status: row.status,
+    reports: Array.isArray(row.reports) ? row.reports.map(normalizeReportEntry).filter(Boolean) : [],
     photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
-  }),
-  cities: Array.isArray(row.cities) ? row.cities : [],
-  manualInactivatedAt: row.manual_inactivated_at instanceof Date ? row.manual_inactivated_at.toISOString() : row.manual_inactivated_at,
-  manualInactivationComment: row.manual_inactivation_comment,
-  manualInactivatedByUserId: row.manual_inactivated_by_user_id,
-});
+    executiveReport: normalizeExecutiveReportEntry(row.executive_report, {
+      photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
+    }),
+    cities: Array.isArray(row.cities) ? row.cities : [],
+    manualInactivatedAt: row.manual_inactivated_at instanceof Date ? row.manual_inactivated_at.toISOString() : row.manual_inactivated_at,
+    manualInactivationComment: row.manual_inactivation_comment,
+    manualInactivatedByUserId: row.manual_inactivated_by_user_id,
+  };
+};
 
 const executeQuery = (client, text, params = []) => (client ? client.query(text, params) : query(text, params));
 
@@ -546,7 +553,7 @@ class PostgresEventAppRepository {
       [normalizeString(city) || null],
     );
 
-    return result.rows.map(sanitizeStaffAdminRecord);
+    return result.rows.map((row) => sanitizeCoordinatorAdminRecord({ coordinator: row }));
   }
 
   async getCoordinatorEvents({ userId }) {
@@ -1016,7 +1023,7 @@ class PostgresEventAppRepository {
           VALUES ($1, $2, $3, $4, $5, 5, $6, TRUE, $7)
           RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo, is_active AS "isActive"
         `,
-        [userResult.rows[0].id, payload.fullName, payload.cedula, payload.address, payload.phone, DEFAULT_PROFILE_PHOTO, cityResult.rows[0].id],
+        [userResult.rows[0].id, payload.fullName, payload.cedula, payload.address, payload.phone, payload.photo ? serializeProfilePhotoField(payload.photo) : DEFAULT_PROFILE_PHOTO, cityResult.rows[0].id],
       );
 
       const createdRecord = sanitizeCoordinatorAdminRecord({
@@ -1129,11 +1136,12 @@ class PostgresEventAppRepository {
               phone = $5,
               city_id = $6,
               is_active = $7,
+              photo = $8,
               updated_at = NOW()
             WHERE id = $1
             RETURNING id, user_id AS "userId", full_name AS name, cedula, address, phone, rating, photo, is_active AS "isActive"
         `,
-        [normalizedCoordinatorId, payload.fullName, payload.cedula, payload.address, payload.phone, cityResult.rows[0].id, currentRow.isActive !== false],
+        [normalizedCoordinatorId, payload.fullName, payload.cedula, payload.address, payload.phone, cityResult.rows[0].id, currentRow.isActive !== false, payload.photo ? serializeProfilePhotoField(payload.photo) : currentRow.photo || DEFAULT_PROFILE_PHOTO],
       );
 
       const updatedRecord = sanitizeCoordinatorAdminRecord({
@@ -1409,7 +1417,7 @@ class PostgresEventAppRepository {
           VALUES ($1, $2, $3, $4, $5, $6, $7, 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
           RETURNING id
         `,
-        [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       const event = eventResult.rows[0];
@@ -1451,7 +1459,7 @@ class PostgresEventAppRepository {
           WHERE id = $1
           RETURNING id
         `,
-        [id, eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, eventData.image, eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [id, eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       if (eventResult.rowCount === 0) {
@@ -1953,8 +1961,14 @@ class PostgresEventAppRepository {
     }
 
     const executiveContact = normalizeExecutiveContact(await this.findUserById(event.createdByUserId));
-    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+    const coordinatorEvent = mapCoordinatorEvent({ event, coordinatorProfile, executiveContact });
+    if (!coordinatorEvent) {
       return false;
+    }
+
+    const reportTimeError = validateCoordinatorReportTimeRange({ event: coordinatorEvent, startTime: payload.startTime, endTime: payload.endTime });
+    if (reportTimeError) {
+      return { errorCode: 'INVALID_REPORT_TIME_RANGE', message: reportTimeError };
     }
 
     const report = buildCoordinatorReport({

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { comparePassword } = require('../utils/passwords');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
-const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry } = require('../utils/eventAssets');
+const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
 const { enrichEventLifecycle } = require('../utils/eventLifecycle');
 const { matchesClientIdentityConflict, normalizeClientMutationPayload } = require('../utils/adminClientPayload');
@@ -12,6 +12,7 @@ const {
   isDocumentEquivalent,
   isNitEquivalent,
   normalizeComparableValue,
+  normalizePhotoAssetField,
   normalizeProfilePhotoField,
   normalizePhoneValue,
   resolveStaffSizeFields,
@@ -114,35 +115,44 @@ const normalizeCity = (city) => ({
   isOther: Boolean(city.isOther || String(city.name || '').toUpperCase() === 'OTRO'),
 });
 
-const normalizeEvent = (event, clients = []) => ({
-  ...event,
-  createdByUserId: Number(event.createdByUserId || event.created_by_user_id || DEFAULT_EXECUTIVE_USER_ID),
-  clientId: resolveClientId({
-    rawClientId: event.clientId || event.client_id,
-    rawClientUserId: event.clientUserId || event.client_user_id,
-    client: event.client,
-    clients,
-  }),
-  clientUserId: resolveClientUserId({
-    rawClientUserId: event.clientUserId || event.client_user_id,
-    client: event.client,
-    clients,
-  }),
-  cities: Array.isArray(event.cities)
-    ? event.cities.map((city) => ({
-      ...city,
-      points: Array.isArray(city.points) ? city.points : [],
-    }))
-    : [],
-  reports: Array.isArray(event.reports) ? event.reports.map(normalizeReportEntry).filter(Boolean) : [],
-  photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
-  executiveReport: normalizeExecutiveReportEntry(event.executiveReport || event.executive_report, {
+const normalizeEvent = (event, clients = []) => {
+  const normalizedImage = normalizePhotoAssetField(
+    event.imageMetadata ? { uri: event.image, ...event.imageMetadata } : event.image,
+    { defaultUri: null },
+  );
+
+  return {
+    ...event,
+    image: normalizedImage.uri,
+    imageMetadata: normalizedImage.metadata,
+    createdByUserId: Number(event.createdByUserId || event.created_by_user_id || DEFAULT_EXECUTIVE_USER_ID),
+    clientId: resolveClientId({
+      rawClientId: event.clientId || event.client_id,
+      rawClientUserId: event.clientUserId || event.client_user_id,
+      client: event.client,
+      clients,
+    }),
+    clientUserId: resolveClientUserId({
+      rawClientUserId: event.clientUserId || event.client_user_id,
+      client: event.client,
+      clients,
+    }),
+    cities: Array.isArray(event.cities)
+      ? event.cities.map((city) => ({
+        ...city,
+        points: Array.isArray(city.points) ? city.points : [],
+      }))
+      : [],
+    reports: Array.isArray(event.reports) ? event.reports.map(normalizeReportEntry).filter(Boolean) : [],
     photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
-  }),
-  manualInactivatedAt: event.manualInactivatedAt || event.manual_inactivated_at || null,
-  manualInactivationComment: event.manualInactivationComment || event.manual_inactivation_comment || null,
-  manualInactivatedByUserId: Number(event.manualInactivatedByUserId || event.manual_inactivated_by_user_id || 0) || null,
-});
+    executiveReport: normalizeExecutiveReportEntry(event.executiveReport || event.executive_report, {
+      photos: Array.isArray(event.photos) ? event.photos.map(normalizePhotoEntry).filter(Boolean) : [],
+    }),
+    manualInactivatedAt: event.manualInactivatedAt || event.manual_inactivated_at || null,
+    manualInactivationComment: event.manualInactivationComment || event.manual_inactivation_comment || null,
+    manualInactivatedByUserId: Number(event.manualInactivatedByUserId || event.manual_inactivated_by_user_id || 0) || null,
+  };
+};
 
 const normalizeCoordinator = (coordinator) => ({
   ...coordinator,
@@ -907,7 +917,7 @@ class EventAppRepository {
       address: payload.address,
       phone: payload.phone,
       rating: 5,
-      photo: DEFAULT_PROFILE_PHOTO,
+      photo: payload.photo || DEFAULT_PROFILE_PHOTO,
       isActive: true,
       city: city.name,
     });
@@ -978,15 +988,27 @@ class EventAppRepository {
       }
     }
 
-    this.db.coordinators[coordinatorIndex] = normalizeCoordinator({
-      ...currentCoordinator,
-      name: payload.fullName,
-      cedula: payload.cedula,
-      address: payload.address,
-      phone: payload.phone,
-      isActive: currentCoordinator.isActive !== false,
-      city: city.name,
-    });
+    this.db.coordinators[coordinatorIndex] = normalizeCoordinator(payload.photo
+      ? {
+        ...currentCoordinator,
+        name: payload.fullName,
+        cedula: payload.cedula,
+        address: payload.address,
+        phone: payload.phone,
+        photo: payload.photo,
+        photoMetadata: null,
+        isActive: currentCoordinator.isActive !== false,
+        city: city.name,
+      }
+      : {
+        ...currentCoordinator,
+        name: payload.fullName,
+        cedula: payload.cedula,
+        address: payload.address,
+        phone: payload.phone,
+        isActive: currentCoordinator.isActive !== false,
+        city: city.name,
+      });
 
     const updatedRecord = sanitizeCoordinatorAdminRecord({
       coordinator: this.db.coordinators[coordinatorIndex],
@@ -1076,22 +1098,39 @@ class EventAppRepository {
     const previousRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
     const categoryRecord = this.#ensureStaffCategory(payload.category);
     const sizes = resolveStaffSizeFields(payload);
-    this.db.staff[staffIndex] = normalizeStaffMember({
-      ...this.db.staff[staffIndex],
-      name: payload.fullName,
-      cedula: payload.cedula,
-      city: city.name,
-      category: categoryRecord.name,
-      sexo: payload.sexo,
-      photo: payload.photo || this.db.staff[staffIndex].photo,
-      isActive: this.db.staff[staffIndex].isActive !== false,
-      shirtSize: sizes.shirtSize,
-      pantsSize: sizes.pantsSize,
-      clothingSize: sizes.clothingSize,
-      shoeSize: payload.shoeSize || null,
-      altura: payload.altura || null,
-      measurements: serializeStaffMeasurements(payload),
-    });
+    this.db.staff[staffIndex] = normalizeStaffMember(payload.photo
+      ? {
+        ...this.db.staff[staffIndex],
+        name: payload.fullName,
+        cedula: payload.cedula,
+        city: city.name,
+        category: categoryRecord.name,
+        sexo: payload.sexo,
+        photo: payload.photo,
+        photoMetadata: null,
+        isActive: this.db.staff[staffIndex].isActive !== false,
+        shirtSize: sizes.shirtSize,
+        pantsSize: sizes.pantsSize,
+        clothingSize: sizes.clothingSize,
+        shoeSize: payload.shoeSize || null,
+        altura: payload.altura || null,
+        measurements: serializeStaffMeasurements(payload),
+      }
+      : {
+        ...this.db.staff[staffIndex],
+        name: payload.fullName,
+        cedula: payload.cedula,
+        city: city.name,
+        category: categoryRecord.name,
+        sexo: payload.sexo,
+        isActive: this.db.staff[staffIndex].isActive !== false,
+        shirtSize: sizes.shirtSize,
+        pantsSize: sizes.pantsSize,
+        clothingSize: sizes.clothingSize,
+        shoeSize: payload.shoeSize || null,
+        altura: payload.altura || null,
+        measurements: serializeStaffMeasurements(payload),
+      });
 
     const updatedRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);
     this.#recordAuditLog({
@@ -1189,13 +1228,22 @@ class EventAppRepository {
       return null;
     }
 
-    this.db.events[eventIndex] = normalizeEvent({
-      ...this.db.events[eventIndex],
-      ...eventData,
-      manualInactivatedAt: null,
-      manualInactivationComment: null,
-      manualInactivatedByUserId: null,
-    }, this.getClients());
+    this.db.events[eventIndex] = normalizeEvent(typeof eventData.image === 'object' && eventData.image
+      ? {
+        ...this.db.events[eventIndex],
+        ...eventData,
+        imageMetadata: null,
+        manualInactivatedAt: null,
+        manualInactivationComment: null,
+        manualInactivatedByUserId: null,
+      }
+      : {
+        ...this.db.events[eventIndex],
+        ...eventData,
+        manualInactivatedAt: null,
+        manualInactivationComment: null,
+        manualInactivatedByUserId: null,
+      }, this.getClients());
     this.save();
     return enrichEventLifecycle(this.db.events[eventIndex]);
   }
@@ -1423,14 +1471,19 @@ class EventAppRepository {
     }
 
     const event = normalizeEvent(this.db.events[eventIndex], this.getClients());
-    const isAssigned = mapCoordinatorEvent({
+    const coordinatorEvent = mapCoordinatorEvent({
       event,
       coordinatorProfile,
       executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
     });
 
-    if (!isAssigned) {
+    if (!coordinatorEvent) {
       return false;
+    }
+
+    const reportTimeError = validateCoordinatorReportTimeRange({ event: coordinatorEvent, startTime: payload.startTime, endTime: payload.endTime });
+    if (reportTimeError) {
+      return { errorCode: 'INVALID_REPORT_TIME_RANGE', message: reportTimeError };
     }
 
     const report = buildCoordinatorReport({

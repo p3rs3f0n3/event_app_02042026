@@ -68,7 +68,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Crear evento</Text>
           <Text style={styles.menuText}>Define cliente, ciudades, puntos operativos, disponibilidad y asignación.</Text>
-          <AppButton title="ABRIR CREACIÓN" onPress={() => setCurrentView('createEvent')} />
+          <AppButton title="ABRIR CREACIÓN" onPress={() => { setEditingEvent(null); setCurrentView('createEvent'); }} />
         </SurfaceCard>
 
         <SurfaceCard style={styles.menuCard}>

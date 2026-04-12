@@ -89,7 +89,12 @@ Mesero
 Seguridad
 otro
 
+ver consolidado de personas ingresadas o coordinadores o staff en el campo control de altas operativas.
+Hecho, esto se ve a manera de resumen cuan estás revisando eventos
 
+En el modulo del coordinador se usa un campo llamado impacto, debe llamarse impactos directos, otro que se llame 
+impactos indirectos, estos campos solo son numéricos.
+Hecho
 
 
 

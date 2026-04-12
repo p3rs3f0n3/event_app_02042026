@@ -50,6 +50,11 @@ const normalizeAdminPhonePayload = (payload = {}) => ({
 });
 
 const normalizeAdminPhotoPayload = (photo) => {
+  if (typeof photo === 'string') {
+    const uri = normalizeString(photo);
+    return uri ? { uri, mimeType: null, fileSize: null, fileName: null, source: 'legacy' } : null;
+  }
+
   if (!photo || typeof photo !== 'object' || Array.isArray(photo)) {
     return null;
   }
@@ -61,6 +66,14 @@ const normalizeAdminPhotoPayload = (photo) => {
     fileName: normalizeString(photo.fileName) || null,
     source: normalizeString(photo.source) || 'admin',
   };
+};
+
+const normalizeEventImagePayload = (image) => {
+  if (typeof image === 'string') {
+    return normalizeString(image) || null;
+  }
+
+  return normalizeAdminPhotoPayload(image);
 };
 
 const appendEmailDeliveryMetadata = (record, emailDelivery) => ({
@@ -79,7 +92,7 @@ const sendProfileWelcomeEmail = async (req, { email, recipientName, roleLabel, u
 };
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 app.get('/api/app-config', asyncHandler(async (req, res) => {
   return res.json({
@@ -474,6 +487,7 @@ app.post('/api/admin/coordinators', asyncHandler(async (req, res) => {
     whatsappPhone: normalizedPhones.whatsappPhone,
     email: normalizeString(req.body.email).toLowerCase(),
     city: normalizeString(req.body.city),
+    photo: normalizeAdminPhotoPayload(req.body.photo),
   });
 
   if (result?.errorCode === 'DUPLICATE_RECORD') {
@@ -513,6 +527,7 @@ app.put('/api/admin/coordinators/:id', asyncHandler(async (req, res) => {
     whatsappPhone: normalizedPhones.whatsappPhone,
     email: normalizeString(req.body.email).toLowerCase(),
     city: normalizeString(req.body.city),
+    photo: normalizeAdminPhotoPayload(req.body.photo),
   });
 
   if (result?.errorCode === 'NOT_FOUND') {
@@ -760,7 +775,10 @@ app.post('/api/events', asyncHandler(async (req, res) => {
     return badRequest(res, assignmentConflict);
   }
 
-  const newE = await req.app.locals.repository.createEvent(stripDraftAssignmentMetadata(req.body));
+  const newE = await req.app.locals.repository.createEvent(stripDraftAssignmentMetadata({
+    ...req.body,
+    image: normalizeEventImagePayload(req.body.image),
+  }));
   return res.status(201).json(newE);
 }));
 app.put('/api/events/:id', asyncHandler(async (req, res) => {
@@ -790,7 +808,10 @@ app.put('/api/events/:id', asyncHandler(async (req, res) => {
     return badRequest(res, assignmentConflict);
   }
 
-  const updatedEvent = await req.app.locals.repository.updateEvent(req.params.id, stripDraftAssignmentMetadata(req.body));
+  const updatedEvent = await req.app.locals.repository.updateEvent(req.params.id, stripDraftAssignmentMetadata({
+    ...req.body,
+    image: normalizeEventImagePayload(req.body.image),
+  }));
   if (updatedEvent) {
     return res.json(updatedEvent);
   }
@@ -862,7 +883,8 @@ app.post('/api/events/:id/reports', asyncHandler(async (req, res) => {
     endTime: normalizeString(req.body.endTime),
     initialInventory: normalizeString(req.body.initialInventory),
     finalInventory: normalizeString(req.body.finalInventory),
-    observations: normalizeString(req.body.observations),
+    directImpact: Number(req.body.directImpact || 0),
+    indirectImpact: Number(req.body.indirectImpact || 0),
     hasRedemptions: Boolean(req.body.hasRedemptions),
     redemptionsCount: Number(req.body.redemptionsCount || 0),
     relevantAspects: normalizeString(req.body.relevantAspects),
@@ -870,6 +892,10 @@ app.post('/api/events/:id/reports', asyncHandler(async (req, res) => {
 
   if (updatedEvent === false) {
     return res.status(403).json({ message: 'El coordinador no está autorizado para cargar informes en este evento' });
+  }
+
+  if (updatedEvent?.errorCode === 'INVALID_REPORT_TIME_RANGE') {
+    return badRequest(res, updatedEvent.message);
   }
 
   if (!updatedEvent) {

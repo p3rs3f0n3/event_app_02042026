@@ -5,6 +5,9 @@ import { getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLif
 import { getUserDisplayName } from '../utils/user';
 import { getAppPalette, RADII, SPACING } from '../theme/tokens';
 
+const getCoordinatorDisplayName = (coordinator) => coordinator?.name || coordinator?.fullName || 'Sin coordinador';
+const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
+
 const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   const palette = getAppPalette('green');
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -136,10 +139,10 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
                   <Text style={styles.pointInfo}>⏰ {formatTime(point.startTime)} - {formatTime(point.endTime)}</Text>
 
                   <View style={styles.coordSubSection}>
-                    <Text style={styles.coordLabel}>Coordinador: {point.coordinator?.name}</Text>
+                    <Text style={styles.coordLabel}>Coordinador: {getCoordinatorDisplayName(point.coordinator)}</Text>
                     <Text style={styles.staffCount}>Personas a cargo: {point.assignedStaff?.length || 0}</Text>
                     {point.assignedStaff?.map((st) => (
-                      <Text key={st.id} style={styles.staffItem}>• {st.name}</Text>
+                      <Text key={st.id} style={styles.staffItem}>• {getStaffDisplayName(st)}</Text>
                     ))}
                   </View>
                 </View>

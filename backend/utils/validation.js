@@ -1,4 +1,11 @@
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+const normalizeMeridiemTimeString = (value) => String(value || '')
+  .trim()
+  .replace(/\u00A0/g, ' ')
+  .replace(/a\.\s*m\./i, 'AM')
+  .replace(/p\.\s*m\./i, 'PM')
+  .replace(/a\.m\./i, 'AM')
+  .replace(/p\.m\./i, 'PM');
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 const normalizeEmail = (value) => normalizeString(value).toLowerCase();
 const normalizePhoneDigits = (value) => String(value || '').replace(/\D/g, '');
@@ -59,7 +66,11 @@ const validateEventPayload = (payload) => {
   if (!isNonEmptyString(name)) return 'El nombre del evento es requerido';
   if (!isNonEmptyString(client)) return 'El cliente es requerido';
   if (!isValidIdValue(clientUserId)) return 'Debes seleccionar un cliente válido';
-  if (!isNonEmptyString(image)) return 'La imagen del evento es requerida';
+  if (!image) return 'La imagen del evento es requerida';
+  if (typeof image !== 'string') {
+    const imageError = validateOptionalAdminPhotoPayload(image);
+    if (imageError) return imageError;
+  }
   if (!isValidIdValue(createdByUserId)) return 'El usuario creador del evento es requerido';
   if (!isValidDateValue(startDate) || !isValidDateValue(endDate)) return 'Las fechas del evento son inválidas';
   if (new Date(endDate).getTime() <= new Date(startDate).getTime()) return 'La fecha fin debe ser posterior al inicio';
@@ -203,12 +214,16 @@ const validateCoordinatorReportPayload = (payload) => {
     return 'La hora de inicio y finalización son obligatorias';
   }
 
+  if (!/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(normalizeMeridiemTimeString(payload.startTime)) || !/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(normalizeMeridiemTimeString(payload.endTime))) {
+    return 'La hora de inicio y finalización deben tener formato de hora válido';
+  }
+
   if (!isNonEmptyString(payload.initialInventory) || !isNonEmptyString(payload.finalInventory)) {
     return 'El inventario inicial y final son obligatorios';
   }
 
-  if (!isNonEmptyString(payload.observations)) {
-    return 'Las observaciones del evento son obligatorias';
+  if (!Number.isInteger(Number(payload.directImpact)) || Number(payload.directImpact) < 0 || !Number.isInteger(Number(payload.indirectImpact)) || Number(payload.indirectImpact) < 0) {
+    return 'El impacto directo e indirecto deben ser números iguales o mayores a cero';
   }
 
   if (payload.hasRedemptions && (!Number.isInteger(Number(payload.redemptionsCount)) || Number(payload.redemptionsCount) < 0)) {
@@ -333,6 +348,9 @@ const validateAdminCoordinatorPayload = (payload) => {
   if (!email) return 'El email es obligatorio';
   if (email && !isValidEmail(email)) return 'El email no es válido';
 
+  const photoError = validateOptionalAdminPhotoPayload(payload.photo);
+  if (photoError) return photoError;
+
   return null;
 };
 
@@ -355,6 +373,9 @@ const validateAdminCoordinatorUpdatePayload = (payload) => {
 
   const email = normalizeEmail(payload.email);
   if (email && !isValidEmail(email)) return 'El email no es válido';
+
+  const photoError = validateOptionalAdminPhotoPayload(payload.photo);
+  if (photoError) return photoError;
 
   return null;
 };

@@ -81,8 +81,25 @@ const normalizeStoredProfilePhoto = (value) => {
 };
 
 const normalizeProfilePhotoField = (value) => {
+  const normalizedField = normalizePhotoAssetField(value, { defaultUri: DEFAULT_PROFILE_PHOTO });
+
+  return {
+    photo: normalizedField.uri,
+    photoMetadata: normalizedField.metadata,
+  };
+};
+
+const normalizePhotoAssetField = (value, { defaultUri = null } = {}) => {
   const normalizedPhoto = normalizeStoredProfilePhoto(value);
-  const photo = normalizedPhoto?.uri || DEFAULT_PROFILE_PHOTO;
+  const uri = normalizedPhoto?.uri || defaultUri || null;
+
+  if (!uri) {
+    return {
+      uri: null,
+      metadata: null,
+    };
+  }
+
   const hasMetadata = Boolean(
     normalizedPhoto?.mimeType
       || normalizedPhoto?.fileName
@@ -91,8 +108,8 @@ const normalizeProfilePhotoField = (value) => {
   );
 
   return {
-    photo,
-    photoMetadata: hasMetadata
+    uri,
+    metadata: hasMetadata
       ? {
         mimeType: normalizedPhoto.mimeType,
         fileName: normalizedPhoto.fileName,
@@ -104,9 +121,13 @@ const normalizeProfilePhotoField = (value) => {
 };
 
 const serializeProfilePhotoField = (value) => {
+  return serializePhotoAssetField(value, { fallbackUri: DEFAULT_PROFILE_PHOTO });
+};
+
+const serializePhotoAssetField = (value, { fallbackUri = null } = {}) => {
   const normalizedPhoto = normalizeStoredProfilePhoto(value);
   if (!normalizedPhoto?.uri) {
-    return DEFAULT_PROFILE_PHOTO;
+    return fallbackUri;
   }
 
   if (!normalizedPhoto.mimeType && !normalizedPhoto.fileName && !normalizedPhoto.fileSize && (!normalizedPhoto.source || normalizedPhoto.source === 'legacy')) {
@@ -285,9 +306,11 @@ module.exports = {
   sanitizeExecutiveAdminRecord,
   sanitizeStaffAdminRecord,
   sanitizeUserRecord,
+  normalizePhotoAssetField,
   normalizeProfilePhotoField,
   normalizeStoredProfilePhoto,
   normalizeStaffSizeValue,
   resolveStaffSizeFields,
+  serializePhotoAssetField,
   serializeProfilePhotoField,
 };
