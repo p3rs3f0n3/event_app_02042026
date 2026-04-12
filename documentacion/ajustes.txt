@@ -1,0 +1,78 @@
+
+Cambiar front para elegir como cliente, como ejecutivo o como coordinador --No va
+
+mejorar responsive eventapp se ve muy arriba
+- Colores 360 marketing
+
+
+Módulo de admin
+- Otro botón que permita crear cliente, coordinadores y staff OK
+- validar que si ya están creados por cédula/tarjeta identidad/cedula extranjería
+- Alta de cliente :
+Nit OK
+Razón social OK
+NOMBRE Contacto OK
+Cargo CONTACTO OK
+Cel OK
+E-mail OK
+USUARIO OK
+CONTRASEÑA OK
+
+Crear evento
+- busqueda de Cliente de manera manual x nit OK
+- en creación de fotos agregar ok sin cprtat foto, no siempre es necesario OK
+- Direccion del punto por google maps OK
+- cambiar etiqueta contacto punto de venta OK
+- validar telefono que sea solo númerico OK
+- ejecutivo que cree coordinadores, staff y clientes OK se hace desde el perfil de admin 
+
+- En la foto del staff (cara/foto c, que al darle click OK
+
+
+
+- editar lo que escribio el coordinador
+
+Coordinador
+- Alarma coordinador foto inicio que se puede 
+
+en admin
+Cambiar teléfono por numero celular. 
+Hecho
+
+Cambiar la palabra podés por puedes. 
+Hecho se pasa de voceo a tuteo
+
+Limpiar los datos del anterior usuario cada vez que se busca.
+Cuando se recupera y se le da cancelar se borran los datos
+
+Borrar clientes 
+Hecho, se inactivan por temas de trazabilidad
+ 
+En talla de ropa se especifica, talla camisa, talla pantalón.
+Hecho
+
+agregar campo de altura.
+Hecho
+
+Se especifica en el campo medidas para las mujeresej : 90-60-90 
+Hecho, se agrega pedir el sexo para poder colocar las medidas de busto, cintura y cadera. 
+
+Cuando el admin crea el perfil, debe llegar al e, mail de la persona (cliente, ejecutivo o coordinador) correo de información con los datos usuario y contraseña.
+Hecho
+
+En admin, falta la opción de crear ejecutivo.
+Hecho
+
+
+
+
+
+
+
+https://expo.dev/accounts/mojarras/projects/eventapp/builds/6fdb0aaf-62b3-40ab-a122-1cc960cd65b7
+
+/model --cambiar de modelo
+
+
+PS D:\Desarrollos\claude_code\event_app\mobile> npx expo start --clear 
+PS D:\Desarrollos\claude_code\event_app\backend> npm run dev

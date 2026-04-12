@@ -30,8 +30,23 @@ const {
 const { normalizeStaffSexo, serializeStaffMeasurements } = require('../utils/staffMeasurements');
 
 const DEFAULT_EXECUTIVE_USER_ID = 2;
+const DUPLICATE_USERNAME_MESSAGE = 'El nombre de usuario ya está en uso y debe ser único para iniciar sesión.';
+const DUPLICATE_CLIENT_NIT_MESSAGE = 'Ya existe un cliente con ese NIT.';
+const DUPLICATE_COORDINATOR_CEDULA_MESSAGE = 'Ya existe un coordinador con esa cédula.';
+const DUPLICATE_EXECUTIVE_CEDULA_MESSAGE = 'Ya existe un ejecutivo con esa cédula.';
+const DUPLICATE_STAFF_CEDULA_MESSAGE = 'Ya existe una persona de staff con esa cédula.';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const hasDuplicateUsername = ({ users, username, excludeUserId = null }) => {
+  const normalizedUsername = normalizeComparableValue(username);
+  if (!normalizedUsername) {
+    return false;
+  }
+
+  return users.some((user) => Number(user.id) !== Number(excludeUserId)
+    && normalizeComparableValue(user.username) === normalizedUsername);
+};
 
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
@@ -608,8 +623,12 @@ class EventAppRepository {
 
     const duplicateNitClient = normalizedPayload.nit ? this.findAdminClientByNit(normalizedPayload.nit) : null;
 
-    if (duplicateUser || duplicateClient || duplicateNitClient) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    if (duplicateNitClient || duplicateClient) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
+    }
+
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const newUser = {
@@ -657,31 +676,16 @@ class EventAppRepository {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
 
-    const normalizedUsername = normalizeComparableValue(payload.username);
     const normalizedCedula = payload.cedula ? String(payload.cedula).trim() : '';
-    const normalizedEmail = normalizeComparableValue(payload.email);
-    const normalizedPhone = normalizePhoneValue(payload.phone);
-    const normalizedWhatsappPhone = normalizePhoneValue(payload.whatsappPhone);
-    const normalizedFullName = normalizeComparableValue(payload.fullName);
+    const duplicateUser = hasDuplicateUsername({ users: this.db.users, username: payload.username });
+    const duplicateExecutive = this.db.executives.find((executive) => normalizedCedula && isDocumentEquivalent(executive.cedula, normalizedCedula));
 
-    const duplicateUser = this.db.users.find((user) => {
-      if (normalizeComparableValue(user.username) === normalizedUsername) return true;
-      if (normalizedEmail && normalizeComparableValue(user.email) === normalizedEmail) return true;
-      if (normalizedPhone && normalizePhoneValue(user.phone) === normalizedPhone) return true;
-      if (normalizedWhatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === normalizedWhatsappPhone) return true;
-      return false;
-    });
-    const duplicateExecutive = this.db.executives.find((executive) => (
-      (normalizedCedula && isDocumentEquivalent(executive.cedula, normalizedCedula))
-      ||
-      normalizeComparableValue(executive.fullName || executive.full_name) === normalizedFullName
-      || (normalizedPhone && normalizePhoneValue(executive.phone) === normalizedPhone)
-      || (normalizedWhatsappPhone && normalizePhoneValue(executive.whatsappPhone || executive.whatsapp_phone) === normalizedWhatsappPhone)
-      || (normalizedEmail && normalizeComparableValue(executive.email) === normalizedEmail)
-    ));
+    if (duplicateExecutive) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
+    }
 
-    if (duplicateUser || duplicateExecutive) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const newUser = {
@@ -742,32 +746,19 @@ class EventAppRepository {
       return { errorCode: 'NOT_FOUND' };
     }
 
-    const normalizedUsername = normalizeComparableValue(payload.username);
     const normalizedCedula = payload.cedula ? String(payload.cedula).trim() : '';
-    const normalizedEmail = normalizeComparableValue(payload.email);
-    const normalizedPhone = normalizePhoneValue(payload.phone);
-    const normalizedWhatsappPhone = normalizePhoneValue(payload.whatsappPhone);
-    const normalizedFullName = normalizeComparableValue(payload.fullName);
-
-    const duplicateUser = this.db.users.find((user) => {
-      if (Number(user.id) === Number(currentExecutive.userId)) return false;
-      if (normalizedUsername && normalizeComparableValue(user.username) === normalizedUsername) return true;
-      if (normalizedEmail && normalizeComparableValue(user.email) === normalizedEmail) return true;
-      if (normalizedPhone && normalizePhoneValue(user.phone) === normalizedPhone) return true;
-      if (normalizedWhatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === normalizedWhatsappPhone) return true;
-      return false;
-    });
+    const duplicateUser = hasDuplicateUsername({ users: this.db.users, username: payload.username, excludeUserId: currentExecutive.userId });
     const duplicateExecutive = this.db.executives.find((executive) => {
       if (Number(executive.id) === normalizedExecutiveId) return false;
-      return (normalizedCedula && isDocumentEquivalent(executive.cedula, normalizedCedula))
-        || normalizeComparableValue(executive.fullName || executive.full_name) === normalizedFullName
-        || (normalizedPhone && normalizePhoneValue(executive.phone) === normalizedPhone)
-        || (normalizedWhatsappPhone && normalizePhoneValue(executive.whatsappPhone || executive.whatsapp_phone) === normalizedWhatsappPhone)
-        || (normalizedEmail && normalizeComparableValue(executive.email) === normalizedEmail);
+      return normalizedCedula && isDocumentEquivalent(executive.cedula, normalizedCedula);
     });
 
-    if (duplicateUser || duplicateExecutive) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    if (duplicateExecutive) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
+    }
+
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const previousRecord = sanitizeExecutiveAdminRecord(currentExecutive, this.db.users[userIndex]);
@@ -833,8 +824,12 @@ class EventAppRepository {
       ? this.getAdminClients().find((client) => Number(client.clientId) !== normalizedClientId && isNitEquivalent(client.nit, normalizedPayload.nit)) || null
       : null;
 
-    if (duplicateUser || duplicateClient || duplicateNitClient) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    if (duplicateNitClient || duplicateClient) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
+    }
+
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const previousRecord = sanitizeClientRecord({ client: currentClient, user: this.db.users[userIndex] });
@@ -880,28 +875,17 @@ class EventAppRepository {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
 
-    const username = normalizeComparableValue(payload.username);
-    const email = normalizeComparableValue(payload.email);
-    const phone = normalizePhoneValue(payload.phone);
-    const whatsappPhone = normalizePhoneValue(payload.whatsappPhone);
-    const fullName = normalizeComparableValue(payload.fullName);
     const cedula = String(payload.cedula || '').trim();
 
-    const duplicateUser = this.db.users.find((user) => {
-      if (normalizeComparableValue(user.username) === username) return true;
-      if (email && normalizeComparableValue(user.email) === email) return true;
-      if (phone && normalizePhoneValue(user.phone) === phone) return true;
-      return whatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === whatsappPhone;
-    });
+    const duplicateUser = hasDuplicateUsername({ users: this.db.users, username: payload.username });
     const duplicateCedulaCoordinator = cedula ? this.findAdminCoordinatorByCedula(cedula) : null;
-    const duplicateCoordinator = this.db.coordinators.find((coordinator) => (
-      isDocumentEquivalent(coordinator.cedula, cedula)
-      || normalizeComparableValue(coordinator.name) === fullName
-      || normalizePhoneValue(coordinator.phone) === phone
-    ));
 
-    if (duplicateUser || duplicateCoordinator || duplicateCedulaCoordinator) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    if (duplicateCedulaCoordinator) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
+    }
+
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const newUser = {
@@ -958,29 +942,24 @@ class EventAppRepository {
     }
 
     const linkedUser = currentCoordinator.userId ? this.findUserById(currentCoordinator.userId) : null;
-    const normalizedUsername = normalizeComparableValue(payload.username || linkedUser?.username);
-    const normalizedEmail = normalizeComparableValue(payload.email);
-    const normalizedPhone = normalizePhoneValue(payload.phone);
-    const normalizedWhatsappPhone = normalizePhoneValue(payload.whatsappPhone || payload.phone);
-    const normalizedFullName = normalizeComparableValue(payload.fullName);
     const normalizedCedula = String(payload.cedula || '').trim();
 
-    const duplicateUser = linkedUser ? this.db.users.find((user) => {
-      if (Number(user.id) === Number(linkedUser.id)) return false;
-      if (normalizedUsername && normalizeComparableValue(user.username) === normalizedUsername) return true;
-      if (normalizedEmail && normalizeComparableValue(user.email) === normalizedEmail) return true;
-      if (normalizedPhone && normalizePhoneValue(user.phone) === normalizedPhone) return true;
-      return normalizedWhatsappPhone && normalizePhoneValue(user.whatsappPhone || user.whatsapp_phone) === normalizedWhatsappPhone;
+    const duplicateUser = linkedUser ? hasDuplicateUsername({
+      users: this.db.users,
+      username: payload.username || linkedUser.username,
+      excludeUserId: linkedUser.id,
     }) : null;
     const duplicateCoordinator = this.db.coordinators.find((coordinator) => {
       if (Number(coordinator.id) === normalizedCoordinatorId) return false;
-      return isDocumentEquivalent(coordinator.cedula, normalizedCedula)
-        || normalizeComparableValue(coordinator.name) === normalizedFullName
-        || normalizePhoneValue(coordinator.phone) === normalizedPhone;
+      return isDocumentEquivalent(coordinator.cedula, normalizedCedula);
     });
 
-    if (duplicateUser || duplicateCoordinator) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    if (duplicateCoordinator) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
+    }
+
+    if (duplicateUser) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const previousRecord = sanitizeCoordinatorAdminRecord({ coordinator: currentCoordinator, user: linkedUser });
@@ -1032,23 +1011,11 @@ class EventAppRepository {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
 
-    const fullName = normalizeComparableValue(payload.fullName);
     const cedula = String(payload.cedula || '').trim();
-    const category = normalizeComparableValue(payload.category);
-    const cityName = normalizeComparableValue(city.name);
     const duplicateCedulaStaff = cedula ? this.findAdminStaffByCedula(cedula) : null;
 
-    const duplicateStaff = this.db.staff.find((staffMember) => (
-      isDocumentEquivalent(staffMember.cedula, cedula)
-      || (
-        normalizeComparableValue(staffMember.name) === fullName
-        && normalizeComparableValue(staffMember.city) === cityName
-        && normalizeComparableValue(staffMember.category) === category
-      )
-    ));
-
-    if (duplicateStaff || duplicateCedulaStaff) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    if (duplicateCedulaStaff) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
     }
 
     const categoryRecord = this.#ensureStaffCategory(payload.category);
@@ -1096,22 +1063,14 @@ class EventAppRepository {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
 
-    const normalizedFullName = normalizeComparableValue(payload.fullName);
     const normalizedCedula = String(payload.cedula || '').trim();
-    const normalizedCategory = normalizeComparableValue(payload.category);
-    const normalizedCityName = normalizeComparableValue(city.name);
     const duplicateStaff = this.db.staff.find((staffMember) => {
       if (Number(staffMember.id) === normalizedStaffId) return false;
-      return isDocumentEquivalent(staffMember.cedula, normalizedCedula)
-        || (
-          normalizeComparableValue(staffMember.name) === normalizedFullName
-          && normalizeComparableValue(staffMember.city) === normalizedCityName
-          && normalizeComparableValue(staffMember.category) === normalizedCategory
-        );
+      return isDocumentEquivalent(staffMember.cedula, normalizedCedula);
     });
 
     if (duplicateStaff) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
     }
 
     const previousRecord = sanitizeStaffAdminRecord(this.db.staff[staffIndex]);

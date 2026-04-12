@@ -1781,10 +1781,10 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
       <SurfaceCard style={styles.heroCard}>
         <View style={styles.heroBadges}>
-          <StatusBadge label={`${lists.clients.length} clientes`} tone="info" />
-          <StatusBadge label={`${executives.length} ejecutivos`} tone="success" />
-          <StatusBadge label={`${lists.coordinators.length} coordinadores`} tone="success" />
-          <StatusBadge label={`${lists.staff.length} staff`} tone="warning" />
+          <StatusBadge label={`${lists.clients.length} clientes`} tone="info" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
+          <StatusBadge label={`${executives.length} ejecutivos`} tone="success" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
+          <StatusBadge label={`${lists.coordinators.length} coordinadores`} tone="success" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
+          <StatusBadge label={`${lists.staff.length} staff`} tone="warning" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
         </View>
         <Text style={styles.cardTitle}>Control administrativo con persistencia real</Text>
         <Text style={styles.heroText}>El módulo valida duplicados por identificador principal, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar. Inactivos actuales: {inactiveCounts.clients} clientes, {inactiveCounts.executives} ejecutivos, {inactiveCounts.coordinators} coordinadores y {inactiveCounts.staff} staff.</Text>
@@ -1885,23 +1885,34 @@ const createStyles = (palette) => StyleSheet.create({
   loaderWrap: { justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   loaderText: { color: '#FFFFFF', fontWeight: '700' },
   heroCard: { backgroundColor: palette.surfaceMuted },
-  heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, alignItems: 'center' },
+  heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, alignItems: 'stretch' },
+  heroBadge: { minWidth: 150, minHeight: 34, alignItems: 'center', justifyContent: 'center' },
+  heroBadgeText: { width: '100%', textAlign: 'center', lineHeight: 16 },
   heroText: { color: palette.textMuted, lineHeight: 20 },
   feedbackCard: { borderWidth: 1 },
   feedbackSuccess: { borderColor: palette.successText, backgroundColor: palette.successBg },
   feedbackWarning: { borderColor: '#D97706', backgroundColor: '#FFFBEB' },
   feedbackError: { borderColor: palette.errorText, backgroundColor: palette.errorBg },
   feedbackText: { color: '#223548', fontWeight: '700' },
-  tabRow: { flexDirection: 'row', gap: SPACING.sm },
+  tabRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'stretch' },
   tabButton: {
     flex: 1,
+    minHeight: 52,
     borderRadius: RADII.md,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingVertical: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   tabButtonActive: { backgroundColor: '#FFFFFF' },
-  tabButtonText: { color: '#FFFFFF', fontWeight: '800' },
+  tabButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 18,
+    includeFontPadding: false,
+  },
   tabButtonTextActive: { color: palette.text },
   tabContent: { gap: SPACING.lg },
   formCard: { gap: SPACING.md },

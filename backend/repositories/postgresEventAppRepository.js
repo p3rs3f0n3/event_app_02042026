@@ -29,6 +29,60 @@ const {
 } = require('../utils/staffCategories');
 const { serializeStaffMeasurements } = require('../utils/staffMeasurements');
 
+const DUPLICATE_USERNAME_MESSAGE = 'El nombre de usuario ya está en uso y debe ser único para iniciar sesión.';
+const DUPLICATE_CLIENT_NIT_MESSAGE = 'Ya existe un cliente con ese NIT.';
+const DUPLICATE_COORDINATOR_CEDULA_MESSAGE = 'Ya existe un coordinador con esa cédula.';
+const DUPLICATE_EXECUTIVE_CEDULA_MESSAGE = 'Ya existe un ejecutivo con esa cédula.';
+const DUPLICATE_STAFF_CEDULA_MESSAGE = 'Ya existe una persona de staff con esa cédula.';
+
+const isPostgresUniqueViolation = (error) => error?.code === '23505';
+
+const mapAdminUniqueViolation = (error) => {
+  const constraint = String(error?.constraint || '').toLowerCase();
+
+  if (constraint === 'users_username_key') {
+    return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
+  }
+
+  if (['clients_nit_key', 'idx_clients_nit_unique'].includes(constraint)) {
+    return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
+  }
+
+  if (['executives_cedula_key', 'idx_executives_cedula_unique'].includes(constraint)) {
+    return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
+  }
+
+  if (constraint === 'coordinators_cedula_key') {
+    return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
+  }
+
+  if (constraint === 'staff_cedula_key') {
+    return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
+  }
+
+  return null;
+};
+
+const hasDuplicateUsername = async ({ username, excludeUserId = null }) => {
+  const normalizedUsername = String(username || '').trim();
+  if (!normalizedUsername) {
+    return false;
+  }
+
+  const result = await query(
+    `
+      SELECT id
+      FROM users
+      WHERE LOWER(username) = LOWER($1)
+        AND ($2::bigint IS NULL OR id <> $2)
+      LIMIT 1
+    `,
+    [normalizedUsername, excludeUserId ? Number(excludeUserId) : null],
+  );
+
+  return result.rowCount > 0;
+};
+
 const resolveClientUserId = ({ rawClientUserId, client, clients }) => {
   const normalizedRawClientUserId = Number(rawClientUserId);
   if (Number.isInteger(normalizedRawClientUserId) && normalizedRawClientUserId > 0) {
@@ -595,28 +649,11 @@ class PostgresEventAppRepository {
   async createClient(payload) {
     const duplicateNitClient = payload.nit ? await this.findAdminClientByNit(payload.nit) : null;
     if (duplicateNitClient) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
     }
 
-    const duplicateResult = await query(
-      `
-        SELECT u.id
-        FROM users u
-        LEFT JOIN clients c ON c.user_id = u.id
-        WHERE LOWER(u.username) = LOWER($1)
-           OR ($2::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($2))
-           OR ($3::text IS NOT NULL AND COALESCE(u.phone, '') = $3)
-           OR ($4::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $4)
-           OR ($5::text IS NOT NULL AND LOWER(COALESCE(c.nit, '')) = LOWER($5))
-           OR ($6::text IS NOT NULL AND LOWER(COALESCE(c.razon_social, '')) = LOWER($6))
-           OR ($7::text IS NOT NULL AND LOWER(COALESCE(c.contact_full_name, '')) = LOWER($7))
-          LIMIT 1
-      `,
-      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.nit, payload.razonSocial, payload.contactFullName],
-    );
-
-    if (duplicateResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    if (await hasDuplicateUsername({ username: payload.username })) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const client = await pool.connect();
@@ -658,6 +695,9 @@ class PostgresEventAppRepository {
       return createdRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -672,28 +712,11 @@ class PostgresEventAppRepository {
 
     const duplicateExecutiveByCedula = payload.cedula ? await this.findAdminExecutiveByCedula(payload.cedula) : null;
     if (duplicateExecutiveByCedula) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
     }
 
-    const duplicateResult = await query(
-      `
-        SELECT u.id
-        FROM users u
-        LEFT JOIN roles r ON r.id = u.role_id
-        LEFT JOIN executives e ON e.user_id = u.id
-        WHERE LOWER(u.username) = LOWER($1)
-           OR ($2::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($2))
-           OR ($3::text IS NOT NULL AND COALESCE(u.phone, '') = $3)
-           OR ($4::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $4)
-           OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.cedula, '')) = LOWER($5))
-           OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.full_name, u.full_name)) = LOWER($6))
-          LIMIT 1
-      `,
-      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.cedula || null, payload.fullName],
-    );
-
-    if (duplicateResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    if (await hasDuplicateUsername({ username: payload.username })) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const client = await pool.connect();
@@ -733,6 +756,9 @@ class PostgresEventAppRepository {
       return createdRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -763,32 +789,11 @@ class PostgresEventAppRepository {
     const currentRow = currentClientResult.rows[0];
     const duplicateNitClient = payload.nit ? await this.findAdminClientByNit(payload.nit) : null;
     if (duplicateNitClient && Number(duplicateNitClient.clientId) !== normalizedClientId) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
     }
 
-    const duplicateResult = await query(
-      `
-        SELECT u.id
-        FROM users u
-        LEFT JOIN clients c ON c.user_id = u.id
-        WHERE u.id <> $1
-          AND COALESCE(c.id, 0) <> $2
-          AND (
-            LOWER(u.username) = LOWER($3)
-            OR ($4::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($4))
-            OR ($5::text IS NOT NULL AND COALESCE(u.phone, '') = $5)
-            OR ($6::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $6)
-            OR ($7::text IS NOT NULL AND LOWER(COALESCE(c.nit, '')) = LOWER($7))
-            OR ($8::text IS NOT NULL AND LOWER(COALESCE(c.razon_social, '')) = LOWER($8))
-            OR ($9::text IS NOT NULL AND LOWER(COALESCE(c.contact_full_name, '')) = LOWER($9))
-          )
-        LIMIT 1
-      `,
-      [currentRow.userId, normalizedClientId, payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.nit, payload.razonSocial, payload.contactFullName],
-    );
-
-    if (duplicateResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un cliente con ese usuario o datos principales.' };
+    if (await hasDuplicateUsername({ username: payload.username, excludeUserId: currentRow.userId })) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const previousRecord = sanitizeClientRecord({
@@ -869,6 +874,9 @@ class PostgresEventAppRepository {
       return updatedRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_CLIENT_NIT_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -898,7 +906,7 @@ class PostgresEventAppRepository {
 
     const duplicateExecutiveByCedula = payload.cedula ? await this.findAdminExecutiveByCedula(payload.cedula) : null;
     if (duplicateExecutiveByCedula && Number(duplicateExecutiveByCedula.id) !== normalizedExecutiveId) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
     }
 
     const cityResult = await query('SELECT id, name FROM cities WHERE LOWER(name) = LOWER($1) LIMIT 1', [payload.city]);
@@ -906,29 +914,8 @@ class PostgresEventAppRepository {
       return { errorCode: 'INVALID_REFERENCE', message: 'La ciudad seleccionada no existe.' };
     }
 
-    const duplicateResult = await query(
-      `
-        SELECT u.id
-        FROM users u
-        LEFT JOIN roles r ON r.id = u.role_id
-        LEFT JOIN executives e ON e.user_id = u.id
-        WHERE u.id <> $1
-          AND COALESCE(e.id, 0) <> $2
-          AND (
-            LOWER(u.username) = LOWER($3)
-            OR ($4::text IS NOT NULL AND LOWER(COALESCE(u.email, '')) = LOWER($4))
-            OR ($5::text IS NOT NULL AND COALESCE(u.phone, '') = $5)
-            OR ($6::text IS NOT NULL AND COALESCE(u.whatsapp_phone, '') = $6)
-            OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.cedula, '')) = LOWER($7))
-            OR (r.code = 'EJECUTIVO' AND LOWER(COALESCE(e.full_name, u.full_name)) = LOWER($8))
-          )
-        LIMIT 1
-      `,
-      [currentExecutiveResult.rows[0].userId, normalizedExecutiveId, payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null, payload.cedula || null, payload.fullName],
-    );
-
-    if (duplicateResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un ejecutivo con ese usuario o datos principales.' };
+    if (await hasDuplicateUsername({ username: payload.username, excludeUserId: currentExecutiveResult.rows[0].userId })) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const previousRecord = sanitizeExecutiveAdminRecord(currentExecutiveResult.rows[0]);
@@ -984,6 +971,9 @@ class PostgresEventAppRepository {
       return updatedRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_EXECUTIVE_CEDULA_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -998,31 +988,12 @@ class PostgresEventAppRepository {
 
     const duplicateCedulaCoordinator = payload.cedula ? await this.findAdminCoordinatorByCedula(payload.cedula) : null;
 
-    const duplicateUserResult = await query(
-      `
-        SELECT s.id
-        FROM users
-        WHERE LOWER(username) = LOWER($1)
-           OR ($2::text IS NOT NULL AND LOWER(COALESCE(email, '')) = LOWER($2))
-           OR ($3::text IS NOT NULL AND COALESCE(phone, '') = $3)
-           OR ($4::text IS NOT NULL AND COALESCE(whatsapp_phone, '') = $4)
-        LIMIT 1
-      `,
-      [payload.username, payload.email || null, payload.phone || null, payload.whatsappPhone || null],
-    );
-    const duplicateCoordinatorResult = await query(
-      `
-        SELECT s.id
-        FROM coordinators
-        WHERE LOWER(full_name) = LOWER($1)
-           OR phone = $2
-        LIMIT 1
-      `,
-      [payload.fullName, payload.phone],
-    );
+    if (duplicateCedulaCoordinator) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
+    }
 
-    if (duplicateCedulaCoordinator || duplicateUserResult.rowCount > 0 || duplicateCoordinatorResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    if (await hasDuplicateUsername({ username: payload.username })) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const client = await pool.connect();
@@ -1065,6 +1036,9 @@ class PostgresEventAppRepository {
       return createdRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -1099,41 +1073,14 @@ class PostgresEventAppRepository {
 
     const duplicateCoordinatorByCedula = payload.cedula ? await this.findAdminCoordinatorByCedula(payload.cedula) : null;
     if (duplicateCoordinatorByCedula && Number(duplicateCoordinatorByCedula.id) !== normalizedCoordinatorId) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
     }
 
-    const duplicateUserResult = currentRow.linkedUserId ? await query(
-      `
-        SELECT id
-        FROM users
-        WHERE id <> $1
-          AND (
-            ($2::text IS NOT NULL AND LOWER(username) = LOWER($2))
-            OR ($3::text IS NOT NULL AND LOWER(COALESCE(email, '')) = LOWER($3))
-            OR ($4::text IS NOT NULL AND COALESCE(phone, '') = $4)
-            OR ($5::text IS NOT NULL AND COALESCE(whatsapp_phone, '') = $5)
-          )
-        LIMIT 1
-      `,
-      [currentRow.linkedUserId, payload.username || currentRow.username || null, payload.email || null, payload.phone || null, payload.whatsappPhone || payload.phone || null],
-    ) : { rowCount: 0 };
-
-    const duplicateCoordinatorResult = await query(
-      `
-        SELECT id
-        FROM coordinators
-        WHERE id <> $1
-          AND (
-            LOWER(full_name) = LOWER($2)
-            OR phone = $3
-          )
-        LIMIT 1
-      `,
-      [normalizedCoordinatorId, payload.fullName, payload.phone],
-    );
-
-    if (duplicateUserResult.rowCount > 0 || duplicateCoordinatorResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe un coordinador con ese usuario o datos principales.' };
+    if (currentRow.linkedUserId && await hasDuplicateUsername({
+      username: payload.username || currentRow.username,
+      excludeUserId: currentRow.linkedUserId,
+    })) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
     const previousRecord = sanitizeCoordinatorAdminRecord({
@@ -1206,6 +1153,9 @@ class PostgresEventAppRepository {
       return updatedRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_COORDINATOR_CEDULA_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -1220,23 +1170,8 @@ class PostgresEventAppRepository {
 
     const duplicateCedulaStaff = payload.cedula ? await this.findAdminStaffByCedula(payload.cedula) : null;
 
-    const duplicateResult = await query(
-      `
-        SELECT s.id
-        FROM staff s
-        INNER JOIN cities ci ON ci.id = s.city_id
-        WHERE (
-             LOWER(s.full_name) = LOWER($1)
-             AND LOWER(ci.name) = LOWER($2)
-             AND UPPER(s.category) = UPPER($3)
-           )
-        LIMIT 1
-      `,
-      [payload.fullName, payload.city, payload.category],
-    );
-
-    if (duplicateCedulaStaff || duplicateResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+    if (duplicateCedulaStaff) {
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
     }
 
     const client = await pool.connect();
@@ -1269,6 +1204,9 @@ class PostgresEventAppRepository {
       return createdRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();
@@ -1301,27 +1239,7 @@ class PostgresEventAppRepository {
 
     const duplicateStaffByCedula = payload.cedula ? await this.findAdminStaffByCedula(payload.cedula) : null;
     if (duplicateStaffByCedula && Number(duplicateStaffByCedula.id) !== normalizedStaffId) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
-    }
-
-    const duplicateResult = await query(
-      `
-        SELECT s.id
-        FROM staff s
-        INNER JOIN cities ci ON ci.id = s.city_id
-        WHERE s.id <> $1
-          AND (
-            LOWER(s.full_name) = LOWER($2)
-            AND LOWER(ci.name) = LOWER($3)
-            AND UPPER(s.category) = UPPER($4)
-          )
-        LIMIT 1
-      `,
-      [normalizedStaffId, payload.fullName, payload.city, payload.category],
-    );
-
-    if (duplicateResult.rowCount > 0) {
-      return { errorCode: 'DUPLICATE_RECORD', message: 'Ya existe una persona de staff con esos datos principales.' };
+      return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
     }
 
     const previousRecord = sanitizeStaffAdminRecord(currentRow);
@@ -1369,6 +1287,9 @@ class PostgresEventAppRepository {
       return updatedRecord;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (isPostgresUniqueViolation(error)) {
+        return mapAdminUniqueViolation(error) || { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_STAFF_CEDULA_MESSAGE };
+      }
       throw error;
     } finally {
       client.release();

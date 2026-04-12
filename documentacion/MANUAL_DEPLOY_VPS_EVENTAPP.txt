@@ -98,6 +98,50 @@ CHECKLIST FINAL VPS
 - [ ] /api/health responde ok por HTTPS
 - [ ] El equipo ya puede probar contra la VPS
 
+ACCESO A POSTGRES DESDE DBEAVER
+- PostgreSQL en la VPS NO debe exponerse publicamente. El acceso correcto es por tunel SSH.
+- El contenedor `eventapp-postgres` esta publicado solo en `127.0.0.1:5432` de la VPS.
+
+Datos para DBeaver:
+
+1) Pestana Main / PostgreSQL
+   - Host: 127.0.0.1
+   - Port: 5432
+   - Database: event_app
+   - Username: eventapp_user
+   - Password: EventApp.VPS.2026!
+
+2) Pestana SSH
+   - Use SSH Tunnel: SI
+   - Host/IP: 66.94.101.47
+   - Port: 22
+   - User name: root
+   - Password: hLhlT2x2zv6qUl3mU9
+
+3) Importante
+   - En DBeaver el host de PostgreSQL debe ser `127.0.0.1`.
+   - NO usar `66.94.101.47` como host de la base.
+   - NO usar `eventapp-postgres` como host desde la maquina local.
+   - Si aparece `EOFException`, verificar que el compose siga publicando `127.0.0.1:5432:5432`.
+
+RESETEO PARA PRUEBAS DE FLUJO COMPLETO
+- Si hace falta dejar la BD solo con el admin para pruebas funcionales completas:
+  - Hacer backup primero en `/root/backups/`
+  - Borrar datos de `clients`, `executives`, `coordinators`, `staff`, `events`, `event_cities`, `audit_logs`
+  - Borrar todos los `users` excepto el rol `ADMIN`
+  - Reiniciar secuencias principales
+- Ultimo backup de referencia realizado en:
+  `/root/backups/eventapp_db_before_reset_20260412101239.sql`
+- Estado esperado despues del reseteo:
+  - `users = 1`
+  - `clients = 0`
+  - `executives = 0`
+  - `coordinators = 0`
+  - `staff = 0`
+  - `events = 0`
+  - `audit_logs = 0`
+  - Usuario restante: `admin` / rol `ADMIN`
+
 NOTA DE RECUPERACION DE CONTEXTO
 - Si un agente pierde contexto, este documento + `documentacion/Datos VPS.txt` alcanzan para volver a conectarse y redeployar.
 - La verdad operativa actual es: backend aislado en Docker, proyecto remoto en `/root/projects/eventapp`, API publica en `https://66.94.101.47.sslip.io/api`.
