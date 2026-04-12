@@ -62,14 +62,14 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SurfaceCard style={styles.heroCard}>
         <StatusBadge label="Visibilidad controlada" tone="info" />
         <Text style={styles.cardTitle}>Acceso a reportes publicados</Text>
-        <Text style={styles.cardText}>Los borradores siguen ocultos. Solo ves información validada y publicada.</Text>
+        <Text style={styles.cardText}>Acceso a reportes con el fin de realizar seguimiento a los diferentes eventos.</Text>
       </SurfaceCard>
 
       <UserProfileCard
         user={user}
         palette={palette}
         title="Mi perfil cliente"
-        description={`Sesión activa como @${user?.username}. El cambio de contraseña quedó en tu bloque personal, separado de la consulta de eventos e informes.`}
+        description={`Sesión activa como @${user?.username}.`}
         buttonLabel="MI CONTRASEÑA"
         buttonVariant="primary"
       />
@@ -81,7 +81,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
   const renderEventList = () => (
     <ScreenShell palette={palette}>
-      <SectionTitle kicker="Eventos" title="Mis eventos" subtitle="Solo verás informes finales publicados. Los borradores no se muestran." />
+      <SectionTitle kicker="Eventos" title="Mis eventos" subtitle="Informes finales publicados." />
 
       {loading ? <ActivityIndicator color="#FFFFFF" size="large" style={styles.loading} /> : null}
       {!loading && events.length === 0 ? <Text style={styles.emptyText}>Todavía no tienes eventos vinculados.</Text> : null}

@@ -43,7 +43,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Panel ejecutivo"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${displayUsername}. Gestiona creación, seguimiento y cierre ejecutivo desde un único panel.`}
+        subtitle={`Hola, ${displayUsername}. Gestiona creación, seguimiento y cierre ejecutivo.`}
       />
 
       <SurfaceCard style={styles.heroCard}>
@@ -59,7 +59,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         user={user}
         palette={palette}
         title="Perfil ejecutivo"
-        description={`Sesión activa como @${user?.username}. El cambio de contraseña quedó asociado a tu usuario y separado del trabajo comercial para no mezclarlo con la operación.`}
+        description={`Sesión activa como @${user?.username}.`}
         buttonLabel="MI CONTRASEÑA"
         buttonVariant="primary"
       />
@@ -73,13 +73,13 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Revisar eventos</Text>
-          <Text style={styles.menuText}>Haz seguimiento, edición e inactivación con el flujo actual.</Text>
+          <Text style={styles.menuText}>Haz seguimiento, edición e inactivación de eventos.</Text>
           <AppButton title="ABRIR REVISIÓN" onPress={() => setCurrentView('reviewEvents')} />
         </SurfaceCard>
 
         <SurfaceCard style={styles.menuCard}>
           <Text style={styles.menuTitle}>Informe final</Text>
-          <Text style={styles.menuText}>Consolidá fotos, reportes operativos y publicación para cliente.</Text>
+          <Text style={styles.menuText}>Consolida fotos, reportes operativos y publicación para cliente.</Text>
           <AppButton title="ABRIR INFORME" onPress={() => setCurrentView('reports')} />
         </SurfaceCard>
       </View>

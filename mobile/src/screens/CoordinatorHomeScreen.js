@@ -60,7 +60,7 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <StatusBadge label="Contacto" tone="muted" />
         </View>
         <Text style={styles.cardTitle}>Gestión operativa en campo</Text>
-        <Text style={styles.cardText}>La vista mantiene intactos los flujos de carga de evidencia, informes y consulta de puntos.</Text>
+        <Text style={styles.cardText}>La vista gestiona los flujos de carga de evidencia, informes y consulta de puntos.</Text>
       </SurfaceCard>
 
       <SurfaceCard>
@@ -73,7 +73,7 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         user={user}
         palette={palette}
         title="Perfil coordinador"
-        description={`Sesión activa como @${user?.username}. El cambio de contraseña quedó asociado a tu usuario y fuera de los flujos de campo para evitar confusión operativa.`}
+        description={`Sesión activa como @${user?.username}.`}
         buttonLabel="MI CONTRASEÑA"
         buttonVariant="primary"
       />

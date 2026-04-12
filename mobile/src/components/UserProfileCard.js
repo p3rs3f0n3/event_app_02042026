@@ -21,7 +21,7 @@ const UserProfileCard = ({
         <View style={styles.profileInfo}>
           <Text style={styles.profileTitle}>{title}</Text>
           <Text style={styles.profileText}>
-            {description || `Sesión activa como @${user?.username}. El cambio de contraseña quedó separado del trabajo operativo para evitar confusiones en los formularios.`}
+            {description || `Sesión activa como @${user?.username}.`}
           </Text>
         </View>
         <ChangePasswordCard user={user} palette={palette} buttonLabel={buttonLabel} buttonVariant={buttonVariant} />

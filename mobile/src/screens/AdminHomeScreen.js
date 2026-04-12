@@ -1774,7 +1774,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <SectionTitle
         kicker="Módulo administrador"
         title={appConfig?.appName || 'EventApp'}
-        subtitle={`Hola, ${getUserDisplayName(user)}. Desde este panel puedes gestionar altas, actualizaciones e inactivaciones administrativas sin borrar registros y manteniendo la trazabilidad sin romper los flujos vigentes.`}
+        subtitle={`Hola, ${getUserDisplayName(user)}. Desde este panel puedes gestionar altas, actualizaciones e inactivaciones administrativas.`}
       />
 
       <UserProfileCard user={user} palette={palette} title="Perfil administrativo" buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />

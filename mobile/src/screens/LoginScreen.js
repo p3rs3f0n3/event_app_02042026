@@ -127,7 +127,6 @@ const LoginScreen = ({ onLogin, appConfig }) => {
               <Text style={styles.kickerMeta}>{activeAccounts.join(' · ')}</Text>
             </View>
             <Text style={styles.subtitle}>Ingresa a tu espacio de trabajo</Text>
-            <Text style={styles.helperText}>Usa las credenciales asignadas para tu rol y continúa con la operación. Para los usuarios base de prueba, la contraseña es 123.</Text>
 
             <View style={styles.formSection}>
               <Text style={styles.fieldLabel}>Usuario</Text>
@@ -155,8 +154,6 @@ const LoginScreen = ({ onLogin, appConfig }) => {
 
             <AppButton title={loading ? 'INGRESANDO...' : 'INGRESAR'} onPress={handleLogin} disabled={loading} />
             {loading ? <ActivityIndicator color={palette.hero} style={styles.loader} /> : null}
-
-            <Text style={styles.secondaryCopy}>Cada perfil accede a su flujo operativo y mantiene la navegación vigente por rol.</Text>
           </SurfaceCard>
 
           <Pressable style={styles.footer} onLongPress={openHiddenConfig} delayLongPress={700}>
