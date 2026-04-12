@@ -57,3 +57,36 @@ Respondió bien:
 - `/root/projects/eventapp`
 
 https://66.94.101.47.sslip.io/api
+
+Cómo conectarte con DBeaver
+Tenés que usar SSH Tunnel.
+
+Main
+- Host: localhost
+- Port: 5432
+- Database: event_app
+- Username: eventapp_user
+- Password: EventApp.VPS.2026!
+
+SSH
+- Host/IP: 66.94.101.47
+- Port: 22
+- User: root
+- Password: hLhlT2x2zv6qUl3mU9
+
+Driver
+- PostgreSQL
+Resumen práctico
+En DBeaver:
+1. New Connection → PostgreSQL
+2. en la pestaña principal:
+   - host localhost
+   - port 5432
+   - db event_app
+   - user eventapp_user
+   - password EventApp.VPS.2026!
+3. pestaña SSH:
+   - usar túnel SSH
+   - host 66.94.101.47
+   - user root
+   - password hLhlT2x2zv6qUl3mU9

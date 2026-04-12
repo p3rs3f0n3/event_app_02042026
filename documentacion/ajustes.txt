@@ -63,6 +63,31 @@ Hecho
 En admin, falta la opción de crear ejecutivo.
 Hecho
 
+*** se corrige bug que generaba error cuando se intentaba crear un correo que ya existiía, solo se valida por cedula
+
+Categorias del staff: Hecho, se cambian categorias
+
+Productor
+Logístico operativo
+Coordinador
+Supervisor
+Promotor
+Mercaderista
+Impulsador
+Volanteador
+Modelo A
+Modelo AA
+Modelo AAA
+Animador
+Barista
+DJ
+Recreador
+Operador dummie
+Patinadora 
+Presentador
+Mesero
+Seguridad
+otro
 
 
 

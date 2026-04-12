@@ -98,9 +98,22 @@ Clientes
 - usuario: cliente.nutresa
 - contraseña: 123
 
+
+iniciar local el desarrollo
+
 app expo go
 PS D:\Desarrollos\claude_code\event_app\mobile> npx expo start --clear
 
 back
 PS D:\Desarrollos\claude_code\event_app\backend> npm run db:init
 PS D:\Desarrollos\claude_code\event_app\backend> npm run dev
+
+Links del update
+- Android:  
+  https://u.expo.dev/update/019d608a-f9b0-7d13-a009-f627fccce4c0
+- iOS:  
+  https://u.expo.dev/update/019d608a-f9b0-72d4-b8e2-cb0ddc4553f8
+  
+  
+  
+  

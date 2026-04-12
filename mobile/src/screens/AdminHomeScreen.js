@@ -1780,12 +1780,6 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <UserProfileCard user={user} palette={palette} title="Perfil administrativo" buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />
 
       <SurfaceCard style={styles.heroCard}>
-        <View style={styles.heroBadges}>
-          <StatusBadge label={`${lists.clients.length} clientes`} tone="info" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
-          <StatusBadge label={`${executives.length} ejecutivos`} tone="success" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
-          <StatusBadge label={`${lists.coordinators.length} coordinadores`} tone="success" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
-          <StatusBadge label={`${lists.staff.length} staff`} tone="warning" style={styles.heroBadge} textStyle={styles.heroBadgeText} />
-        </View>
         <Text style={styles.cardTitle}>Control administrativo con persistencia real</Text>
         <Text style={styles.heroText}>El módulo valida duplicados por identificador principal, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar. Inactivos actuales: {inactiveCounts.clients} clientes, {inactiveCounts.executives} ejecutivos, {inactiveCounts.coordinators} coordinadores y {inactiveCounts.staff} staff.</Text>
       </SurfaceCard>
@@ -1806,7 +1800,14 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       <View style={styles.tabRow}>
         {TABS.map((tab) => (
           <Pressable key={tab.key} style={[styles.tabButton, activeTab === tab.key && styles.tabButtonActive]} onPress={() => setActiveTab(tab.key)}>
-            <Text style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}>{tab.label}</Text>
+            <Text
+              style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {tab.label}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -1885,9 +1886,6 @@ const createStyles = (palette) => StyleSheet.create({
   loaderWrap: { justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   loaderText: { color: '#FFFFFF', fontWeight: '700' },
   heroCard: { backgroundColor: palette.surfaceMuted },
-  heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, alignItems: 'stretch' },
-  heroBadge: { minWidth: 150, minHeight: 34, alignItems: 'center', justifyContent: 'center' },
-  heroBadgeText: { width: '100%', textAlign: 'center', lineHeight: 16 },
   heroText: { color: palette.textMuted, lineHeight: 20 },
   feedbackCard: { borderWidth: 1 },
   feedbackSuccess: { borderColor: palette.successText, backgroundColor: palette.successBg },
@@ -1909,8 +1907,9 @@ const createStyles = (palette) => StyleSheet.create({
   tabButtonText: {
     color: '#FFFFFF',
     fontWeight: '800',
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 14,
     includeFontPadding: false,
   },
   tabButtonTextActive: { color: palette.text },
