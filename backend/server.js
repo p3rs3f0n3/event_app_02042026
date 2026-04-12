@@ -19,6 +19,7 @@ const {
   validateExecutiveReportPayload,
   validateAdminClientPayload,
   validateAdminClientUpdatePayload,
+  validateAcceptTermsPayload,
   validateAdminCoordinatorPayload,
   validateAdminCoordinatorUpdatePayload,
   validateAdminExecutivePayload,
@@ -33,6 +34,8 @@ const {
 } = require('./utils/validation');
 const { normalizeStaffCategoryName } = require('./utils/staffCategories');
 const { normalizeStaffSexo } = require('./utils/staffMeasurements');
+
+const APP_DISPLAY_NAME = 'Eventrix';
 
 const app = express();
 
@@ -96,7 +99,7 @@ app.use(express.json({ limit: '15mb' }));
 
 app.get('/api/app-config', asyncHandler(async (req, res) => {
   return res.json({
-    appName: 'EventApp',
+    appName: APP_DISPLAY_NAME,
     roles: getRoleConfigList(),
   });
 }));
@@ -119,6 +122,31 @@ app.post('/api/login', asyncHandler(async (req, res) => {
   return res.json({
     ...user,
     roleConfig: getRoleConfig(user.role),
+  });
+}));
+
+app.post('/api/terms/accept', asyncHandler(async (req, res) => {
+  const validationError = validateAcceptTermsPayload(req.body);
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const result = await req.app.locals.repository.acceptUserTerms({
+    userId: Number(req.body.userId),
+  });
+
+  if (result?.errorCode === 'USER_NOT_FOUND') {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+
+  if (result?.errorCode === 'USER_INACTIVE') {
+    return res.status(409).json({ message: 'El usuario está inactivo y no puede aceptar términos' });
+  }
+
+  return res.json({
+    ...result,
+    roleConfig: getRoleConfig(result.role),
+    message: 'Términos aceptados correctamente',
   });
 }));
 

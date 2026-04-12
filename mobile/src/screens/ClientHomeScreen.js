@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { getClientEvents } from '../api/api';
+import { APP_DISPLAY_NAME } from '../config/appMetadata';
 import UserProfileCard from '../components/UserProfileCard';
 import { normalizeExecutiveReport } from '../utils/executiveReport';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
@@ -44,7 +45,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     <ScreenShell palette={palette} contentContainerStyle={styles.content}>
       <SectionTitle
         kicker="Portal cliente"
-        title={appConfig?.appName || 'EventApp'}
+        title={appConfig?.appName || APP_DISPLAY_NAME}
         subtitle={`Hola, ${displayUsername}. Consulta los eventos vinculados y el informe final publicado por el ejecutivo.`}
       />
 

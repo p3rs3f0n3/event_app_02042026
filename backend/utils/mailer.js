@@ -42,11 +42,11 @@ const buildWelcomeEmailContent = ({ recipientName, roleLabel, username, password
   const safeRoleLabel = roleLabel || 'usuario';
 
   return {
-    subject: 'Bienvenido a la familia Event App',
+    subject: 'Bienvenido a Eventrix',
     text: [
       `Hola ${safeRecipientName},`,
       '',
-      'Te damos la bienvenida a la familia Event App.',
+      'Te damos la bienvenida a Eventrix.',
       `Tu perfil fue creado como ${safeRoleLabel}.`,
       '',
       'Tus credenciales de acceso son:',
@@ -55,12 +55,12 @@ const buildWelcomeEmailContent = ({ recipientName, roleLabel, username, password
       '',
       'Te recomendamos cambiar la contraseña luego de tu primer ingreso.',
       '',
-      'Equipo Event App',
+      'Equipo Eventrix',
     ].join('\n'),
     html: `
       <div style="font-family: Arial, sans-serif; color: #1F2937; line-height: 1.6;">
         <p>Hola <strong>${escapeHtml(safeRecipientName)}</strong>,</p>
-        <p>Te damos la bienvenida a la familia <strong>Event App</strong>.</p>
+        <p>Te damos la bienvenida a <strong>Eventrix</strong>.</p>
         <p>Tu perfil fue creado como <strong>${escapeHtml(safeRoleLabel)}</strong>.</p>
         <p>Tus credenciales de acceso son:</p>
         <ul>
@@ -68,7 +68,7 @@ const buildWelcomeEmailContent = ({ recipientName, roleLabel, username, password
           <li><strong>Contraseña:</strong> ${escapeHtml(password)}</li>
         </ul>
         <p>Te recomendamos cambiar la contraseña luego de tu primer ingreso.</p>
-        <p>Equipo Event App</p>
+        <p>Equipo Eventrix</p>
       </div>
     `,
   };

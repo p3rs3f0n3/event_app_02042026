@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import CoordinatorEventDetailScreen from './CoordinatorEventDetailScreen';
 import CoordinatorEventsScreen from './CoordinatorEventsScreen';
+import { APP_DISPLAY_NAME } from '../config/appMetadata';
 import UserProfileCard from '../components/UserProfileCard';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
@@ -49,7 +50,7 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     <ScreenShell palette={palette} contentContainerStyle={styles.content}>
       <SectionTitle
         kicker="Panel coordinador"
-        title={appConfig?.appName || 'EventApp'}
+        title={appConfig?.appName || APP_DISPLAY_NAME}
         subtitle={`Hola, ${getUserDisplayName(user)}. Revisa puntos asignados, carga fotos y reportes, y mantén contacto con el ejecutivo.`}
       />
 

@@ -224,6 +224,8 @@ const sanitizeUserRecord = (user) => ({
   email: user.email || null,
   role: user.role,
   isActive: user.isActive ?? user.is_active ?? true,
+  termsAccepted: user.termsAccepted ?? user.terms_accepted ?? false,
+  termsAcceptedAt: user.termsAcceptedAt || user.terms_accepted_at || null,
 });
 
 const sanitizeExecutiveAdminRecord = (value, linkedUser = null) => {

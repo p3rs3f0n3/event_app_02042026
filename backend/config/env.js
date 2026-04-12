@@ -39,7 +39,7 @@ const config = {
     secure: parseBoolean(process.env.SMTP_SECURE, false),
     requireTls: parseBoolean(process.env.SMTP_REQUIRE_TLS, false),
     fromEmail: process.env.SMTP_FROM_EMAIL || '',
-    fromName: process.env.SMTP_FROM_NAME || 'Event App',
+    fromName: process.env.SMTP_FROM_NAME || 'Eventrix',
   },
 };
 

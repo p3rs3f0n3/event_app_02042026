@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { APP_DISPLAY_NAME } from '../config/appMetadata';
 
 import {
   createAdminStaffCategory,
@@ -1854,7 +1855,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     <ScreenShell palette={palette} contentContainerStyle={styles.content}>
       <SectionTitle
         kicker="Módulo administrador"
-        title={appConfig?.appName || 'EventApp'}
+        title={appConfig?.appName || APP_DISPLAY_NAME}
         subtitle={`Hola, ${getUserDisplayName(user)}. Desde este panel puedes gestionar altas, actualizaciones e inactivaciones administrativas.`}
       />
 

@@ -1,5 +1,7 @@
+import { APP_DISPLAY_NAME } from './appMetadata';
+
 export const FALLBACK_APP_CONFIG = {
-  appName: 'EventApp',
+  appName: APP_DISPLAY_NAME,
   roles: [
     { code: 'ADMIN', label: 'Administrador', theme: 'blue', status: 'active', enabled: true },
     { code: 'EJECUTIVO', label: 'Ejecutivo', theme: 'green', status: 'active', enabled: true },

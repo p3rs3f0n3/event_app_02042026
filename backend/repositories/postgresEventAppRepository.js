@@ -248,7 +248,7 @@ class PostgresEventAppRepository {
   async authenticateUser({ username, password }) {
     const result = await query(
       `
-        SELECT u.id, u.username, u.full_name, u.phone, u.whatsapp_phone, u.email, u.password_hash, r.code AS role
+        SELECT u.id, u.username, u.full_name, u.phone, u.whatsapp_phone, u.email, u.password_hash, u.terms_accepted, u.terms_accepted_at, r.code AS role
         FROM users u
         INNER JOIN roles r ON r.id = u.role_id
         WHERE LOWER(u.username) = LOWER($1) AND u.is_active = TRUE
@@ -270,13 +270,16 @@ class PostgresEventAppRepository {
       whatsappPhone: user.whatsapp_phone || null,
       email: user.email || null,
       role: user.role,
+      termsAccepted: user.terms_accepted ?? false,
+      termsAcceptedAt: user.terms_accepted_at instanceof Date ? user.terms_accepted_at.toISOString() : user.terms_accepted_at,
     };
   }
 
   async findUserById(id) {
     const result = await query(
       `
-        SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+        SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email,
+               is_active AS "isActive", terms_accepted AS "termsAccepted", terms_accepted_at AS "termsAcceptedAt"
         FROM users
         WHERE id = $1
         LIMIT 1
@@ -285,6 +288,43 @@ class PostgresEventAppRepository {
     );
 
     return result.rows[0] || null;
+  }
+
+  async acceptUserTerms({ userId }) {
+    const result = await query(
+      `
+        UPDATE users
+        SET terms_accepted = TRUE,
+            terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
+            updated_at = NOW()
+        WHERE id = $1
+          AND is_active = TRUE
+        RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email,
+                  is_active AS "isActive", terms_accepted AS "termsAccepted", terms_accepted_at AS "termsAcceptedAt",
+                  (SELECT code FROM roles WHERE id = users.role_id) AS role
+      `,
+      [Number(userId)],
+    );
+
+    if (result.rowCount > 0) {
+      return sanitizeUserRecord(result.rows[0]);
+    }
+
+    const existingUser = await query(
+      `
+        SELECT id, is_active AS "isActive"
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [Number(userId)],
+    );
+
+    if (existingUser.rowCount === 0) {
+      return { errorCode: 'USER_NOT_FOUND' };
+    }
+
+    return { errorCode: 'USER_INACTIVE' };
   }
 
   async changeUserPassword({ userId, currentPassword, newPassword }) {

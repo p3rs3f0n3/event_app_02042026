@@ -5,6 +5,7 @@ import CreateEventScreen from './CreateEventScreen';
 import ReviewEventsScreen from './ReviewEventsScreen';
 import ReportsScreen from './ReportsScreen';
 import UserProfileCard from '../components/UserProfileCard';
+import { APP_DISPLAY_NAME } from '../config/appMetadata';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
@@ -42,7 +43,7 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     <ScreenShell palette={palette} contentContainerStyle={styles.content}>
       <SectionTitle
         kicker="Panel ejecutivo"
-        title={appConfig?.appName || 'EventApp'}
+        title={appConfig?.appName || APP_DISPLAY_NAME}
         subtitle={`Hola, ${displayUsername}. Gestiona creación, seguimiento y cierre ejecutivo.`}
       />
 

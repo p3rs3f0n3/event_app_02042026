@@ -115,6 +115,14 @@ const normalizeCity = (city) => ({
   isOther: Boolean(city.isOther || String(city.name || '').toUpperCase() === 'OTRO'),
 });
 
+const normalizeUser = (user) => ({
+  ...user,
+  id: Number(user.id),
+  isActive: user.isActive ?? user.is_active ?? true,
+  termsAccepted: user.termsAccepted ?? user.terms_accepted ?? false,
+  termsAcceptedAt: user.termsAcceptedAt || user.terms_accepted_at || null,
+});
+
 const normalizeEvent = (event, clients = []) => {
   const normalizedImage = normalizePhotoAssetField(
     event.imageMetadata ? { uri: event.image, ...event.imageMetadata } : event.image,
@@ -186,7 +194,7 @@ const normalizeStaffMember = (staffMember) => ({
 const normalizeDb = (db, initialDb) => ({
   ...clone(initialDb),
   ...db,
-  users: Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users),
+  users: (Array.isArray(db?.users) && db.users.length > 0 ? db.users : clone(initialDb.users)).map(normalizeUser),
   executives: buildExecutivesDb({ db, initialDb }),
   clients: buildClientsDb({ db, initialDb }),
   coordinators: Array.isArray(db?.coordinators) && db.coordinators.length > 0 ? db.coordinators.map(normalizeCoordinator) : clone(initialDb.coordinators).map(normalizeCoordinator),
@@ -358,11 +366,36 @@ class EventAppRepository {
       whatsappPhone: user.whatsappPhone || user.whatsapp_phone || null,
       email: user.email || null,
       role: user.role,
+      termsAccepted: user.termsAccepted ?? false,
+      termsAcceptedAt: user.termsAcceptedAt || null,
     };
   }
 
   findUserById(id) {
     return this.db.users.find((user) => Number(user.id) === Number(id)) || null;
+  }
+
+  acceptUserTerms({ userId }) {
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(userId));
+
+    if (userIndex === -1) {
+      return { errorCode: 'USER_NOT_FOUND' };
+    }
+
+    if (this.db.users[userIndex].isActive === false) {
+      return { errorCode: 'USER_INACTIVE' };
+    }
+
+    const acceptedAt = this.db.users[userIndex].termsAcceptedAt || new Date().toISOString();
+
+    this.db.users[userIndex] = normalizeUser({
+      ...this.db.users[userIndex],
+      termsAccepted: true,
+      termsAcceptedAt: acceptedAt,
+    });
+    this.save();
+
+    return sanitizeUserRecord(this.db.users[userIndex]);
   }
 
   changeUserPassword({ userId, currentPassword, newPassword }) {
@@ -641,7 +674,7 @@ class EventAppRepository {
       return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
-    const newUser = {
+    const newUser = normalizeUser({
       id: this.#nextId(this.db.users),
       username: payload.username,
       password: payload.password,
@@ -651,7 +684,9 @@ class EventAppRepository {
       email: payload.email || null,
       role: 'CLIENTE',
       isActive: true,
-    };
+      termsAccepted: false,
+      termsAcceptedAt: null,
+    });
     const newClient = {
       id: this.#nextId(this.db.clients),
       userId: newUser.id,
@@ -698,7 +733,7 @@ class EventAppRepository {
       return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
-    const newUser = {
+    const newUser = normalizeUser({
       id: this.#nextId(this.db.users),
       username: payload.username,
       password: payload.password,
@@ -708,7 +743,9 @@ class EventAppRepository {
       email: payload.email || null,
       role: 'EJECUTIVO',
       isActive: true,
-    };
+      termsAccepted: false,
+      termsAcceptedAt: null,
+    });
     const newExecutive = {
       id: this.#nextId(this.db.executives),
       userId: newUser.id,
@@ -898,7 +935,7 @@ class EventAppRepository {
       return { errorCode: 'DUPLICATE_RECORD', message: DUPLICATE_USERNAME_MESSAGE };
     }
 
-    const newUser = {
+    const newUser = normalizeUser({
       id: this.#nextId(this.db.users),
       username: payload.username,
       password: payload.password,
@@ -908,7 +945,9 @@ class EventAppRepository {
       email: payload.email || null,
       role: 'COORDINADOR',
       isActive: true,
-    };
+      termsAccepted: false,
+      termsAcceptedAt: null,
+    });
     const newCoordinator = normalizeCoordinator({
       id: this.#nextId(this.db.coordinators),
       userId: newUser.id,

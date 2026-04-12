@@ -56,6 +56,18 @@ const validateChangePasswordPayload = (payload) => {
   return null;
 };
 
+const validateAcceptTermsPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de aceptación de términos inválido';
+  }
+
+  if (!isValidIdValue(payload.userId)) {
+    return 'El usuario es requerido';
+  }
+
+  return null;
+};
+
 const validateEventPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de evento inválido';
@@ -507,6 +519,7 @@ module.exports = {
   badRequest: (res, message) => res.status(400).json({ message }),
   normalizeString,
   normalizePhoneDigits,
+  validateAcceptTermsPayload,
   validateAdminClientPayload,
   validateAdminClientUpdatePayload,
   validateAdminCoordinatorPayload,

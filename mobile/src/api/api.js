@@ -61,6 +61,14 @@ export const changePassword = async ({ userId, currentPassword, newPassword }) =
   }
 };
 
+export const acceptTerms = async (userId) => {
+  try {
+    return (await getAPI().post('/terms/accept', { userId })).data;
+  } catch (error) {
+    throw extractApiErrorMessage(error);
+  }
+};
+
 export const getAppConfig = async () => (await getAPI().get('/app-config')).data;
 export const getEvents = async (createdByUserId) => (await getAPI().get('/events', { params: { createdByUserId } })).data;
 export const getCoordinatorEvents = async (userId) => (await getAPI().get('/coordinator/events', { params: { userId } })).data;

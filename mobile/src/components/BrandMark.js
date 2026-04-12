@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { CalendarDays, Sparkles } from 'lucide-react-native';
 
+import { APP_DISPLAY_NAME, APP_LEGAL_TAGLINE } from '../config/appMetadata';
 import { COLORS } from '../theme/colors';
 
 const SIZE_MAP = {
@@ -28,7 +29,7 @@ const SIZE_MAP = {
   },
 };
 
-const BrandMark = ({ appName = 'EventApp', subtitle, size = 'md', align = 'center' }) => {
+const BrandMark = ({ appName = APP_DISPLAY_NAME, subtitle, legalLine = APP_LEGAL_TAGLINE, size = 'md', align = 'center' }) => {
   const palette = SIZE_MAP[size] || SIZE_MAP.md;
 
   return (
@@ -44,6 +45,7 @@ const BrandMark = ({ appName = 'EventApp', subtitle, size = 'md', align = 'cente
       <View style={[styles.textBlock, align === 'left' ? styles.leftAligned : styles.centerAligned]}>
         <Text style={[styles.eyebrow, { fontSize: palette.eyebrow }]}>EVENT OPERATIONS SUITE</Text>
         <Text style={[styles.title, { fontSize: palette.title }]}>{appName}</Text>
+        {legalLine ? <Text style={[styles.legalLine, { fontSize: Math.max(11, palette.subtitle - 1) }]}>{legalLine}</Text> : null}
         {subtitle ? <Text style={[styles.subtitle, { fontSize: palette.subtitle }]}>{subtitle}</Text> : null}
       </View>
     </View>
@@ -105,6 +107,10 @@ const styles = StyleSheet.create({
     color: COLORS.brand.onDark,
     fontWeight: '800',
     letterSpacing: -0.8,
+  },
+  legalLine: {
+    color: COLORS.brand.highlight,
+    fontWeight: '700',
   },
   subtitle: {
     color: COLORS.brand.subtleText,

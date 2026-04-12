@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
 import BrandMark from './BrandMark';
+import { APP_DISPLAY_NAME, SPLASH_BRAND_SUBTITLE } from '../config/appMetadata';
 import { COLORS } from '../theme/colors';
 import { RADII, SHADOWS, SPACING, getAppPalette } from '../theme/tokens';
 
@@ -13,9 +14,9 @@ const EntrySplash = ({ appName, loadingConfig = false }) => (
     <View style={styles.orbBottom} />
 
     <BrandMark
-      appName={appName}
+      appName={appName || APP_DISPLAY_NAME}
       size="lg"
-      subtitle="Planificación, ejecución y seguimiento operativo en una sola experiencia móvil."
+      subtitle={SPLASH_BRAND_SUBTITLE}
     />
 
     <View style={styles.footerCard}>
