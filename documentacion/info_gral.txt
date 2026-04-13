@@ -105,8 +105,14 @@ app expo go
 PS D:\Desarrollos\claude_code\event_app\mobile> npx expo start --clear
 
 back
+Solo para entorno local o base descartable:
 PS D:\Desarrollos\claude_code\event_app\backend> npm run db:init
 PS D:\Desarrollos\claude_code\event_app\backend> npm run dev
+
+IMPORTANTE:
+- `npm run db:init` NO se usa en la VPS con datos reales.
+- En VPS el flujo correcto es sincronizar codigo y reconstruir solo `eventapp-backend`.
+- Ver `documentacion/MANUAL_DEPLOY_VPS_EVENTAPP.txt` antes de cualquier deploy remoto.
 
 Links del update
 - Android:  

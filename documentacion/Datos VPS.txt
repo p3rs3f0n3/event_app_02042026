@@ -37,6 +37,22 @@ Monté EventApp como un stack Docker aislado en:
 
 /root/projects/eventapp
 
+POLITICA OPERATIVA DE LA VPS
+- Deploy normal: subir codigo, sincronizar `backend/` y `deploy/`, y reconstruir solo `eventapp-backend`.
+- NO pisar informacion existente en PostgreSQL.
+- NO ejecutar `npm run db:init` como parte de un deploy normal.
+- NO usar `TRUNCATE`, `DROP DATABASE` ni restauraciones salvo instruccion explicita, backup previo y validacion manual.
+
+Scripts a evitar en deploy normal
+- `scripts/deploy_vps_terms_fix.py` -> peligroso porque ejecuta `npm run db:init` dentro del contenedor.
+- `scripts/restore_vps_from_backup_and_migrate_terms.py` -> peligroso porque hace `DROP DATABASE IF EXISTS event_app` antes de restaurar.
+- `backend/scripts/init-postgres.js` -> peligroso en entornos con datos reales porque aplica schema y seed.
+
+Script recomendado para deploy normal
+- `scripts/safe_deploy_vps_backend.py`
+- Hace backup remoto, sincroniza `backend/` y `deploy/`, reconstruye solo `eventapp-backend` y valida healthcheck.
+- No toca la base de datos y no sobrescribe `deploy/eventapp.vps.env`.
+
 Contenedores
 - eventapp-postgres
 - eventapp-backend
@@ -90,3 +106,8 @@ En DBeaver:
    - host 66.94.101.47
    - user root
    - password hLhlT2x2zv6qUl3mU9
+
+Recordatorio critico
+- Si el repo remoto tiene cambios locales, NO hacer `git pull` a ciegas.
+- Hacer backup del codigo remoto antes de sobrescribir `backend/` o `deploy/`.
+- La base de datos existente se preserva; el deploy normal no debe resetearla.

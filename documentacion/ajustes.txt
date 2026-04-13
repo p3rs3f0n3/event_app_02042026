@@ -96,13 +96,10 @@ En el modulo del coordinador se usa un campo llamado impacto, debe llamarse impa
 impactos indirectos, estos campos solo son numéricos.
 Hecho
 
-
-
-
 https://expo.dev/accounts/mojarras/projects/eventapp/builds/6fdb0aaf-62b3-40ab-a122-1cc960cd65b7
 
 /model --cambiar de modelo
 
-
 PS D:\Desarrollos\claude_code\event_app\mobile> npx expo start --clear 
 PS D:\Desarrollos\claude_code\event_app\backend> npm run dev
+

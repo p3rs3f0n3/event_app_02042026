@@ -40,7 +40,21 @@ METODOS DE ACTUALIZACION DISPONIBLES
 2) EAS Update
    - Metodo recomendado para QA compartido.
    - Mucho mas estable que depender de un tunel.
-   - Requiere que Expo Go o el cliente compatible abra el proyecto actualizado por canal/rama.
+    - Requiere que Expo Go o el cliente compatible abra el proyecto actualizado por canal/rama.
+
+3) APK Android por EAS Build
+   - Metodo recomendado cuando se necesita un instalable Android para QA.
+   - Flujo seguro recomendado:
+     python scripts/safe_mobile_apk_build.py --dry-run
+     python scripts/safe_mobile_apk_build.py
+   - El script valida configuracion, cuenta Expo, perfil EAS y API URL antes de construir.
+
+4) EAS Update seguro
+   - Metodo recomendado cuando se necesita publicar actualizacion OTA para QA.
+   - Flujo seguro recomendado:
+     python scripts/safe_eas_update.py --dry-run
+     python scripts/safe_eas_update.py
+   - El script valida owner, projectId, runtimeVersion, autenticacion, branch/channel y API URL antes de publicar.
 
 VERIFICACIONES PREVIAS
 1) Entrar a la carpeta mobile:
@@ -125,6 +139,22 @@ CHECKLIST FINAL EXPO / EAS
 - [ ] El channel `phase-1` existe
 - [ ] `eas update:list` muestra android e ios
 - [ ] QA ya puede probar la app actualizada
+
+CHECKLIST SAFE APK
+- [ ] Se ejecuto `python scripts/safe_mobile_apk_build.py --dry-run`
+- [ ] El owner Expo coincide con `mojarras`
+- [ ] El perfil `preview` genera `apk`
+- [ ] `EXPO_PUBLIC_API_URL` apunta a `https://66.94.101.47.sslip.io/api`
+- [ ] `npx eas whoami` responde la cuenta esperada
+- [ ] El build EAS finalizo y se obtuvo URL del APK
+
+CHECKLIST SAFE EAS UPDATE
+- [ ] Se ejecuto `python scripts/safe_eas_update.py --dry-run`
+- [ ] Owner y `projectId` siguen correctos
+- [ ] `runtimeVersion` sigue presente en `app.json`
+- [ ] Branch `phase-1` y channel `phase-1` siguen vigentes para QA
+- [ ] `EXPO_PUBLIC_API_URL` apunta al backend HTTPS correcto
+- [ ] El update se publico correctamente y `eas update:list` lo muestra
 
 NOTA DE RECUPERACION DE CONTEXTO
 - Si un agente se queda sin contexto, este documento alcanza para retomar la actualizacion de Expo/EAS.

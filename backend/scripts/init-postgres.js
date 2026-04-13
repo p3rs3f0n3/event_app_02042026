@@ -5,6 +5,23 @@ const { config } = require('../config/env');
 
 const schemaPath = path.join(__dirname, '..', 'db', '01_schema.sql');
 const seedPath = path.join(__dirname, '..', 'db', '02_seed.sql');
+const requiredConfirmation = 'I_UNDERSTAND_DB_INIT_APPLIES_SCHEMA_AND_SEED';
+
+const ensureExplicitConfirmation = () => {
+  const allowDbInit = process.env.ALLOW_DB_INIT;
+  const confirmation = process.env.DB_INIT_CONFIRM;
+
+  if (allowDbInit === 'true' && confirmation === requiredConfirmation) {
+    return;
+  }
+
+  console.error('🛑 Refusing to run db:init without explicit confirmation.');
+  console.error('This script applies schema AND seed and is unsafe for environments with real data.');
+  console.error('To run it intentionally, set both environment variables:');
+  console.error('  ALLOW_DB_INIT=true');
+  console.error(`  DB_INIT_CONFIRM=${requiredConfirmation}`);
+  process.exit(1);
+};
 
 const createAdminClient = () => new Client({
   host: config.postgres.host,
@@ -27,6 +44,8 @@ const createAppClient = () => new Client({
 const quoteIdentifier = (value) => `"${String(value).replace(/"/g, '""')}"`;
 
 const run = async () => {
+  ensureExplicitConfirmation();
+
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
   const seedSql = fs.readFileSync(seedPath, 'utf8');
 

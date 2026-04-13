@@ -1,4 +1,5 @@
 import sys
+import os
 import paramiko
 
 HOST = '66.94.101.47'
@@ -36,6 +37,25 @@ VALIDATION_COMMANDS = [
     'cat /tmp/terms_accept.out',
 ]
 
+REQUIRED_FLAG = '--i-understand-this-drops-event-app-db'
+REQUIRED_ENV = 'ALLOW_DESTRUCTIVE_VPS_RESTORE'
+REQUIRED_ENV_VALUE = 'DROP_EVENT_APP_DB'
+
+
+def ensure_explicit_confirmation():
+    has_flag = REQUIRED_FLAG in sys.argv[1:]
+    env_value = os.environ.get(REQUIRED_ENV)
+
+    if has_flag and env_value == REQUIRED_ENV_VALUE:
+        return
+
+    print('[BLOCKED] Refusing to run restore_vps_from_backup_and_migrate_terms.py without explicit confirmation.')
+    print('This script stops the backend, backs up the current DB, DROPS `event_app`, recreates it, and restores a backup.')
+    print('To run it intentionally, use BOTH:')
+    print(f'  env {REQUIRED_ENV}={REQUIRED_ENV_VALUE}')
+    print(f'  flag {REQUIRED_FLAG}')
+    sys.exit(1)
+
 
 def run_commands(client, commands, label):
     print(f'=== {label} ===')
@@ -53,6 +73,8 @@ def run_commands(client, commands, label):
 
 
 def main():
+    ensure_explicit_confirmation()
+
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(HOST, username=USER, password=PASSWORD, timeout=20)

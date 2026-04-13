@@ -31,6 +31,26 @@ REMOTE_COMMANDS = [
     'cat /tmp/terms_accept.out',
 ]
 
+REQUIRED_FLAG = '--i-understand-this-runs-db-init'
+REQUIRED_ENV = 'ALLOW_DESTRUCTIVE_VPS_DB_INIT'
+REQUIRED_ENV_VALUE = 'YES'
+
+
+def ensure_explicit_confirmation():
+    has_flag = REQUIRED_FLAG in sys.argv[1:]
+    env_value = os.environ.get(REQUIRED_ENV)
+
+    if has_flag and env_value == REQUIRED_ENV_VALUE:
+        return
+
+    print('[BLOCKED] Refusing to run deploy_vps_terms_fix.py without explicit confirmation.')
+    print('This script rebuilds the backend AND runs `docker exec eventapp-backend npm run db:init`.')
+    print('That command applies schema and seed and can overwrite real data.')
+    print('To run it intentionally, use BOTH:')
+    print(f'  env {REQUIRED_ENV}={REQUIRED_ENV_VALUE}')
+    print(f'  flag {REQUIRED_FLAG}')
+    sys.exit(1)
+
 
 def upload_files():
     transport = paramiko.Transport((HOST, 22))
@@ -68,5 +88,6 @@ def run_remote_commands():
 
 
 if __name__ == '__main__':
+    ensure_explicit_confirmation()
     upload_files()
     run_remote_commands()
