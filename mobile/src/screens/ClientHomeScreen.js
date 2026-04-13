@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { getClientEvents } from '../api/api';
 import { APP_DISPLAY_NAME } from '../config/appMetadata';
@@ -9,6 +9,7 @@ import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '..
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, SPACING } from '../theme/tokens';
+import { shareClientReportPdf } from '../utils/clientReportPdf';
 
 const formatDate = (value) => new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -17,6 +18,8 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const displayUsername = getUserDisplayName(user);
   const palette = getAppPalette(roleConfig?.theme || 'blue');
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -34,10 +37,21 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   };
 
   useEffect(() => {
-    if (currentView === 'events') {
+    if (user?.id && (currentView === 'menu' || currentView === 'events')) {
       fetchEvents();
     }
   }, [currentView, user?.id]);
+
+  const handleDownloadPdf = async (event, report, points) => {
+    setDownloadingPdf(true);
+    try {
+      await shareClientReportPdf({ event, report, points });
+    } catch (error) {
+      Alert.alert('Error', error?.message || 'No se pudo generar el PDF del informe.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   const publishedEvents = useMemo(() => events.filter((event) => normalizeExecutiveReport(event.executiveReport)), [events]);
 
@@ -163,19 +177,32 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
                   <Text style={styles.reportSectionTitle}>Fotos seleccionadas por el ejecutivo</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
                     {report.selectedPhotos.map((photo) => (
-                      <View key={photo.id} style={styles.photoCard}>
+                      <TouchableOpacity key={photo.id} style={styles.photoCard} activeOpacity={0.9} onPress={() => setSelectedPhoto(photo)}>
                         <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
                         <Text style={styles.photoCaption}>{photo.author?.fullName || 'Coordinación'}</Text>
-                      </View>
+                        <Text style={styles.photoHint}>Tocá la foto para verla grande</Text>
+                      </TouchableOpacity>
                     ))}
                   </ScrollView>
                 </>
               ) : null}
+
+              <AppButton title={downloadingPdf ? 'GENERANDO PDF...' : 'DESCARGAR INFORME PDF'} variant="secondary" disabled={downloadingPdf} onPress={() => handleDownloadPdf(event, report, points)} />
             </View>
           )}
         </SurfaceCard>
 
         <AppButton title="VOLVER A MIS EVENTOS" variant="secondary" onPress={() => setCurrentView('events')} />
+
+        <Modal visible={Boolean(selectedPhoto)} transparent animationType="fade" onRequestClose={() => setSelectedPhoto(null)}>
+          <Pressable style={styles.photoModalBackdrop} onPress={() => setSelectedPhoto(null)}>
+            <View style={styles.photoModalCard}>
+              {selectedPhoto ? <Image source={{ uri: selectedPhoto.uri }} style={styles.photoModalImage} /> : null}
+              <Text style={styles.photoModalCaption}>{selectedPhoto?.author?.fullName || 'Coordinación'}</Text>
+              <AppButton title="CERRAR" variant="secondary" onPress={() => setSelectedPhoto(null)} />
+            </View>
+          </Pressable>
+        </Modal>
       </ScreenShell>
     );
   };
@@ -213,6 +240,11 @@ const createStyles = (palette) => StyleSheet.create({
   photoCard: { width: 180, backgroundColor: palette.surfaceMuted, borderRadius: 14, padding: 10 },
   photoPreview: { width: '100%', height: 120, borderRadius: 10, marginBottom: 8 },
   photoCaption: { color: '#475569', fontSize: 12 },
+  photoHint: { color: palette.primary, fontSize: 11, marginTop: 6, fontWeight: '700' },
+  photoModalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.88)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  photoModalCard: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, gap: 12 },
+  photoModalImage: { width: '100%', height: 420, borderRadius: 16, resizeMode: 'contain', backgroundColor: '#0F172A' },
+  photoModalCaption: { color: '#475569', textAlign: 'center' },
 });
 
 export default ClientHomeScreen;

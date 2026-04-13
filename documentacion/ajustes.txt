@@ -103,3 +103,9 @@ https://expo.dev/accounts/mojarras/projects/eventapp/builds/6fdb0aaf-62b3-40ab-a
 PS D:\Desarrollos\claude_code\event_app\mobile> npx expo start --clear 
 PS D:\Desarrollos\claude_code\event_app\backend> npm run dev
 
+CLIENTE
+1. cuando inicia sesión el cliente, no está cargando los eventos que ya existen.
+2. las fotos deben poder visualizarse grandes cuando se le de click
+3. Cliente pueda descargar el informe en pdf, tanto la info como las fotos.
+
+Logo app

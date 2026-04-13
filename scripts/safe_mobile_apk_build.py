@@ -24,7 +24,14 @@ def step(message):
     print(f'\n=== {message} ===')
 
 
+def normalize_command(command):
+    if os.name == 'nt' and command and command[0] == 'npx':
+        return ['npx.cmd', *command[1:]]
+    return command
+
+
 def run(command, cwd, env=None, dry_run=False):
+    command = normalize_command(command)
     printable = ' '.join(command)
     if dry_run:
         info(f'[dry-run] {printable}')
