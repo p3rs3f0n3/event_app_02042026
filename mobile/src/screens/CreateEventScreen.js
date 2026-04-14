@@ -841,7 +841,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         {/* Modal Detalles Staff */}
         <Modal visible={!!pointInDetail} transparent animationType="slide">
           <View style={styles.overlayCenter}>
-            <View style={styles.detailPopup}>
+            <ScrollView style={styles.detailPopup} contentContainerStyle={styles.detailPopupContent} showsVerticalScrollIndicator={false}>
               {pointInDetail ? (
                 <>
                   <Text style={styles.detailName}>{pointInDetail.point?.establishment || 'Punto sin nombre'}</Text>
@@ -859,7 +859,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setPointInDetail(null)}><Text style={styles.closeDetailText}>CERRAR</Text></TouchableOpacity>
                 </>
               ) : null}
-            </View>
+            </ScrollView>
           </View>
         </Modal>
         <Modal visible={!!staffInDetail} transparent animationType="slide">
