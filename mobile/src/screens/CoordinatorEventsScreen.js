@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getCoordinatorEvents } from '../api/api';
 import { useResponsiveMetrics } from '../utils/responsive';
-import { getAppPalette, RADII, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 
 const formatDate = (date) => new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -10,8 +10,9 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette(roleConfig?.theme || 'brown');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -72,22 +73,22 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.pageBg },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { paddingBottom: 48, gap: 18 },
+  scrollContent: { paddingBottom: metrics.spacing(48), gap: tokens.spacing.lg },
   title: { color: palette.onHero, fontWeight: 'bold', textAlign: 'center' },
-  subtitle: { color: palette.onHeroMuted, textAlign: 'center' },
-  listContainer: { gap: 16 },
-  emptyCard: { backgroundColor: palette.panel, borderRadius: 18, padding: 20, alignItems: 'center', gap: 8 },
-  emptyTitle: { color: palette.onHero, fontWeight: 'bold', fontSize: 18 },
-  emptyText: { color: palette.onHeroMuted, textAlign: 'center' },
-  eventCard: { backgroundColor: palette.surface, borderRadius: 18, overflow: 'hidden' },
-  eventImage: { width: '100%', height: 150, resizeMode: 'cover' },
-  eventBody: { padding: 14, backgroundColor: palette.surfaceMuted, gap: 4 },
-  eventTitle: { color: palette.text, fontSize: 18, fontWeight: 'bold' },
-  eventText: { color: palette.textMuted, fontSize: 13 },
-  backButton: { backgroundColor: palette.secondaryButton, borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
+  subtitle: { color: palette.onHeroMuted, textAlign: 'center', fontSize: tokens.typography.body, lineHeight: metrics.font(20, 0.85) },
+  listContainer: { gap: tokens.spacing.md },
+  emptyCard: { backgroundColor: palette.panel, borderRadius: tokens.radii.md, padding: tokens.spacing.lg, alignItems: 'center', gap: tokens.spacing.xs },
+  emptyTitle: { color: palette.onHero, fontWeight: 'bold', fontSize: metrics.font(18, 0.9) },
+  emptyText: { color: palette.onHeroMuted, textAlign: 'center', fontSize: tokens.typography.body },
+  eventCard: { backgroundColor: palette.surface, borderRadius: tokens.radii.md, overflow: 'hidden' },
+  eventImage: { width: '100%', height: metrics.size(150), resizeMode: 'cover' },
+  eventBody: { padding: tokens.spacing.md, backgroundColor: palette.surfaceMuted, gap: metrics.spacing(4, 0.75) },
+  eventTitle: { color: palette.text, fontSize: metrics.font(18, 0.9), fontWeight: 'bold' },
+  eventText: { color: palette.textMuted, fontSize: tokens.typography.label },
+  backButton: { backgroundColor: palette.secondaryButton, borderRadius: tokens.radii.pill, paddingVertical: tokens.spacing.md, alignItems: 'center' },
   backButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
 });
 

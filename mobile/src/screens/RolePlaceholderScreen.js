@@ -1,9 +1,14 @@
 import React from 'react';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '../theme/colors';
+import { getResponsiveTokens } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const RolePlaceholderScreen = ({ roleConfig, onLogout }) => {
   const theme = COLORS[roleConfig?.theme] || COLORS.green;
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
+  const styles = createStyles(metrics, tokens);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.primary }]}>
@@ -19,14 +24,14 @@ const RolePlaceholderScreen = ({ roleConfig, onLogout }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (metrics, tokens) => StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  title: { color: '#FFF', fontSize: 34, fontWeight: 'bold', textAlign: 'center' },
-  roleTitle: { color: '#FFB300', fontSize: 24, fontWeight: 'bold', marginTop: 16, textAlign: 'center' },
-  helper: { color: '#FFF', fontSize: 15, textAlign: 'center', marginTop: 16, maxWidth: 320, lineHeight: 22 },
-  button: { marginTop: 28, backgroundColor: '#D1D5DB', paddingVertical: 14, paddingHorizontal: 36, borderRadius: 30 },
-  buttonText: { color: '#333', fontWeight: 'bold' },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: tokens.layout.screenPadding },
+  title: { color: '#FFF', fontSize: metrics.font(34, 0.95), fontWeight: 'bold', textAlign: 'center' },
+  roleTitle: { color: '#FFB300', fontSize: metrics.font(24, 0.95), fontWeight: 'bold', marginTop: tokens.spacing.md, textAlign: 'center' },
+  helper: { color: '#FFF', fontSize: tokens.typography.body, textAlign: 'center', marginTop: tokens.spacing.md, maxWidth: metrics.contentMaxWidth, lineHeight: metrics.font(22, 0.86) },
+  button: { marginTop: metrics.spacing(28), backgroundColor: '#D1D5DB', paddingVertical: tokens.spacing.md, paddingHorizontal: metrics.spacing(36), borderRadius: tokens.radii.pill },
+  buttonText: { color: '#333', fontWeight: 'bold', fontSize: tokens.typography.body },
 });
 
 export default RolePlaceholderScreen;

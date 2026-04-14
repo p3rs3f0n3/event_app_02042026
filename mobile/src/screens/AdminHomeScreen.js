@@ -30,7 +30,8 @@ import {
 } from '../api/api';
 import UserProfileCard from '../components/UserProfileCard';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
-import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens, SHADOWS } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 import { getUserDisplayName } from '../utils/user';
 
 const LOOKUP_INITIAL_STATE = {
@@ -116,16 +117,21 @@ const InputRow = ({
   onPress,
   keyboardType = 'default',
   maxLength,
-}) => (
-  <View style={stylesShared.fieldWrap}>
-    <Text style={stylesShared.fieldLabel}>{label}</Text>
+}) => {
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
+  const sharedStyles = useMemo(() => createSharedStyles(metrics, tokens), [metrics, tokens]);
+
+  return (
+    <View style={sharedStyles.fieldWrap}>
+      <Text style={sharedStyles.fieldLabel}>{label}</Text>
     {onPress ? (
-      <Pressable style={stylesShared.inputShell} onPress={onPress}>
-        <Text style={[stylesShared.inputText, !value && stylesShared.placeholderText]}>{value || placeholder || 'Seleccionar'}</Text>
+      <Pressable style={sharedStyles.inputShell} onPress={onPress}>
+        <Text style={[sharedStyles.inputText, !value && sharedStyles.placeholderText]}>{value || placeholder || 'Seleccionar'}</Text>
       </Pressable>
     ) : (
       <TextInput
-        style={[stylesShared.inputShell, stylesShared.textInput, multiline && stylesShared.textArea]}
+        style={[sharedStyles.inputShell, sharedStyles.textInput, multiline && sharedStyles.textArea]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -136,8 +142,9 @@ const InputRow = ({
         maxLength={maxLength}
       />
     )}
-  </View>
-);
+    </View>
+  );
+};
 
 const normalizeNitSearchValue = (value) => String(value || '').trim();
 const normalizeDocumentSearchValue = (value) => String(value || '').trim();
@@ -351,8 +358,11 @@ const getAdminAuditSummary = ({ entityType, values, fallbackTitle }) => {
 };
 
 const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette(roleConfig?.theme || 'blue');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
+  const sharedStyles = useMemo(() => createSharedStyles(metrics, tokens), [metrics, tokens]);
   const [activeTab, setActiveTab] = useState('clients');
   const [cities, setCities] = useState([]);
   const [staffCategories, setStaffCategories] = useState([]);
@@ -1751,8 +1761,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
         <InputRow label="Ciudad" value={staffForm.city} onPress={() => openCityPicker('staff')} placeholder="Seleccionar ciudad" />
         <InputRow label="Categoría" value={staffForm.category} onPress={openCategoryPicker} placeholder="Buscar o crear categoría" />
         <Text style={styles.categoryHelperText}>Usamos un catálogo administrable: buscas la categoría y, si no existe, la creas desde el mismo flujo.</Text>
-        <View style={stylesShared.fieldWrap}>
-          <Text style={stylesShared.fieldLabel}>Sexo</Text>
+        <View style={sharedStyles.fieldWrap}>
+          <Text style={sharedStyles.fieldLabel}>Sexo</Text>
           <View style={styles.segmentedRow}>
             {STAFF_SEXO_OPTIONS.map((option) => {
               const isSelected = staffForm.sexo === option.value;
@@ -1919,7 +1929,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <SurfaceCard style={styles.modalCard}>
             <Text style={styles.cardTitle}>Buscar categoría de staff</Text>
             <TextInput
-              style={[stylesShared.inputShell, stylesShared.textInput]}
+              style={[sharedStyles.inputShell, sharedStyles.textInput]}
               value={categorySearch}
               onChangeText={setCategorySearch}
               placeholder="Ej: PROTOCOLO, MERCADERISTAS..."
@@ -1945,43 +1955,44 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   );
 };
 
-const stylesShared = StyleSheet.create({
-  fieldWrap: { gap: SPACING.xs },
-  fieldLabel: { color: '#223548', fontSize: 13, fontWeight: '800' },
+const createSharedStyles = (metrics, tokens) => StyleSheet.create({
+  fieldWrap: { gap: tokens.spacing.xs },
+  fieldLabel: { color: '#223548', fontSize: metrics.font(13, 0.85), fontWeight: '800' },
   inputShell: {
-    minHeight: 50,
-    borderRadius: RADII.md,
+    minHeight: tokens.sizes.inputMinHeight,
+    borderRadius: tokens.radii.md,
     borderWidth: 1,
     borderColor: '#D7E0EA',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
+    paddingHorizontal: tokens.spacing.md,
     justifyContent: 'center',
   },
-  textInput: { color: '#223548', paddingVertical: 14 },
-  inputText: { color: '#223548' },
+  textInput: { color: '#223548', paddingVertical: tokens.spacing.sm, fontSize: tokens.typography.bodyLg },
+  inputText: { color: '#223548', fontSize: tokens.typography.bodyLg },
   placeholderText: { color: '#94A3B8' },
-  textArea: { minHeight: 84, textAlignVertical: 'top' },
+  textArea: { minHeight: metrics.size(84, 0.95), textAlignVertical: 'top' },
 });
 
-const createStyles = (palette) => StyleSheet.create({
-  content: { gap: SPACING.lg },
-  loaderWrap: { justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
-  loaderText: { color: '#FFFFFF', fontWeight: '700' },
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
+  content: { gap: tokens.spacing.md },
+  loaderWrap: { justifyContent: 'center', alignItems: 'center', gap: tokens.spacing.md },
+  loaderText: { color: '#FFFFFF', fontWeight: '700', textAlign: 'center' },
   heroCard: { backgroundColor: palette.surfaceMuted },
-  heroText: { color: palette.textMuted, lineHeight: 20 },
+  heroText: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
   feedbackCard: { borderWidth: 1 },
   feedbackSuccess: { borderColor: palette.successText, backgroundColor: palette.successBg },
   feedbackWarning: { borderColor: '#D97706', backgroundColor: '#FFFBEB' },
   feedbackError: { borderColor: palette.errorText, backgroundColor: palette.errorBg },
-  feedbackText: { color: '#223548', fontWeight: '700' },
-  tabRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'stretch' },
+  feedbackText: { color: '#223548', fontWeight: '700', fontSize: tokens.typography.body, lineHeight: metrics.font(20, 0.85) },
+  tabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm, alignItems: 'stretch' },
   tabButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: RADII.md,
+    flexGrow: 1,
+    flexBasis: metrics.compactWidth ? '47%' : 0,
+    minHeight: tokens.sizes.buttonMinHeight,
+    borderRadius: tokens.radii.md,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingHorizontal: tokens.spacing.sm,
+    paddingVertical: tokens.spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1989,76 +2000,77 @@ const createStyles = (palette) => StyleSheet.create({
   tabButtonText: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 12,
+    fontSize: tokens.typography.caption,
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: metrics.font(14, 0.8),
     includeFontPadding: false,
   },
   tabButtonTextActive: { color: palette.text },
-  tabContent: { gap: SPACING.lg },
-  formCard: { gap: SPACING.md },
-  helperText: { color: palette.textMuted, lineHeight: 20 },
-  cardTitle: { fontSize: 22, fontWeight: '800', color: palette.text },
-  lookupRow: { gap: SPACING.sm },
+  tabContent: { gap: tokens.spacing.md },
+  formCard: { gap: tokens.spacing.md },
+  helperText: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
+  cardTitle: { fontSize: metrics.font(22, 0.92), fontWeight: '800', color: palette.text },
+  lookupRow: { gap: tokens.spacing.sm },
   lookupInputWrap: { flex: 1 },
-  lookupButtonWrap: { minWidth: 180 },
+  lookupButtonWrap: { minWidth: metrics.compactWidth ? undefined : metrics.size(180, 0.95), width: metrics.compactWidth ? '100%' : undefined },
   lookupCard: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     borderWidth: 1,
-    padding: SPACING.md,
-    gap: SPACING.xs,
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.xs,
     backgroundColor: palette.surfaceMuted,
     borderColor: palette.border,
   },
   lookupCardExists: { borderColor: '#F59E0B', backgroundColor: '#FFF7ED' },
   lookupCardAvailable: { borderColor: palette.successText, backgroundColor: palette.successBg },
   lookupCardError: { borderColor: palette.errorText, backgroundColor: palette.errorBg },
-  lookupTitle: { color: palette.text, fontWeight: '800', fontSize: 16 },
-  lookupMessage: { color: palette.textMuted, lineHeight: 20 },
-  lookupResultBlock: { marginTop: SPACING.xs, gap: 4 },
+  lookupTitle: { color: palette.text, fontWeight: '800', fontSize: metrics.font(16, 0.88) },
+  lookupMessage: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
+  lookupResultBlock: { marginTop: tokens.spacing.xs, gap: metrics.spacing(4, 0.8) },
   listCard: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     backgroundColor: palette.surfaceMuted,
-    padding: SPACING.md,
+    padding: tokens.spacing.md,
     gap: 4,
   },
-  listTitle: { color: palette.text, fontSize: 16, fontWeight: '800' },
-  listMeta: { color: palette.textMuted },
-  searchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.sm },
-  categoryHelperText: { color: palette.textMuted, marginTop: -SPACING.xs, lineHeight: 18 },
-  segmentedRow: { flexDirection: 'row', gap: SPACING.sm },
+  listTitle: { color: palette.text, fontSize: metrics.font(16, 0.88), fontWeight: '800' },
+  listMeta: { color: palette.textMuted, fontSize: tokens.typography.body, lineHeight: metrics.font(19, 0.85) },
+  searchHeader: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: tokens.spacing.sm },
+  categoryHelperText: { color: palette.textMuted, marginTop: -tokens.spacing.xs, lineHeight: metrics.font(18, 0.85), fontSize: tokens.typography.caption },
+  segmentedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
   segmentedButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: RADII.md,
+    flexGrow: 1,
+    flexBasis: metrics.compactWidth ? '47%' : 0,
+    minHeight: metrics.size(48, 0.95),
+    borderRadius: tokens.radii.md,
     borderWidth: 1,
     borderColor: palette.border,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: tokens.spacing.md,
   },
   segmentedButtonActive: {
     borderColor: palette.primaryButton,
     backgroundColor: palette.surfaceMuted,
   },
-  segmentedButtonText: { color: palette.textMuted, fontWeight: '700' },
+  segmentedButtonText: { color: palette.textMuted, fontWeight: '700', fontSize: tokens.typography.body },
   segmentedButtonTextActive: { color: palette.text, fontWeight: '800' },
   photoCard: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     borderWidth: 1,
     borderColor: palette.border,
     backgroundColor: palette.surfaceMuted,
-    padding: SPACING.md,
-    gap: SPACING.sm,
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.sm,
   },
-  photoCardTitle: { color: palette.text, fontWeight: '800', fontSize: 15 },
+  photoCardTitle: { color: palette.text, fontWeight: '800', fontSize: metrics.font(15, 0.86) },
   photoPreviewShell: { alignSelf: 'center' },
-  photoPreviewImage: { width: 180, height: 180, borderRadius: RADII.md, backgroundColor: '#E2E8F0' },
+  photoPreviewImage: { width: metrics.size(180, 0.95), height: metrics.size(180, 0.95), borderRadius: tokens.radii.md, backgroundColor: '#E2E8F0' },
   photoPlaceholder: {
-    width: 180,
-    height: 180,
-    borderRadius: RADII.md,
+    width: metrics.size(180, 0.95),
+    height: metrics.size(180, 0.95),
+    borderRadius: tokens.radii.md,
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: palette.border,
@@ -2066,61 +2078,61 @@ const createStyles = (palette) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  photoPlaceholderText: { color: palette.textMuted, fontWeight: '800' },
-  photoHelperText: { color: palette.textMuted, lineHeight: 19 },
-  photoActionsRow: { flexDirection: 'row', gap: SPACING.sm },
+  photoPlaceholderText: { color: palette.textMuted, fontWeight: '800', textAlign: 'center' },
+  photoHelperText: { color: palette.textMuted, lineHeight: metrics.font(19, 0.85), fontSize: tokens.typography.body },
+  photoActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
   photoActionButton: { flex: 1 },
   categoryOption: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     borderWidth: 1,
     borderColor: palette.border,
     backgroundColor: palette.surfaceMuted,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
     gap: 4,
   },
   categoryOptionActive: { backgroundColor: '#FFF7ED', borderColor: '#FFB300' },
-  categoryOptionText: { color: palette.text, fontWeight: '800' },
+  categoryOptionText: { color: palette.text, fontWeight: '800', fontSize: tokens.typography.body },
   categoryOptionTextActive: { color: '#1F2937' },
-  categoryOptionCode: { color: palette.textMuted, fontSize: 12 },
-  formActionsRow: { flexDirection: 'row', gap: SPACING.sm },
+  categoryOptionCode: { color: palette.textMuted, fontSize: tokens.typography.caption },
+  formActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
   formActionButton: { flex: 1 },
-  inactivateButton: { marginTop: SPACING.xs },
+  inactivateButton: { marginTop: tokens.spacing.xs },
   inlineNotice: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     backgroundColor: palette.surfaceMuted,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
   },
-  inlineNoticeText: { color: palette.textMuted, lineHeight: 20 },
-  auditSection: { marginTop: SPACING.md, gap: SPACING.sm },
-  auditTitle: { color: palette.text, fontSize: 16, fontWeight: '800' },
+  inlineNoticeText: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
+  auditSection: { marginTop: tokens.spacing.md, gap: tokens.spacing.sm },
+  auditTitle: { color: palette.text, fontSize: metrics.font(16, 0.88), fontWeight: '800' },
   auditItem: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: palette.border,
-    padding: SPACING.md,
+    padding: tokens.spacing.md,
     gap: 4,
   },
   auditItemTitle: { color: palette.text, fontWeight: '800' },
-  auditItemMeta: { color: palette.textMuted, fontSize: 12 },
-  auditItemDetail: { color: palette.textMuted, lineHeight: 18 },
+  auditItemMeta: { color: palette.textMuted, fontSize: tokens.typography.caption },
+  auditItemDetail: { color: palette.textMuted, lineHeight: metrics.font(18, 0.85), fontSize: tokens.typography.body },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
-    padding: SPACING.lg,
+    padding: tokens.layout.screenPadding,
   },
-  modalCard: { maxHeight: '80%', gap: SPACING.md, ...SHADOWS.floating },
-  cityList: { gap: SPACING.sm },
+  modalCard: { width: '100%', maxWidth: tokens.layout.modalMaxWidth, maxHeight: '80%', alignSelf: 'center', gap: tokens.spacing.md, ...SHADOWS.floating },
+  cityList: { gap: tokens.spacing.sm },
   cityOption: {
-    borderRadius: RADII.md,
+    borderRadius: tokens.radii.md,
     backgroundColor: palette.surfaceMuted,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
   },
-  cityOptionText: { color: palette.text, fontWeight: '700' },
+  cityOptionText: { color: palette.text, fontWeight: '700', fontSize: tokens.typography.body },
 });
 
 export default AdminHomeScreen;

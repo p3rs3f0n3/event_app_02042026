@@ -7,14 +7,17 @@ import { APP_DISPLAY_NAME } from '../config/appMetadata';
 import UserProfileCard from '../components/UserProfileCard';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
-import { getAppPalette, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [refreshToken, setRefreshToken] = useState(0);
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette(roleConfig?.theme || 'brown');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
 
   if (currentView === 'events') {
     return (
@@ -84,12 +87,12 @@ const CoordinatorHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   content: { justifyContent: 'space-between' },
   summaryCard: { backgroundColor: palette.surfaceMuted },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  cardTitle: { fontSize: 22, fontWeight: '800', color: palette.text },
-  cardText: { color: palette.textMuted, lineHeight: 20 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
+  cardTitle: { fontSize: metrics.font(22, 0.92), fontWeight: '800', color: palette.text },
+  cardText: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
 });
 
 export default CoordinatorHomeScreen;

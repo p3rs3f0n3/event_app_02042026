@@ -8,8 +8,9 @@ import { normalizeExecutiveReport } from '../utils/executiveReport';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
-import { getAppPalette, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 import { shareClientReportPdf } from '../utils/clientReportPdf';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const formatDate = (value) => new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -21,8 +22,10 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const displayUsername = getUserDisplayName(user);
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette(roleConfig?.theme || 'blue');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -212,39 +215,39 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   return renderMenu();
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   content: { justifyContent: 'space-between' },
-  metricsRow: { flexDirection: 'row', gap: SPACING.sm },
+  metricsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
   metricCard: { flex: 1, alignItems: 'center', backgroundColor: palette.surfaceMuted },
-  metricNumber: { fontSize: 30, fontWeight: '800', color: palette.text },
-  metricLabel: { color: palette.textMuted, textAlign: 'center' },
+  metricNumber: { fontSize: metrics.font(30, 0.95), fontWeight: '800', color: palette.text },
+  metricLabel: { color: palette.textMuted, textAlign: 'center', fontSize: tokens.typography.body },
   heroCard: { backgroundColor: palette.surfaceMuted },
-  cardTitle: { fontSize: 20, fontWeight: '800', color: palette.text },
-  cardText: { color: palette.textMuted, lineHeight: 20 },
-  loading: { marginTop: 24 },
-  emptyText: { color: '#FFFFFF', textAlign: 'center', marginTop: 28 },
-  listGap: { gap: SPACING.md },
-  eventCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, gap: 8 },
-  eventTitle: { fontSize: 18, fontWeight: '800', color: palette.text },
-  eventMeta: { color: palette.textMuted },
-  detailRow: { color: '#374151', marginBottom: 6 },
-  contactRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  contactButton: { flex: 1 },
-  pendingText: { color: palette.textMuted, lineHeight: 20 },
-  reportGap: { gap: 8 },
-  reportTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  reportMeta: { color: '#6B7280', marginBottom: 4 },
-  reportSectionTitle: { color: palette.text, fontWeight: '800', marginTop: 4 },
-  reportBody: { color: '#374151', lineHeight: 20 },
-  photoRow: { gap: 12, marginTop: 4 },
-  photoCard: { width: 180, backgroundColor: palette.surfaceMuted, borderRadius: 14, padding: 10 },
-  photoPreview: { width: '100%', height: 120, borderRadius: 10, marginBottom: 8 },
-  photoCaption: { color: '#475569', fontSize: 12 },
-  photoHint: { color: palette.primary, fontSize: 11, marginTop: 6, fontWeight: '700' },
-  photoModalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.88)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  photoModalCard: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, gap: 12 },
-  photoModalImage: { width: '100%', height: 420, borderRadius: 16, resizeMode: 'contain', backgroundColor: '#0F172A' },
-  photoModalCaption: { color: '#475569', textAlign: 'center' },
+  cardTitle: { fontSize: metrics.cardTitleSize, fontWeight: '800', color: palette.text },
+  cardText: { color: palette.textMuted, fontSize: tokens.typography.body, lineHeight: metrics.font(20, 0.85) },
+  loading: { marginTop: metrics.spacing(24) },
+  emptyText: { color: '#FFFFFF', textAlign: 'center', marginTop: metrics.spacing(28), fontSize: tokens.typography.body },
+  listGap: { gap: tokens.spacing.md },
+  eventCard: { backgroundColor: '#FFFFFF', borderRadius: tokens.radii.md, padding: tokens.spacing.md, gap: tokens.spacing.xs },
+  eventTitle: { fontSize: metrics.font(18, 0.9), fontWeight: '800', color: palette.text },
+  eventMeta: { color: palette.textMuted, fontSize: tokens.typography.body },
+  detailRow: { color: '#374151', marginBottom: metrics.spacing(6, 0.8), fontSize: tokens.typography.body },
+  contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm, marginTop: tokens.spacing.sm },
+  contactButton: { flexGrow: 1, flexBasis: metrics.compactWidth ? '100%' : 0 },
+  pendingText: { color: palette.textMuted, fontSize: tokens.typography.body, lineHeight: metrics.font(20, 0.85) },
+  reportGap: { gap: tokens.spacing.xs },
+  reportTitle: { fontSize: metrics.cardTitleSize, fontWeight: '800', color: '#111827' },
+  reportMeta: { color: '#6B7280', marginBottom: metrics.spacing(4, 0.75), fontSize: tokens.typography.caption },
+  reportSectionTitle: { color: palette.text, fontWeight: '800', marginTop: metrics.spacing(4, 0.75), fontSize: tokens.typography.body },
+  reportBody: { color: '#374151', fontSize: tokens.typography.body, lineHeight: metrics.font(20, 0.85) },
+  photoRow: { gap: tokens.spacing.sm, marginTop: metrics.spacing(4, 0.75) },
+  photoCard: { width: metrics.size(180), backgroundColor: palette.surfaceMuted, borderRadius: tokens.radii.sm, padding: tokens.spacing.sm },
+  photoPreview: { width: '100%', height: metrics.size(120), borderRadius: metrics.radius(10), marginBottom: tokens.spacing.xs },
+  photoCaption: { color: '#475569', fontSize: tokens.typography.caption },
+  photoHint: { color: palette.hero, fontSize: metrics.font(11, 0.75), marginTop: metrics.spacing(6, 0.8), fontWeight: '700' },
+  photoModalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.88)', alignItems: 'center', justifyContent: 'center', padding: tokens.spacing.lg },
+  photoModalCard: { width: '100%', maxWidth: metrics.modalMaxWidth, backgroundColor: '#FFFFFF', borderRadius: tokens.radii.lg, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  photoModalImage: { width: '100%', height: Math.max(metrics.size(240, 0.9), Math.min(metrics.size(420, 0.95), Math.round(metrics.height * 0.58))), borderRadius: metrics.radius(16), resizeMode: 'contain', backgroundColor: '#0F172A' },
+  photoModalCaption: { color: '#475569', textAlign: 'center', fontSize: tokens.typography.body },
 });
 
 export default ClientHomeScreen;

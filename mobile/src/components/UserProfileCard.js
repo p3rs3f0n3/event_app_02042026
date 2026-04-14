@@ -3,7 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import ChangePasswordCard from './ChangePasswordCard';
 import { SurfaceCard } from './ui';
-import { SPACING } from '../theme/tokens';
+import { getResponsiveTokens } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const UserProfileCard = ({
   user,
@@ -13,7 +14,9 @@ const UserProfileCard = ({
   buttonLabel = 'MI CONTRASEÑA',
   buttonVariant = 'primary',
 }) => {
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
 
   return (
     <SurfaceCard style={styles.profileCard}>
@@ -30,12 +33,12 @@ const UserProfileCard = ({
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   profileCard: { backgroundColor: '#FFFFFF' },
-  profileHeader: { gap: SPACING.md },
-  profileInfo: { gap: SPACING.xs },
-  profileTitle: { color: palette.text, fontSize: 18, fontWeight: '800' },
-  profileText: { color: palette.textMuted, lineHeight: 20 },
+  profileHeader: { gap: tokens.spacing.md },
+  profileInfo: { gap: tokens.spacing.xs },
+  profileTitle: { color: palette.text, fontSize: metrics.font(18, 0.9), fontWeight: '800' },
+  profileText: { color: palette.textMuted, fontSize: tokens.typography.body, lineHeight: metrics.font(20, 0.85) },
 });
 
 export default UserProfileCard;

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { CalendarDays, Sparkles } from 'lucide-react-native';
 
 import { APP_DISPLAY_NAME, APP_LEGAL_TAGLINE } from '../config/appMetadata';
 import { COLORS } from '../theme/colors';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const SIZE_MAP = {
   sm: {
@@ -30,37 +31,53 @@ const SIZE_MAP = {
 };
 
 const BrandMark = ({ appName = APP_DISPLAY_NAME, subtitle, legalLine = APP_LEGAL_TAGLINE, size = 'md', align = 'center' }) => {
-  const palette = SIZE_MAP[size] || SIZE_MAP.md;
+  const metrics = useResponsiveMetrics();
+  const styles = useMemo(() => createStyles(metrics), [metrics]);
+  const basePalette = SIZE_MAP[size] || SIZE_MAP.md;
+  const palette = {
+    badge: metrics.size(basePalette.badge, 0.95),
+    icon: metrics.size(basePalette.icon, 0.9),
+    title: metrics.font(basePalette.title, 0.95),
+    eyebrow: metrics.font(basePalette.eyebrow, 0.8),
+    subtitle: metrics.font(basePalette.subtitle, 0.85),
+  };
 
   return (
     <View style={[styles.container, align === 'left' ? styles.leftAligned : styles.centerAligned]}>
-      <View style={[styles.badge, { width: palette.badge, height: palette.badge, borderRadius: palette.badge / 2 }]}>
+      <View style={[styles.badge, { width: palette.badge, height: palette.badge, borderRadius: palette.badge / 2 }]}> 
         <View style={styles.badgeGlow} />
         <CalendarDays color={COLORS.brand.onPrimary} size={palette.icon} strokeWidth={2.3} />
-        <View style={styles.sparkleWrap}>
+        <View style={[styles.sparkleWrap, { width: Math.max(20, Math.round(palette.icon * 0.9)), height: Math.max(20, Math.round(palette.icon * 0.9)), borderRadius: Math.max(10, Math.round(palette.icon * 0.45)) }]}>
           <Sparkles color={COLORS.brand.spark} size={Math.max(14, palette.icon * 0.42)} strokeWidth={2.5} />
         </View>
       </View>
 
       <View style={[styles.textBlock, align === 'left' ? styles.leftAligned : styles.centerAligned]}>
-        <Text style={[styles.eyebrow, { fontSize: palette.eyebrow }]}>EVENT OPERATIONS SUITE</Text>
-        <Text style={[styles.title, { fontSize: palette.title }]}>{appName}</Text>
-        {legalLine ? <Text style={[styles.legalLine, { fontSize: Math.max(11, palette.subtitle - 1) }]}>{legalLine}</Text> : null}
-        {subtitle ? <Text style={[styles.subtitle, { fontSize: palette.subtitle }]}>{subtitle}</Text> : null}
+        <Text style={[styles.eyebrow, align === 'left' ? styles.leftText : styles.centerText, { fontSize: palette.eyebrow }]}>EVENT OPERATIONS SUITE</Text>
+        <Text style={[styles.title, align === 'left' ? styles.leftText : styles.centerText, { fontSize: palette.title }]}>{appName}</Text>
+        {legalLine ? <Text style={[styles.legalLine, align === 'left' ? styles.leftText : styles.centerText, { fontSize: Math.max(11, palette.subtitle - 1) }]}>{legalLine}</Text> : null}
+        {subtitle ? <Text style={[styles.subtitle, align === 'left' ? styles.leftText : styles.centerText, { fontSize: palette.subtitle }]}>{subtitle}</Text> : null}
       </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (metrics) => StyleSheet.create({
   container: {
-    gap: 18,
+    gap: metrics.spacing(18, 0.9),
+    width: '100%',
   },
   centerAligned: {
     alignItems: 'center',
   },
   leftAligned: {
     alignItems: 'flex-start',
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  leftText: {
+    textAlign: 'left',
   },
   badge: {
     justifyContent: 'center',
@@ -86,17 +103,16 @@ const styles = StyleSheet.create({
   },
   sparkleWrap: {
     position: 'absolute',
-    top: -2,
-    right: -1,
-    width: 24,
-    height: 24,
+    top: -metrics.spacing(2, 0.7),
+    right: -metrics.spacing(1, 0.7),
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
     backgroundColor: COLORS.brand.surface,
   },
   textBlock: {
-    gap: 6,
+    gap: metrics.spacing(6, 0.8),
+    width: '100%',
+    maxWidth: metrics.contentMaxWidth,
   },
   eyebrow: {
     color: COLORS.brand.muted,
@@ -114,8 +130,8 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: COLORS.brand.subtleText,
-    lineHeight: 20,
-    maxWidth: 320,
+    lineHeight: metrics.font(20, 0.82),
+    maxWidth: Math.min(metrics.contentMaxWidth, metrics.size(320, 0.9)),
   },
 });
 

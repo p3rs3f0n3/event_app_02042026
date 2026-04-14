@@ -3,7 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAr
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { createEvent, updateEvent, getClients, getCoordinators, getStaff, getStaffCategories, getColombiaCities, addColombiaCity } from '../api/api';
-import { getAppPalette, RADII, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const isOtherCityOption = (city) => Boolean(city?.isOther || String(city?.name || '').trim().toUpperCase() === 'OTRO');
 const normalizeCityName = (value) => String(value || '').trim().toLowerCase();
@@ -166,8 +167,10 @@ const InputField = ({ styles, label, value, onChangeText, placeholder, editable 
 );
 
 const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette('green');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
   const [step, setStep] = useState(1);
   const [showPicker, setShowPicker] = useState(null);
   const [apiLists, setApiLists] = useState({ coordinators: [], staff: [], cities: [], clients: [] });
@@ -900,10 +903,10 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
         </Modal>
 
         {/* Modal Ciudades */}
-        <Modal visible={showCitySearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Filtrar ciudad</Text><TextInput style={styles.searchInput} placeholder="Buscar..." value={searchQuery} onChangeText={setSearchQuery} /><ScrollView style={{maxHeight: 400}}>
+        <Modal visible={showCitySearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Filtrar ciudad</Text><TextInput style={styles.searchInput} placeholder="Buscar..." value={searchQuery} onChangeText={setSearchQuery} /><ScrollView style={styles.modalResults}>
           {apiLists.cities.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(i => (<TouchableOpacity key={i.id} style={styles.cityItem} onPress={() => { setEditingPointIndex(null); setCurrentPoint(createEmptyPoint()); handleClearCategorySelection(); if (isOtherCityOption(i)) { setIsNewCity(true); setCurrentCityName(''); setManualCityName(''); } else { setIsNewCity(false); setCurrentCityName(i.name); setManualCityName(''); } setShowCitySearch(false); setSearchQuery(''); }}><Text style={styles.cityItemText}>{i.name}</Text></TouchableOpacity>))}
         </ScrollView><TouchableOpacity style={styles.closeBtn} onPress={() => setShowCitySearch(false)}><Text style={styles.closeBtnText}>CERRAR</Text></TouchableOpacity></View></View></Modal>
-        <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar por NIT o nombre..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><Text style={styles.modalHelperText}>La búsqueda consulta la base de datos.</Text><ScrollView style={{maxHeight: 400}}>
+        <Modal visible={showClientSearch} transparent animationType="fade"><View style={styles.modalScrollOverlay}><View style={styles.modalPanel}><Text style={styles.modalTitle}>Seleccionar cliente</Text><TextInput style={styles.searchInput} placeholder="Buscar por NIT o nombre..." value={clientSearchQuery} onChangeText={setClientSearchQuery} /><Text style={styles.modalHelperText}>La búsqueda consulta la base de datos.</Text><ScrollView style={styles.modalResults}>
           {clientSearchLoading ? <ActivityIndicator style={styles.modalLoader} size="small" color={palette.primaryButton} /> : null}
           {clientSearchResults.map((client) => (<TouchableOpacity key={client.clientId || client.id} style={styles.cityItem} onPress={() => { setEventData((prev) => ({ ...prev, client: getClientLabel(client), clientId: client.clientId || null, clientUserId: client.userId || client.id })); setShowClientSearch(false); setClientSearchQuery(''); }}><Text style={styles.cityItemText}>{getClientLabel(client)}</Text><Text style={styles.clientItemMeta}>{client.nit ? `NIT ${client.nit} · ` : ''}{getClientDescription(client)}</Text></TouchableOpacity>))}
           {!clientSearchLoading && clientSearchResults.length === 0 ? <Text style={styles.emptyModalText}>No encontramos clientes con ese NIT o nombre.</Text> : null}
@@ -914,96 +917,97 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.pageBg },
   loading: { flex: 1, backgroundColor: palette.pageBg, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: SPACING.xl, paddingBottom: 60 },
-  title: { fontSize: 32, fontWeight: 'bold', color: palette.onHero, textAlign: 'center', marginBottom: 20 },
-  form: { gap: 8 },
-  imageCard: { backgroundColor: palette.panel, borderRadius: RADII.sm, padding: 14, marginBottom: 8 },
-  imageSelector: { alignSelf: 'center', marginBottom: 15 },
-  selectedImage: { width: 300, height: 160, borderRadius: RADII.sm, borderWidth: 2, borderColor: palette.onHero },
-  photoPlaceholder: { width: 300, height: 160, backgroundColor: palette.panelStrong, justifyContent: 'center', alignItems: 'center', borderRadius: RADII.sm, borderStyle: 'dashed', borderWidth: 2, borderColor: palette.onHero },
-  photoText: { fontSize: 11, fontWeight: 'bold', color: palette.onHero },
-  imageActionsCard: { backgroundColor: palette.panelStrong, borderRadius: RADII.sm, padding: 12, gap: 8 },
-  imageActionsInline: { gap: 8 },
-  imageActionsTitle: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
+  scrollContent: { padding: tokens.layout.screenPadding, paddingBottom: metrics.spacing(60) },
+  title: { fontSize: metrics.heroTitleSize, fontWeight: 'bold', color: palette.onHero, textAlign: 'center', marginBottom: tokens.spacing.lg },
+  form: { gap: tokens.spacing.xs },
+  imageCard: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, marginBottom: tokens.spacing.xs },
+  imageSelector: { alignSelf: 'center', marginBottom: metrics.spacing(15), width: '100%', maxWidth: Math.min(metrics.contentMaxWidth, metrics.size(320, 0.95)) },
+  selectedImage: { width: '100%', maxWidth: Math.min(metrics.contentMaxWidth, metrics.size(320, 0.95)), height: metrics.size(160), borderRadius: tokens.radii.sm, borderWidth: 2, borderColor: palette.onHero },
+  photoPlaceholder: { width: '100%', maxWidth: Math.min(metrics.contentMaxWidth, metrics.size(320, 0.95)), height: metrics.size(160), backgroundColor: palette.panelStrong, justifyContent: 'center', alignItems: 'center', borderRadius: tokens.radii.sm, borderStyle: 'dashed', borderWidth: 2, borderColor: palette.onHero },
+  photoText: { fontSize: metrics.font(11, 0.75), fontWeight: 'bold', color: palette.onHero },
+  imageActionsCard: { backgroundColor: palette.panelStrong, borderRadius: tokens.radii.sm, padding: tokens.spacing.sm + metrics.spacing(2), gap: tokens.spacing.xs },
+  imageActionsInline: { gap: tokens.spacing.xs },
+  imageActionsTitle: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: 'bold' },
   imageRemoveLink: { alignSelf: 'flex-start', paddingVertical: 4 },
-  imageRemoveText: { color: palette.onHero, fontSize: 12, fontWeight: 'bold', textDecorationLine: 'underline' },
-  inputContainer: { marginBottom: 10 },
-  label: { color: palette.onHero, fontSize: 13, marginBottom: 2, fontWeight: 'bold' },
-  input: { color: palette.onHero, fontSize: 16, paddingVertical: 5 },
-  helperText: { color: palette.onHero, fontSize: 12, marginTop: -4, marginBottom: 8, opacity: 0.8 },
-  divider: { height: 1, backgroundColor: palette.onHero, marginBottom: 8, opacity: 0.5 },
-  pointFrame: { backgroundColor: palette.panel, padding: 15, borderRadius: RADII.sm, marginVertical: 8, borderLeftWidth: 4, borderLeftColor: palette.primaryButton },
-  pointTitle: { color: palette.primaryButton, fontSize: 15, fontWeight: 'bold', marginBottom: 10 },
-  assignButton: { backgroundColor: palette.panelStrong, paddingVertical: 12, borderRadius: RADII.sm, marginVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: palette.onHero },
-  assignText: { fontSize: 13, color: palette.onHero, fontWeight: 'bold' },
-  addPointBtn: { backgroundColor: palette.primaryButton, paddingVertical: 12, borderRadius: 25, alignItems: 'center' },
-  addPointText: { color: palette.primaryButtonText, fontWeight: 'bold', fontSize: 14 },
-  listPreview: { marginVertical: 15, gap: 6 },
-  previewRow: { backgroundColor: palette.panelStrong, padding: 12, borderRadius: 8 },
-  previewTxt: { color: palette.onHero },
-  previewMeta: { color: palette.onHero, opacity: 0.9, fontSize: 11, marginTop: 4 },
-  previewHint: { color: palette.onHero, opacity: 0.7, fontSize: 11, marginTop: 4 },
-  footerButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
-  footerBtn: { backgroundColor: palette.secondaryButton, paddingVertical: 12, borderRadius: 30, width: '48%', alignItems: 'center' },
-  actionButton: { backgroundColor: palette.secondaryButton, paddingVertical: 14, borderRadius: 30, alignItems: 'center', marginTop: 10 },
-  secondaryActionButton: { borderWidth: 1, borderColor: palette.onHero, paddingVertical: 10, borderRadius: 30, alignItems: 'center', marginTop: 4 },
-  actionText: { fontSize: 14, fontWeight: 'bold', color: palette.secondaryButtonText },
-  secondaryActionText: { fontSize: 12, fontWeight: 'bold', color: palette.onHero },
-  finalSaveBtn: { backgroundColor: palette.heroSoft, paddingVertical: 18, borderRadius: RADII.sm, alignItems: 'center', marginTop: 30 },
-  finalSaveText: { color: palette.onHero, fontWeight: 'bold', fontSize: 18 },
-  modalScrollOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 25 },
-  modalPanel: { backgroundColor: palette.surface, borderRadius: 20, padding: 20, maxHeight: '80%' },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: palette.text },
-  modalHelperText: { color: palette.textMuted, textAlign: 'center', marginBottom: 10, fontSize: 12 },
+  imageRemoveText: { color: palette.onHero, fontSize: tokens.typography.caption, fontWeight: 'bold', textDecorationLine: 'underline' },
+  inputContainer: { marginBottom: metrics.spacing(10) },
+  label: { color: palette.onHero, fontSize: tokens.typography.label, marginBottom: 2, fontWeight: 'bold' },
+  input: { color: palette.onHero, fontSize: tokens.typography.bodyLg, paddingVertical: metrics.spacing(5, 0.75) },
+  helperText: { color: palette.onHero, fontSize: tokens.typography.caption, marginTop: -4, marginBottom: tokens.spacing.xs, opacity: 0.8 },
+  divider: { height: 1, backgroundColor: palette.onHero, marginBottom: tokens.spacing.xs, opacity: 0.5 },
+  pointFrame: { backgroundColor: palette.panel, padding: metrics.spacing(15), borderRadius: tokens.radii.sm, marginVertical: tokens.spacing.xs, borderLeftWidth: 4, borderLeftColor: palette.primaryButton },
+  pointTitle: { color: palette.primaryButton, fontSize: metrics.font(15, 0.85), fontWeight: 'bold', marginBottom: metrics.spacing(10) },
+  assignButton: { backgroundColor: palette.panelStrong, paddingVertical: tokens.spacing.sm + metrics.spacing(2), borderRadius: tokens.radii.sm, marginVertical: metrics.spacing(10), alignItems: 'center', borderWidth: 1, borderColor: palette.onHero },
+  assignText: { fontSize: tokens.typography.label, color: palette.onHero, fontWeight: 'bold' },
+  addPointBtn: { backgroundColor: palette.primaryButton, paddingVertical: tokens.spacing.sm + metrics.spacing(2), borderRadius: tokens.radii.pill, alignItems: 'center' },
+  addPointText: { color: palette.primaryButtonText, fontWeight: 'bold', fontSize: tokens.typography.body },
+  listPreview: { marginVertical: metrics.spacing(15), gap: metrics.spacing(6, 0.8) },
+  previewRow: { backgroundColor: palette.panelStrong, padding: tokens.spacing.sm + metrics.spacing(2), borderRadius: metrics.radius(8, 0.6) },
+  previewTxt: { color: palette.onHero, fontSize: tokens.typography.body },
+  previewMeta: { color: palette.onHero, opacity: 0.9, fontSize: metrics.font(11, 0.75), marginTop: metrics.spacing(4, 0.75) },
+  previewHint: { color: palette.onHero, opacity: 0.7, fontSize: metrics.font(11, 0.75), marginTop: metrics.spacing(4, 0.75) },
+  footerButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm, marginTop: metrics.spacing(15) },
+  footerBtn: { backgroundColor: palette.secondaryButton, paddingVertical: tokens.spacing.sm + metrics.spacing(2), borderRadius: tokens.radii.pill, alignItems: 'center', flexGrow: 1, flexBasis: metrics.compactWidth ? '100%' : 0 },
+  actionButton: { backgroundColor: palette.secondaryButton, paddingVertical: tokens.spacing.md, borderRadius: tokens.radii.pill, alignItems: 'center', marginTop: metrics.spacing(10) },
+  secondaryActionButton: { borderWidth: 1, borderColor: palette.onHero, paddingVertical: metrics.spacing(10), borderRadius: tokens.radii.pill, alignItems: 'center', marginTop: metrics.spacing(4, 0.75) },
+  actionText: { fontSize: tokens.typography.body, fontWeight: 'bold', color: palette.secondaryButtonText },
+  secondaryActionText: { fontSize: tokens.typography.caption, fontWeight: 'bold', color: palette.onHero },
+  finalSaveBtn: { backgroundColor: palette.heroSoft, paddingVertical: metrics.spacing(18), borderRadius: tokens.radii.sm, alignItems: 'center', marginTop: metrics.spacing(30) },
+  finalSaveText: { color: palette.onHero, fontWeight: 'bold', fontSize: metrics.font(18, 0.9) },
+  modalScrollOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: metrics.screenPadding },
+  modalPanel: { backgroundColor: palette.surface, borderRadius: tokens.radii.lg, padding: tokens.spacing.lg, maxHeight: '88%', width: '100%', maxWidth: metrics.modalMaxWidth, alignSelf: 'center' },
+  modalTitle: { fontSize: metrics.font(18, 0.9), fontWeight: 'bold', marginBottom: metrics.spacing(15), textAlign: 'center', color: palette.text },
+  modalHelperText: { color: palette.textMuted, textAlign: 'center', marginBottom: metrics.spacing(10), fontSize: tokens.typography.caption },
   modalLoader: { marginVertical: 12 },
-  searchInput: { backgroundColor: palette.surfaceMuted, padding: 12, borderRadius: RADII.sm, marginBottom: 15, fontSize: 16, color: palette.text },
-  cityItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
-  cityItemText: { fontSize: 16, color: palette.text },
-  clientItemMeta: { fontSize: 12, color: '#666', marginTop: 4 },
+  modalResults: { maxHeight: Math.max(metrics.size(220, 0.95), Math.min(metrics.size(400, 0.95), Math.round(metrics.height * 0.45))) },
+  searchInput: { backgroundColor: palette.surfaceMuted, padding: tokens.spacing.sm + metrics.spacing(2), borderRadius: tokens.radii.sm, marginBottom: metrics.spacing(15), fontSize: tokens.typography.bodyLg, color: palette.text },
+  cityItem: { paddingVertical: metrics.spacing(15), borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  cityItemText: { fontSize: tokens.typography.bodyLg, color: palette.text },
+  clientItemMeta: { fontSize: tokens.typography.caption, color: '#666', marginTop: metrics.spacing(4, 0.75) },
   emptyModalText: { color: palette.textMuted, textAlign: 'center', paddingVertical: 24 },
-  closeBtn: { backgroundColor: palette.secondaryButton, paddingVertical: 12, borderRadius: RADII.sm, alignItems: 'center', marginTop: 15 },
+  closeBtn: { backgroundColor: palette.secondaryButton, paddingVertical: tokens.spacing.sm + metrics.spacing(2), borderRadius: tokens.radii.sm, alignItems: 'center', marginTop: metrics.spacing(15) },
   closeBtnText: { fontWeight: 'bold', color: palette.secondaryButtonText },
-  coordCard: { backgroundColor: palette.surface, padding: 15, borderRadius: RADII.sm, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 15 },
-  coordPhoto: { width: 60, height: 60, borderRadius: 30 },
-  coordName: { fontSize: 16, fontWeight: 'bold', color: palette.text },
+  coordCard: { backgroundColor: palette.surface, padding: metrics.spacing(15), borderRadius: tokens.radii.sm, marginBottom: tokens.spacing.sm, flexDirection: 'row', alignItems: 'center', gap: metrics.spacing(15) },
+  coordPhoto: { width: metrics.size(60), height: metrics.size(60), borderRadius: metrics.radius(30) },
+  coordName: { fontSize: tokens.typography.bodyLg, fontWeight: 'bold', color: palette.text },
   disabledCard: { backgroundColor: '#C8C8C8', opacity: 0.7 },
   disabledPhoto: { opacity: 0.55 },
   disabledText: { color: '#666' },
-  disabledHint: { color: '#666', fontSize: 12, marginTop: 4 },
-  stepTitle: { fontSize: 22, fontWeight: 'bold', color: palette.onHero, textAlign: 'center', marginBottom: 20 },
-  categoryPanel: { backgroundColor: palette.panel, borderRadius: RADII.sm, padding: 14, gap: 10, marginBottom: 16 },
-  sectionLabel: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
-  categoryResults: { maxHeight: 220 },
-  categoryOption: { backgroundColor: palette.panelStrong, borderRadius: RADII.sm, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8 },
+  disabledHint: { color: '#666', fontSize: tokens.typography.caption, marginTop: metrics.spacing(4, 0.75) },
+  stepTitle: { fontSize: metrics.font(22, 0.95), fontWeight: 'bold', color: palette.onHero, textAlign: 'center', marginBottom: tokens.spacing.lg },
+  categoryPanel: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm, marginBottom: tokens.spacing.md },
+  sectionLabel: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: 'bold' },
+  categoryResults: { maxHeight: metrics.size(220) },
+  categoryOption: { backgroundColor: palette.panelStrong, borderRadius: tokens.radii.sm, paddingVertical: tokens.spacing.sm + metrics.spacing(2), paddingHorizontal: tokens.spacing.md, marginBottom: tokens.spacing.xs },
   categoryOptionActive: { backgroundColor: '#FFB300' },
-  categoryOptionText: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
+  categoryOptionText: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: 'bold' },
   categoryOptionTextActive: { color: '#222' },
-  selectedCategoryBar: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  selectedCategoryText: { color: palette.onHero, fontSize: 18, fontWeight: 'bold' },
-  categoryClearButton: { backgroundColor: palette.panelStrong, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14 },
-  categoryClearButtonText: { color: palette.onHero, fontSize: 11, fontWeight: 'bold' },
-  staffList: { gap: 10 },
-  staffRow: { backgroundColor: palette.panelStrong, padding: 15, borderRadius: RADII.sm, flexDirection: 'row', alignItems: 'center' },
-  staffName: { color: palette.onHero, fontWeight: 'bold', fontSize: 15 },
-  dotsButton: { padding: 10, backgroundColor: palette.panel, borderRadius: 20 },
-  dotsText: { color: palette.onHero, fontWeight: 'bold', fontSize: 16 },
+  selectedCategoryBar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: tokens.spacing.sm, marginBottom: tokens.spacing.sm },
+  selectedCategoryText: { color: palette.onHero, fontSize: metrics.font(18, 0.9), fontWeight: 'bold' },
+  categoryClearButton: { backgroundColor: palette.panelStrong, borderRadius: metrics.radius(20), paddingVertical: metrics.spacing(10), paddingHorizontal: tokens.spacing.md, width: metrics.compactWidth ? '100%' : undefined },
+  categoryClearButtonText: { color: palette.onHero, fontSize: metrics.font(11, 0.75), fontWeight: 'bold' },
+  staffList: { gap: tokens.spacing.sm },
+  staffRow: { backgroundColor: palette.panelStrong, padding: metrics.spacing(15), borderRadius: tokens.radii.sm, flexDirection: 'row', alignItems: 'center' },
+  staffName: { color: palette.onHero, fontWeight: 'bold', fontSize: metrics.font(15, 0.85) },
+  dotsButton: { padding: metrics.spacing(10), backgroundColor: palette.panel, borderRadius: metrics.radius(20) },
+  dotsText: { color: palette.onHero, fontWeight: 'bold', fontSize: tokens.typography.bodyLg },
   overlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
-  detailPopup: { backgroundColor: palette.surface, width: '85%', maxHeight: '80%', borderRadius: 30, padding: 25 },
-  detailPopupContent: { alignItems: 'center', paddingBottom: 28, flexGrow: 1 },
-  detailPhoto: { width: 120, height: 120, borderRadius: 60, marginBottom: 15, borderWidth: 3, borderColor: palette.heroSoft },
-  helperTextDark: { color: palette.textMuted, fontSize: 12, marginTop: -4, marginBottom: 12 },
-  detailName: { fontSize: 22, fontWeight: 'bold', color: palette.text },
-  detailCategory: { fontSize: 14, color: '#666', marginBottom: 20, letterSpacing: 2 },
-  detailInfoList: { width: '100%', gap: 12, marginBottom: 25 },
-  detailInfoRow: { backgroundColor: palette.surfaceMuted, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
-  infoLabel: { fontSize: 10, color: '#999', textTransform: 'uppercase' },
-  infoVal: { fontSize: 16, fontWeight: 'bold', color: palette.text, marginTop: 4 },
-  closeDetailBtn: { backgroundColor: palette.heroSoft, width: '100%', paddingVertical: 15, borderRadius: 15, alignItems: 'center' },
+  detailPopup: { backgroundColor: palette.surface, width: '100%', maxWidth: metrics.modalMaxWidth, maxHeight: '88%', borderRadius: tokens.radii.lg, padding: tokens.spacing.lg },
+  detailPopupContent: { alignItems: 'center', paddingBottom: metrics.spacing(28), flexGrow: 1 },
+  detailPhoto: { width: metrics.size(120), height: metrics.size(120), borderRadius: metrics.radius(60), marginBottom: metrics.spacing(15), borderWidth: 3, borderColor: palette.heroSoft },
+  helperTextDark: { color: palette.textMuted, fontSize: tokens.typography.caption, marginTop: -4, marginBottom: tokens.spacing.sm },
+  detailName: { fontSize: metrics.font(22, 0.95), fontWeight: 'bold', color: palette.text },
+  detailCategory: { fontSize: tokens.typography.body, color: '#666', marginBottom: tokens.spacing.lg, letterSpacing: 2 },
+  detailInfoList: { width: '100%', gap: tokens.spacing.sm, marginBottom: metrics.spacing(25) },
+  detailInfoRow: { backgroundColor: palette.surfaceMuted, borderRadius: tokens.radii.sm, paddingHorizontal: tokens.spacing.md, paddingVertical: tokens.spacing.sm + metrics.spacing(2) },
+  infoLabel: { fontSize: metrics.font(10, 0.7), color: '#999', textTransform: 'uppercase' },
+  infoVal: { fontSize: tokens.typography.bodyLg, fontWeight: 'bold', color: palette.text, marginTop: metrics.spacing(4, 0.75) },
+  closeDetailBtn: { backgroundColor: palette.heroSoft, width: '100%', paddingVertical: metrics.spacing(15), borderRadius: metrics.radius(15), alignItems: 'center' },
   closeDetailText: { color: palette.onHero, fontWeight: 'bold' },
-  photoPreviewOverlay: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  photoPreviewOverlay: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: metrics.screenPadding },
   expandedPhoto: { width: '100%', height: '80%' },
   photoPreviewHint: { color: '#FFF', marginTop: 16, fontWeight: 'bold' },
 });

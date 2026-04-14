@@ -3,7 +3,8 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View 
 
 import { changePassword } from '../api/api';
 import { AppButton, SurfaceCard } from './ui';
-import { RADII, SHADOWS, SPACING } from '../theme/tokens';
+import { getResponsiveTokens, SHADOWS } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const INITIAL_FORM = {
   currentPassword: '',
@@ -16,7 +17,9 @@ const ChangePasswordCard = ({ user, palette, buttonLabel = 'CAMBIAR CONTRASEÑA'
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [feedback, setFeedback] = useState({ tone: 'muted', message: '' });
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -131,43 +134,47 @@ const ChangePasswordCard = ({ user, palette, buttonLabel = 'CAMBIAR CONTRASEÑA'
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.7)',
     justifyContent: 'center',
-    padding: SPACING.lg,
+    padding: tokens.spacing.lg,
   },
   modalCard: {
-    gap: SPACING.md,
-    borderRadius: RADII.lg,
+    gap: tokens.spacing.md,
+    borderRadius: tokens.radii.lg,
+    maxWidth: tokens.layout.modalMaxWidth,
+    alignSelf: 'center',
+    width: '100%',
     ...SHADOWS.floating,
   },
-  title: { color: palette.text, fontSize: 22, fontWeight: '800' },
-  subtitle: { color: palette.textMuted },
-  fieldWrap: { gap: SPACING.xs },
-  label: { color: palette.text, fontWeight: '800', fontSize: 13 },
+  title: { color: palette.text, fontSize: metrics.font(22, 0.95), fontWeight: '800' },
+  subtitle: { color: palette.textMuted, fontSize: tokens.typography.body },
+  fieldWrap: { gap: tokens.spacing.xs },
+  label: { color: palette.text, fontWeight: '800', fontSize: tokens.typography.label },
   input: {
-    minHeight: 50,
-    borderRadius: RADII.md,
+    minHeight: tokens.sizes.inputMinHeight,
+    borderRadius: tokens.radii.md,
     borderWidth: 1,
     borderColor: palette.inputBorder,
     backgroundColor: palette.inputBg,
     color: palette.inputText,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    fontSize: tokens.typography.bodyLg,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm + metrics.spacing(2),
   },
   feedbackBox: {
-    borderRadius: RADII.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: tokens.radii.md,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm + metrics.spacing(2),
   },
   feedbackSuccess: { backgroundColor: palette.successBg },
   feedbackError: { backgroundColor: palette.errorBg },
-  feedbackText: { color: palette.text, fontWeight: '700' },
-  actions: { flexDirection: 'row', gap: SPACING.sm },
-  actionButton: { flex: 1 },
-  helper: { color: palette.textMuted, fontSize: 12, lineHeight: 18 },
+  feedbackText: { color: palette.text, fontWeight: '700', fontSize: tokens.typography.body },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
+  actionButton: { flexGrow: 1, flexBasis: metrics.compactWidth ? '100%' : 0 },
+  helper: { color: palette.textMuted, fontSize: tokens.typography.caption, lineHeight: metrics.font(18, 0.8) },
 });
 
 export default ChangePasswordCard;

@@ -8,13 +8,16 @@ import UserProfileCard from '../components/UserProfileCard';
 import { APP_DISPLAY_NAME } from '../config/appMetadata';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
-import { getAppPalette, RADII, SHADOWS, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens, SHADOWS } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [editingEvent, setEditingEvent] = useState(null);
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette(roleConfig?.theme || 'green');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
   const displayUsername = getUserDisplayName(user);
 
   const handleEditEvent = (event) => {
@@ -90,16 +93,16 @@ const ExecutiveHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   content: { justifyContent: 'space-between' },
   heroCard: { backgroundColor: palette.surfaceMuted },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  heroTitle: { fontSize: 24, fontWeight: '800', color: palette.text },
-  heroText: { color: palette.textMuted, lineHeight: 20 },
-  menuContainer: { gap: SPACING.md },
-  menuCard: { gap: SPACING.md, borderRadius: RADII.lg, ...SHADOWS.card },
-  menuTitle: { fontSize: 20, fontWeight: '800', color: palette.text },
-  menuText: { color: palette.textMuted, lineHeight: 20 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
+  heroTitle: { fontSize: metrics.font(24, 0.95), fontWeight: '800', color: palette.text },
+  heroText: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
+  menuContainer: { gap: tokens.spacing.md },
+  menuCard: { gap: tokens.spacing.md, borderRadius: tokens.radii.lg, ...SHADOWS.card },
+  menuTitle: { fontSize: metrics.font(20, 0.9), fontWeight: '800', color: palette.text },
+  menuText: { color: palette.textMuted, lineHeight: metrics.font(20, 0.85), fontSize: tokens.typography.body },
 });
 
 export default ExecutiveHomeScreen;

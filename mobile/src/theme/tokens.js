@@ -1,4 +1,5 @@
 import { COLORS } from './colors';
+import { createResponsiveMetrics } from '../utils/responsive';
 
 export const SPACING = {
   xs: 6,
@@ -16,6 +17,16 @@ export const RADII = {
   pill: 999,
 };
 
+export const TYPOGRAPHY = {
+  caption: 12,
+  body: 14,
+  bodyLg: 16,
+  label: 13,
+  title: 20,
+  section: 28,
+  hero: 36,
+};
+
 export const SHADOWS = {
   card: {
     shadowColor: COLORS.brand.shadow,
@@ -31,6 +42,65 @@ export const SHADOWS = {
     shadowRadius: 24,
     elevation: 8,
   },
+};
+
+const normalizeMetrics = (metrics) => {
+  if (
+    metrics
+    && typeof metrics.spacing === 'function'
+    && typeof metrics.font === 'function'
+    && typeof metrics.size === 'function'
+    && typeof metrics.radius === 'function'
+  ) {
+    return metrics;
+  }
+
+  return createResponsiveMetrics(metrics?.width || 390, metrics?.height || 844);
+};
+
+export const getResponsiveTokens = (metrics) => {
+  const safeMetrics = normalizeMetrics(metrics);
+
+  return {
+    spacing: {
+      xs: safeMetrics.spacing(SPACING.xs),
+      sm: safeMetrics.spacing(SPACING.sm),
+      md: safeMetrics.spacing(SPACING.md),
+      lg: safeMetrics.spacing(SPACING.lg),
+      xl: safeMetrics.spacing(SPACING.xl),
+      xxl: safeMetrics.spacing(SPACING.xxl),
+    },
+    radii: {
+      sm: safeMetrics.radius(RADII.sm),
+      md: safeMetrics.radius(RADII.md),
+      lg: safeMetrics.radius(RADII.lg),
+      pill: RADII.pill,
+    },
+    typography: {
+      caption: safeMetrics.font(TYPOGRAPHY.caption, 0.8),
+      body: safeMetrics.font(TYPOGRAPHY.body, 0.8),
+      bodyLg: safeMetrics.font(TYPOGRAPHY.bodyLg, 0.85),
+      label: safeMetrics.font(TYPOGRAPHY.label, 0.85),
+      title: safeMetrics.font(TYPOGRAPHY.title, 0.9),
+      section: safeMetrics.font(TYPOGRAPHY.section, 0.95),
+      hero: safeMetrics.font(TYPOGRAPHY.hero, 0.95),
+    },
+    layout: {
+      screenPadding: safeMetrics.screenPadding,
+      verticalPadding: safeMetrics.verticalPadding,
+      sectionGap: safeMetrics.sectionGap,
+      cardPadding: safeMetrics.cardPadding,
+      modalMaxWidth: safeMetrics.modalMaxWidth,
+      contentMaxWidth: safeMetrics.contentMaxWidth,
+    },
+    sizes: {
+      buttonMinHeight: safeMetrics.size(52, 0.95),
+      inputMinHeight: safeMetrics.size(50, 0.95),
+      badgeMinHeight: safeMetrics.size(30, 0.9),
+      imageCardHeight: safeMetrics.size(180, 1),
+      heroImageHeight: safeMetrics.size(190, 1),
+    },
+  };
 };
 
 const ROLE_THEME_MAP = {

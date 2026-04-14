@@ -1,69 +1,84 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
 import BrandMark from './BrandMark';
 import { APP_DISPLAY_NAME, SPLASH_BRAND_SUBTITLE } from '../config/appMetadata';
 import { COLORS } from '../theme/colors';
-import { RADII, SHADOWS, SPACING, getAppPalette } from '../theme/tokens';
+import { getResponsiveTokens, SHADOWS, getAppPalette } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const palette = getAppPalette();
 
-const EntrySplash = ({ appName, loadingConfig = false }) => (
-  <View style={styles.container}>
-    <View style={styles.orbTop} />
-    <View style={styles.orbBottom} />
+const EntrySplash = ({ appName, loadingConfig = false }) => {
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
+  const styles = useMemo(() => createStyles(metrics, tokens), [metrics, tokens]);
 
-    <BrandMark
-      appName={appName || APP_DISPLAY_NAME}
-      size="lg"
-      subtitle={SPLASH_BRAND_SUBTITLE}
-    />
+  return (
+    <View style={styles.container}>
+      <View style={styles.orbTop} />
+      <View style={styles.orbBottom} />
 
-    <View style={styles.footerCard}>
-      <Text style={styles.kicker}>Listo para trabajar</Text>
-      <Text style={styles.caption}>Acceso unificado para operación comercial, coordinación y monitoreo de eventos.</Text>
-      <View style={styles.loadingRow}>
-        <ActivityIndicator color={COLORS.brand.highlight} />
-        <Text style={styles.loadingText}>{loadingConfig ? 'Preparando configuración...' : 'Iniciando experiencia...'}</Text>
+      <View style={styles.brandWrap}>
+        <BrandMark
+          appName={appName || APP_DISPLAY_NAME}
+          size="lg"
+          subtitle={SPLASH_BRAND_SUBTITLE}
+        />
+      </View>
+
+      <View style={styles.footerCard}>
+        <Text style={styles.kicker}>Listo para trabajar</Text>
+        <Text style={styles.caption}>Acceso unificado para operación comercial, coordinación y monitoreo de eventos.</Text>
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={COLORS.brand.highlight} />
+          <Text style={styles.loadingText}>{loadingConfig ? 'Preparando configuración...' : 'Iniciando experiencia...'}</Text>
+        </View>
       </View>
     </View>
-  </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
+const createStyles = (metrics, tokens) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: palette.pageBg,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: tokens.layout.screenPadding,
+    paddingVertical: tokens.layout.verticalPadding,
     overflow: 'hidden',
+  },
+  brandWrap: {
+    width: '100%',
+    maxWidth: tokens.layout.contentMaxWidth,
+    alignItems: 'center',
   },
   orbTop: {
     position: 'absolute',
-    top: -110,
-    right: -70,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    top: -metrics.spacing(110),
+    right: -metrics.spacing(70),
+    width: metrics.size(240),
+    height: metrics.size(240),
+    borderRadius: metrics.size(120),
     backgroundColor: COLORS.brand.glowStrong,
   },
   orbBottom: {
     position: 'absolute',
-    bottom: -140,
-    left: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    bottom: -metrics.spacing(140),
+    left: -metrics.spacing(80),
+    width: metrics.size(280),
+    height: metrics.size(280),
+    borderRadius: metrics.size(140),
     backgroundColor: COLORS.brand.glowSoft,
   },
   footerCard: {
-    marginTop: 36,
+    marginTop: tokens.spacing.xl + tokens.spacing.sm,
     width: '100%',
-    maxWidth: 380,
-    borderRadius: RADII.lg,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: 20,
+    maxWidth: tokens.layout.contentMaxWidth,
+    borderRadius: tokens.radii.lg,
+    paddingVertical: tokens.spacing.lg,
+    paddingHorizontal: tokens.spacing.lg,
     backgroundColor: COLORS.brand.card,
     borderWidth: 1,
     borderColor: COLORS.brand.cardBorder,
@@ -71,27 +86,30 @@ const styles = StyleSheet.create({
   },
   kicker: {
     color: COLORS.brand.highlight,
-    fontSize: 12,
+    fontSize: tokens.typography.caption,
     fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   caption: {
-    marginTop: 8,
+    marginTop: tokens.spacing.xs,
     color: COLORS.brand.subtleText,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: tokens.typography.body,
+    lineHeight: metrics.font(21, 0.85),
   },
   loadingRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 18,
+    justifyContent: 'center',
+    gap: tokens.spacing.sm,
+    marginTop: tokens.spacing.md,
   },
   loadingText: {
     color: COLORS.brand.onDark,
-    fontSize: 13,
+    fontSize: metrics.font(13, 0.85),
     fontWeight: '600',
+    flex: 1,
   },
 });
 

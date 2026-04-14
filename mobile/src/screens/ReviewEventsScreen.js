@@ -1,20 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator, Image, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Alert, Modal, TextInput } from 'react-native';
+
 import { getEvents, inactivateEvent } from '../api/api';
+import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLifecycle';
 import { getUserDisplayName } from '../utils/user';
-import { getAppPalette, RADII, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
+import { useResponsiveMetrics } from '../utils/responsive';
 
 const getCoordinatorDisplayName = (coordinator) => coordinator?.name || coordinator?.fullName || 'Sin coordinador';
 const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
 
 const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
+  const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette('green');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [expandedSections, setExpandedSections] = useState({ active: false, inactive: false });
+  const [expandedSections, setExpandedSections] = useState({ active: true, inactive: false });
   const [showInactivationModal, setShowInactivationModal] = useState(false);
   const [inactivationComment, setInactivationComment] = useState('');
   const [submittingInactivation, setSubmittingInactivation] = useState(false);
@@ -27,7 +32,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   const fetchEvents = async () => {
     try {
       const data = await getEvents(user?.id);
-      setEvents(data);
+      setEvents(Array.isArray(data) ? data : []);
     } catch (error) {
       Alert.alert('Error', 'No se pudieron cargar los eventos');
     } finally {
@@ -41,15 +46,11 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   const inactiveEvents = events.filter((event) => event.isInactive);
 
   const toggleSection = (section) => {
-    setExpandedSections((current) => {
-      const nextValue = !current[section];
-
-      return {
-        active: false,
-        inactive: false,
-        [section]: nextValue,
-      };
-    });
+    setExpandedSections((current) => ({
+      active: false,
+      inactive: false,
+      [section]: !current[section],
+    }));
   };
 
   const closeInactivationModal = () => {
@@ -58,9 +59,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   };
 
   const handleConfirmInactivation = async () => {
-    if (!selectedEvent) {
-      return;
-    }
+    if (!selectedEvent) return;
 
     if (!inactivationComment.trim()) {
       Alert.alert('Comentario obligatorio', 'Debes escribir un comentario para inactivar el evento');
@@ -87,219 +86,178 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
 
   const EventCard = ({ event, onPress }) => (
     <TouchableOpacity style={[styles.eventButton, event.isInactive && styles.eventButtonInactive]} onPress={onPress}>
-      <Image
-        source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }}
-        style={[styles.eventIcon, event.isInactive && styles.eventIconInactive]}
-      />
+      <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventIcon, event.isInactive && styles.eventIconInactive]} />
       <View style={[styles.eventInfo, event.isInactive && styles.eventInfoInactive]}>
         <Text style={styles.eventTitle}>{event.name}</Text>
         <Text style={styles.eventSubtitle}>{event.client}</Text>
         <Text style={styles.description}>{formatDate(event.startDate)}</Text>
-        {event.isInactive && <Text style={styles.inactiveBadge}>{getInactiveBadgeLabel(event)}</Text>}
+        {event.isInactive ? <StatusBadge label={getInactiveBadgeLabel(event)} tone="muted" /> : null}
       </View>
     </TouchableOpacity>
   );
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color="#FFF" /></View>;
+  if (loading) {
+    return (
+      <ScreenShell palette={palette} contentContainerStyle={styles.loadingShell}>
+        <ActivityIndicator size="large" color="#FFF" />
+        <Text style={styles.loadingText}>Cargando eventos del ejecutivo...</Text>
+      </ScreenShell>
+    );
+  }
 
   if (selectedEvent) {
     return (
-      <SafeAreaView style={styles.container}> 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Text style={styles.title}>DETALLE DEL EVENTO</Text>
+      <ScreenShell palette={palette} contentContainerStyle={styles.screenContent}>
+        <SectionTitle title="Detalle del evento" subtitle="Revisión operativa y acciones administrativas del ejecutivo." />
 
-          {selectedEvent.image && (
-            <Image source={{ uri: selectedEvent.image }} style={[styles.detailImage, selectedEvent.isInactive && styles.eventIconInactive]} />
-          )}
+        {selectedEvent.image ? (
+          <Image source={{ uri: selectedEvent.image }} style={[styles.detailImage, selectedEvent.isInactive && styles.eventIconInactive]} />
+        ) : null}
 
-          <View style={styles.infoBox}>
-            <Text style={styles.detailTitle}>{selectedEvent.name}</Text>
-            <Text style={styles.detailLabel}>Cliente: <Text style={styles.detailValue}>{selectedEvent.client}</Text></Text>
-            <Text style={styles.detailLabel}>Desde: <Text style={styles.detailValue}>{formatDate(selectedEvent.startDate)}</Text></Text>
-            <Text style={styles.detailLabel}>Hasta: <Text style={styles.detailValue}>{formatDate(selectedEvent.endDate)}</Text></Text>
-            {selectedEvent.isInactive && (
-              <View style={styles.inactiveBox}>
-                <Text style={styles.inactiveBoxTitle}>{getInactiveBadgeLabel(selectedEvent)}</Text>
-                <Text style={styles.inactiveBoxText}>{getInactiveDescription(selectedEvent)}</Text>
-              </View>
-            )}
-          </View>
+        <SurfaceCard style={styles.infoBox}>
+          <Text style={styles.detailTitle}>{selectedEvent.name}</Text>
+          <Text style={styles.detailLabel}>Cliente: <Text style={styles.detailValue}>{selectedEvent.client}</Text></Text>
+          <Text style={styles.detailLabel}>Desde: <Text style={styles.detailValue}>{formatDate(selectedEvent.startDate)}</Text></Text>
+          <Text style={styles.detailLabel}>Hasta: <Text style={styles.detailValue}>{formatDate(selectedEvent.endDate)}</Text></Text>
+          {selectedEvent.isInactive ? (
+            <View style={styles.inactiveBox}>
+              <Text style={styles.inactiveBoxTitle}>{getInactiveBadgeLabel(selectedEvent)}</Text>
+              <Text style={styles.inactiveBoxText}>{getInactiveDescription(selectedEvent)}</Text>
+            </View>
+          ) : null}
+        </SurfaceCard>
 
-          <View style={styles.dividerLarge} />
+        {(selectedEvent.cities || []).map((city, cIndex) => (
+          <View key={cIndex} style={styles.citySection}>
+            <Text style={styles.cityName}>Ciudad: {city.name}</Text>
+            {city.points?.map((point, pIndex) => (
+              <SurfaceCard key={pIndex} style={styles.pointDetailCard}>
+                <Text style={styles.pointName}>{point.establishment}</Text>
+                <Text style={styles.pointInfo}>📍 {point.address}</Text>
+                <Text style={styles.pointInfo}>👤 {point.contact}</Text>
+                <Text style={styles.pointInfo}>📞 {point.phone}</Text>
+                <Text style={styles.pointInfo}>⏰ {formatTime(point.startTime)} - {formatTime(point.endTime)}</Text>
 
-          {selectedEvent.cities?.map((city, cIndex) => (
-            <View key={cIndex} style={styles.citySection}>
-              <Text style={styles.cityName}>Ciudad: {city.name}</Text>
-              {city.points?.map((point, pIndex) => (
-                <View key={pIndex} style={styles.pointDetailCard}>
-                  <Text style={styles.pointName}>{point.establishment}</Text>
-                  <Text style={styles.pointInfo}>📍 {point.address}</Text>
-                  <Text style={styles.pointInfo}>👤 {point.contact}</Text>
-                  <Text style={styles.pointInfo}>📞 {point.phone}</Text>
-                  <Text style={styles.pointInfo}>⏰ {formatTime(point.startTime)} - {formatTime(point.endTime)}</Text>
-
-                  <View style={styles.coordSubSection}>
-                    <Text style={styles.coordLabel}>Coordinador: {getCoordinatorDisplayName(point.coordinator)}</Text>
-                    <Text style={styles.staffCount}>Personas a cargo: {point.assignedStaff?.length || 0}</Text>
-                    {point.assignedStaff?.map((st) => (
-                      <Text key={st.id} style={styles.staffItem}>• {getStaffDisplayName(st)}</Text>
-                    ))}
-                  </View>
+                <View style={styles.coordSubSection}>
+                  <Text style={styles.coordLabel}>Coordinador: {getCoordinatorDisplayName(point.coordinator)}</Text>
+                  <Text style={styles.staffCount}>Personas a cargo: {point.assignedStaff?.length || 0}</Text>
+                  {point.assignedStaff?.map((st) => (
+                    <Text key={st.id} style={styles.staffItem}>• {getStaffDisplayName(st)}</Text>
+                  ))}
                 </View>
-              ))}
-            </View>
-          ))}
+              </SurfaceCard>
+            ))}
+          </View>
+        ))}
 
-          {!selectedEvent.isInactive && (
-            <>
-              <TouchableOpacity style={styles.editButton} onPress={() => onEdit(selectedEvent)}>
-                <Text style={styles.editButtonText}>EDITAR EVENTO</Text>
-              </TouchableOpacity>
+        {!selectedEvent.isInactive ? (
+          <>
+            <AppButton title="EDITAR EVENTO" onPress={() => onEdit(selectedEvent)} />
+            <AppButton title="INACTIVAR EVENTO" variant="danger" onPress={() => setShowInactivationModal(true)} />
+          </>
+        ) : null}
 
-              <TouchableOpacity style={styles.inactivateButton} onPress={() => setShowInactivationModal(true)}>
-                <Text style={styles.inactivateButtonText}>INACTIVAR EVENTO</Text>
-              </TouchableOpacity>
-            </>
-          )}
+        <AppButton title="REGRESAR A LA LISTA" variant="secondary" onPress={() => setSelectedEvent(null)} />
 
-          <TouchableOpacity style={styles.actionButton} onPress={() => setSelectedEvent(null)}>
-            <Text style={styles.actionText}>REGRESAR A LA LISTA</Text>
-          </TouchableOpacity>
-
-          <Modal visible={showInactivationModal} transparent animationType="fade">
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalCard}>
-                <Text style={styles.modalTitle}>Inactivar evento</Text>
-                <Text style={styles.modalText}>El comentario es obligatorio y queda guardado con el evento.</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={inactivationComment}
-                  onChangeText={setInactivationComment}
-                  placeholder="Escribe el comentario..."
-                  placeholderTextColor="#888"
-                  multiline
-                  numberOfLines={4}
-                  editable={!submittingInactivation}
-                />
-                <TouchableOpacity style={styles.inactivateButton} onPress={handleConfirmInactivation} disabled={submittingInactivation}>
-                  <Text style={styles.inactivateButtonText}>{submittingInactivation ? 'GUARDANDO...' : 'CONFIRMAR INACTIVACIÓN'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={closeInactivationModal} disabled={submittingInactivation}>
-                  <Text style={styles.actionText}>CANCELAR</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-        </ScrollView>
-      </SafeAreaView>
+        <Modal visible={showInactivationModal} transparent animationType="fade" onRequestClose={closeInactivationModal}>
+          <View style={styles.modalOverlay}>
+            <SurfaceCard style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Inactivar evento</Text>
+              <Text style={styles.modalText}>El comentario es obligatorio y queda guardado con el evento.</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={inactivationComment}
+                onChangeText={setInactivationComment}
+                placeholder="Escribe el comentario..."
+                placeholderTextColor="#888"
+                multiline
+                numberOfLines={4}
+                editable={!submittingInactivation}
+              />
+              <AppButton title={submittingInactivation ? 'GUARDANDO...' : 'CONFIRMAR INACTIVACIÓN'} variant="danger" onPress={handleConfirmInactivation} disabled={submittingInactivation} />
+              <AppButton title="CANCELAR" variant="secondary" onPress={closeInactivationModal} disabled={submittingInactivation} />
+            </SurfaceCard>
+          </View>
+        </Modal>
+      </ScreenShell>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}> 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>MIS EVENTOS</Text>
-          <Text style={styles.welcome}>Hola, {displayUsername}. Revisa tus eventos creados</Text>
-        </View>
+    <ScreenShell palette={palette} contentContainerStyle={styles.screenContent}>
+      <SectionTitle title="Mis eventos" subtitle={`Hola, ${displayUsername}. Revisa tus eventos creados.`} />
 
-        <View style={styles.listContainer}>
-          {events.length === 0 ? (
-            <Text style={styles.emptyText}>No hay eventos creados actualmente.</Text>
-          ) : (
-            <>
-              <View style={styles.sectionBlock}>
-                <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection('active')}>
-                  <Text style={styles.sectionTitle}>EVENTOS ACTIVOS ({activeEvents.length})</Text>
-                  <Text style={styles.sectionChevron}>{expandedSections.active ? '▾' : '▸'}</Text>
-                </TouchableOpacity>
-                {expandedSections.active && (
-                  activeEvents.length === 0 ? (
-                    <Text style={styles.sectionEmpty}>No hay eventos activos.</Text>
-                  ) : (
-                    activeEvents.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)
-                  )
-                )}
-              </View>
+      <View style={styles.listContainer}>
+        {events.length === 0 ? (
+          <Text style={styles.emptyText}>No hay eventos creados actualmente.</Text>
+        ) : (
+          <>
+            <SurfaceCard style={styles.sectionBlock}>
+              <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection('active')}>
+                <Text style={styles.sectionTitle}>EVENTOS ACTIVOS ({activeEvents.length})</Text>
+                <Text style={styles.sectionChevron}>{expandedSections.active ? '▾' : '▸'}</Text>
+              </TouchableOpacity>
+              {expandedSections.active ? (activeEvents.length === 0 ? <Text style={styles.sectionEmpty}>No hay eventos activos.</Text> : activeEvents.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)) : null}
+            </SurfaceCard>
 
-              <View style={styles.sectionBlock}>
-                <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection('inactive')}>
-                  <Text style={styles.sectionTitle}>EVENTOS INACTIVOS ({inactiveEvents.length})</Text>
-                  <Text style={styles.sectionChevron}>{expandedSections.inactive ? '▾' : '▸'}</Text>
-                </TouchableOpacity>
-                {expandedSections.inactive && (
-                  inactiveEvents.length === 0 ? (
-                    <Text style={styles.sectionEmpty}>No hay eventos inactivos.</Text>
-                  ) : (
-                    inactiveEvents.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)
-                  )
-                )}
-              </View>
-            </>
-          )}
-        </View>
+            <SurfaceCard style={styles.sectionBlock}>
+              <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection('inactive')}>
+                <Text style={styles.sectionTitle}>EVENTOS INACTIVOS ({inactiveEvents.length})</Text>
+                <Text style={styles.sectionChevron}>{expandedSections.inactive ? '▾' : '▸'}</Text>
+              </TouchableOpacity>
+              {expandedSections.inactive ? (inactiveEvents.length === 0 ? <Text style={styles.sectionEmpty}>No hay eventos inactivos.</Text> : inactiveEvents.map((event) => <EventCard key={event.id} event={event} onPress={() => setSelectedEvent(event)} />)) : null}
+            </SurfaceCard>
+          </>
+        )}
+      </View>
 
-        <TouchableOpacity style={styles.actionButton} onPress={onBack}>
-          <Text style={styles.actionText}>REGRESAR AL MENÚ</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+      <AppButton title="REGRESAR AL MENÚ" variant="secondary" onPress={onBack} />
+    </ScreenShell>
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: palette.pageBg },
-  loading: { flex: 1, backgroundColor: palette.pageBg, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: SPACING.xl, paddingBottom: 60 },
-  header: { alignItems: 'center', marginBottom: 30 },
-  title: { fontSize: 32, fontWeight: 'bold', color: palette.onHero, textAlign: 'center' },
-  welcome: { fontSize: 14, color: palette.onHero, textAlign: 'center', marginTop: 10 },
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
+  screenContent: { gap: tokens.spacing.md },
+  loadingShell: { justifyContent: 'center', alignItems: 'center', gap: tokens.spacing.sm },
+  loadingText: { color: palette.onHero, fontWeight: '700', textAlign: 'center' },
   emptyText: { color: palette.onHero, textAlign: 'center', opacity: 0.9 },
-  listContainer: { gap: 20, marginBottom: 30 },
-  sectionBlock: { gap: 12 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: palette.panel, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADII.sm },
-  sectionTitle: { fontSize: 17, fontWeight: 'bold', color: palette.onHero },
-  sectionChevron: { color: palette.onHero, fontSize: 20, fontWeight: 'bold' },
-  sectionEmpty: { color: '#D1D5DB', fontSize: 13 },
-  eventButton: { backgroundColor: palette.surface, borderRadius: 15, overflow: 'hidden', elevation: 4 },
+  listContainer: { gap: tokens.spacing.md },
+  sectionBlock: { gap: tokens.spacing.sm },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing.sm },
+  sectionTitle: { flex: 1, fontSize: metrics.font(17, 0.9), fontWeight: '800', color: palette.text },
+  sectionChevron: { color: palette.text, fontSize: metrics.font(20, 0.9), fontWeight: 'bold' },
+  sectionEmpty: { color: palette.textMuted, fontSize: tokens.typography.caption },
+  eventButton: { backgroundColor: palette.surfaceMuted, borderRadius: tokens.radii.sm, overflow: 'hidden' },
   eventButtonInactive: { backgroundColor: palette.secondaryButton },
-  eventIcon: { width: '100%', height: 110, resizeMode: 'cover' },
+  eventIcon: { width: '100%', height: metrics.size(130, 0.98), resizeMode: 'cover' },
   eventIconInactive: { opacity: 0.45 },
-  eventInfo: { backgroundColor: palette.primaryButton, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
+  eventInfo: { backgroundColor: palette.primaryButton, paddingVertical: tokens.spacing.sm, paddingHorizontal: tokens.spacing.sm, alignItems: 'center', gap: tokens.spacing.xs },
   eventInfoInactive: { backgroundColor: palette.secondaryButton },
-  eventTitle: { fontSize: 18, fontWeight: 'bold', color: palette.primaryButtonText, textAlign: 'center' },
-  eventSubtitle: { fontSize: 13, fontWeight: 'bold', color: '#555', textAlign: 'center' },
-  description: { fontSize: 11, color: '#666', marginTop: 4, textAlign: 'center' },
-  inactiveBadge: { marginTop: 8, fontSize: 11, fontWeight: 'bold', color: '#555' },
-  detailImage: { width: '100%', height: 200, borderRadius: RADII.sm, marginBottom: 20 },
-  infoBox: { backgroundColor: palette.panelStrong, padding: 15, borderRadius: RADII.sm },
-  detailTitle: { fontSize: 28, fontWeight: 'bold', color: palette.primaryButton, marginBottom: 15 },
-  detailLabel: { fontSize: 16, color: palette.onHero, fontWeight: 'bold', marginBottom: 5 },
+  eventTitle: { fontSize: metrics.font(18, 0.9), fontWeight: 'bold', color: palette.primaryButtonText, textAlign: 'center' },
+  eventSubtitle: { fontSize: metrics.font(13, 0.85), fontWeight: 'bold', color: '#555', textAlign: 'center' },
+  description: { fontSize: tokens.typography.caption, color: '#666', textAlign: 'center' },
+  detailImage: { width: '100%', height: metrics.size(220, 1), borderRadius: tokens.radii.md },
+  infoBox: { backgroundColor: palette.panelStrong, gap: tokens.spacing.xs },
+  detailTitle: { fontSize: metrics.font(28, 0.95), fontWeight: 'bold', color: palette.primaryButton },
+  detailLabel: { fontSize: metrics.font(16, 0.88), color: palette.onHero, fontWeight: 'bold' },
   detailValue: { fontWeight: 'normal', color: '#EEE' },
-  inactiveBox: { marginTop: 14, padding: 12, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.2)' },
-  inactiveBoxTitle: { color: '#D1D5DB', fontWeight: 'bold', marginBottom: 6 },
-  inactiveBoxText: { color: '#EEE' },
-  dividerLarge: { height: 1, backgroundColor: palette.onHero, marginVertical: 20, opacity: 0.3 },
-  citySection: { marginBottom: 25 },
-  cityName: { fontSize: 20, fontWeight: 'bold', color: palette.onHero, marginBottom: 12 },
-  pointDetailCard: { backgroundColor: palette.panel, padding: 12, borderRadius: RADII.sm, marginBottom: 10 },
-  pointName: { fontSize: 17, fontWeight: 'bold', color: palette.primaryButton, marginBottom: 5 },
-  pointInfo: { fontSize: 14, color: palette.onHero, marginBottom: 3 },
-  coordSubSection: { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 10 },
-  coordLabel: { fontSize: 15, fontWeight: 'bold', color: palette.onHero },
-  staffCount: { fontSize: 13, color: '#DDD', marginVertical: 3 },
-  staffItem: { fontSize: 12, color: '#EEE', marginLeft: 10 },
-  editButton: { backgroundColor: palette.primaryButton, paddingVertical: 14, borderRadius: RADII.sm, alignItems: 'center', marginTop: 10 },
-  editButtonText: { color: palette.primaryButtonText, fontWeight: 'bold', fontSize: 16 },
-  inactivateButton: { backgroundColor: '#6B7280', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  inactivateButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  actionButton: { backgroundColor: palette.secondaryButton, paddingVertical: 14, borderRadius: 30, alignItems: 'center', marginTop: 15 },
-  actionText: { fontSize: 15, fontWeight: 'bold', color: palette.secondaryButtonText },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: palette.surface, borderRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 22, fontWeight: 'bold', color: palette.text, marginBottom: 10, textAlign: 'center' },
-  modalText: { color: '#444', marginBottom: 12, textAlign: 'center' },
-  modalInput: { minHeight: 110, borderWidth: 1, borderColor: palette.inputBorder, borderRadius: 10, padding: 12, textAlignVertical: 'top', color: '#222' },
+  inactiveBox: { marginTop: tokens.spacing.sm, padding: tokens.spacing.sm, borderRadius: tokens.radii.sm, backgroundColor: 'rgba(0,0,0,0.2)', gap: tokens.spacing.xs },
+  inactiveBoxTitle: { color: '#D1D5DB', fontWeight: 'bold' },
+  inactiveBoxText: { color: '#EEE', lineHeight: metrics.font(19, 0.85) },
+  citySection: { gap: tokens.spacing.sm },
+  cityName: { fontSize: metrics.font(20, 0.9), fontWeight: 'bold', color: palette.onHero },
+  pointDetailCard: { backgroundColor: palette.panel, gap: tokens.spacing.xs },
+  pointName: { fontSize: metrics.font(17, 0.88), fontWeight: 'bold', color: palette.primaryButton },
+  pointInfo: { fontSize: tokens.typography.body, color: palette.onHero },
+  coordSubSection: { marginTop: tokens.spacing.sm, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: tokens.spacing.sm, gap: metrics.spacing(3, 0.8) },
+  coordLabel: { fontSize: metrics.font(15, 0.86), fontWeight: 'bold', color: palette.onHero },
+  staffCount: { fontSize: metrics.font(13, 0.84), color: '#DDD' },
+  staffItem: { fontSize: tokens.typography.caption, color: '#EEE', marginLeft: metrics.spacing(10, 0.8) },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: tokens.layout.screenPadding },
+  modalCard: { width: '100%', maxWidth: tokens.layout.modalMaxWidth, alignSelf: 'center', gap: tokens.spacing.sm },
+  modalTitle: { fontSize: metrics.font(22, 0.92), fontWeight: 'bold', color: palette.text, textAlign: 'center' },
+  modalText: { color: '#444', textAlign: 'center', lineHeight: metrics.font(19, 0.85) },
+  modalInput: { minHeight: metrics.size(110, 0.95), borderWidth: 1, borderColor: palette.inputBorder, borderRadius: tokens.radii.sm, padding: tokens.spacing.sm, textAlignVertical: 'top', color: '#222', fontSize: tokens.typography.bodyLg, backgroundColor: '#FFF' },
 });
 
 export default ReviewEventsScreen;

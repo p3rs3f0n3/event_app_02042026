@@ -20,7 +20,7 @@ import { addCoordinatorEventPhoto, addCoordinatorEventReport } from '../api/api'
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { useResponsiveMetrics } from '../utils/responsive';
-import { getAppPalette, RADII, SPACING } from '../theme/tokens';
+import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 
 const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
 
@@ -152,8 +152,9 @@ const Field = ({ styles, label, value, onChangeText, multiline = false, placehol
 
 const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, roleConfig }) => {
   const metrics = useResponsiveMetrics();
+  const tokens = getResponsiveTokens(metrics);
   const palette = getAppPalette(roleConfig?.theme || 'brown');
-  const styles = useMemo(() => createStyles(palette), [palette]);
+  const styles = useMemo(() => createStyles(palette, metrics, tokens), [palette, metrics, tokens]);
   const [galleryVisible, setGalleryVisible] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [currentEvent, setCurrentEvent] = useState(event);
@@ -567,68 +568,68 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   );
 };
 
-const createStyles = (palette) => StyleSheet.create({
+const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.pageBg },
-  scrollContent: { paddingBottom: 42, gap: 16 },
+  scrollContent: { paddingBottom: metrics.spacing(42), gap: tokens.spacing.md },
   title: { color: palette.onHero, fontWeight: 'bold', textAlign: 'center' },
-  heroImage: { width: '100%', height: 190, borderRadius: 18, resizeMode: 'cover' },
-  panel: { backgroundColor: palette.panel, borderRadius: 18, padding: 18, gap: 8 },
-  eventName: { color: palette.primaryButton, fontSize: 24, fontWeight: 'bold' },
-  metaText: { color: palette.onHero, fontSize: 14 },
-  section: { gap: 12 },
-  sectionTitle: { color: palette.onHero, fontWeight: 'bold', fontSize: 18 },
-  cityCard: { backgroundColor: palette.panelStrong, borderRadius: 16, padding: 14, gap: 10 },
-  cityName: { color: palette.primaryButton, fontSize: 18, fontWeight: 'bold' },
-  cityMeta: { color: palette.onHeroMuted, fontSize: 12 },
-  pointCard: { backgroundColor: 'rgba(0,0,0,0.14)', borderRadius: 14, padding: 12, gap: 5 },
-  pointTitle: { color: palette.onHero, fontSize: 16, fontWeight: 'bold' },
-  pointText: { color: '#F3F4F6', fontSize: 13 },
-  staffItem: { color: '#FDE68A', fontSize: 12, marginLeft: 6 },
-  staffItemDark: { color: palette.text, fontSize: 12, marginLeft: 6 },
-  pointDetailButton: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: palette.primaryButton, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  pointDetailButtonText: { color: palette.primaryButtonText, fontSize: 12, fontWeight: 'bold' },
-  sectionRow: { gap: 14 },
-  assetBox: { backgroundColor: palette.panel, borderRadius: 16, padding: 14, gap: 10 },
-  latestPhoto: { width: '100%', height: 180, borderRadius: 14, resizeMode: 'cover' },
-  helperText: { color: palette.onHeroMuted, fontSize: 13, lineHeight: 18 },
-  helperHint: { color: '#FDE68A', fontSize: 12, lineHeight: 16 },
-  rowButtons: { flexDirection: 'row', gap: 10 },
-  pointContactButtons: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  heroImage: { width: '100%', height: metrics.size(190), borderRadius: tokens.radii.md, resizeMode: 'cover' },
+  panel: { backgroundColor: palette.panel, borderRadius: tokens.radii.md, padding: tokens.spacing.lg, gap: tokens.spacing.xs },
+  eventName: { color: palette.primaryButton, fontSize: metrics.font(24, 0.95), fontWeight: 'bold' },
+  metaText: { color: palette.onHero, fontSize: tokens.typography.body },
+  section: { gap: tokens.spacing.sm },
+  sectionTitle: { color: palette.onHero, fontWeight: 'bold', fontSize: metrics.font(18, 0.9) },
+  cityCard: { backgroundColor: palette.panelStrong, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  cityName: { color: palette.primaryButton, fontSize: metrics.font(18, 0.9), fontWeight: 'bold' },
+  cityMeta: { color: palette.onHeroMuted, fontSize: tokens.typography.caption },
+  pointCard: { backgroundColor: 'rgba(0,0,0,0.14)', borderRadius: tokens.radii.sm, padding: tokens.spacing.sm + metrics.spacing(2), gap: metrics.spacing(5, 0.8) },
+  pointTitle: { color: palette.onHero, fontSize: metrics.font(16, 0.88), fontWeight: 'bold' },
+  pointText: { color: '#F3F4F6', fontSize: tokens.typography.label },
+  staffItem: { color: '#FDE68A', fontSize: tokens.typography.caption, marginLeft: metrics.spacing(6, 0.8) },
+  staffItemDark: { color: palette.text, fontSize: tokens.typography.caption, marginLeft: metrics.spacing(6, 0.8) },
+  pointDetailButton: { marginTop: tokens.spacing.xs, alignSelf: 'flex-start', backgroundColor: palette.primaryButton, borderRadius: tokens.radii.sm, paddingHorizontal: tokens.spacing.sm + metrics.spacing(2), paddingVertical: tokens.spacing.sm },
+  pointDetailButtonText: { color: palette.primaryButtonText, fontSize: tokens.typography.caption, fontWeight: 'bold' },
+  sectionRow: { gap: tokens.spacing.md },
+  assetBox: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  latestPhoto: { width: '100%', height: metrics.size(180), borderRadius: tokens.radii.sm, resizeMode: 'cover' },
+  helperText: { color: palette.onHeroMuted, fontSize: tokens.typography.label, lineHeight: metrics.font(18, 0.8) },
+  helperHint: { color: '#FDE68A', fontSize: tokens.typography.caption, lineHeight: metrics.font(16, 0.78) },
+  rowButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
+  pointContactButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm, marginBottom: tokens.spacing.md },
   closePointDetailButton: { marginTop: 8 },
-  secondaryButton: { flex: 1, backgroundColor: palette.secondaryButton, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  secondaryButton: { flexGrow: 1, flexBasis: metrics.compactWidth ? '100%' : 0, backgroundColor: palette.secondaryButton, borderRadius: tokens.radii.sm, paddingVertical: tokens.spacing.md, alignItems: 'center' },
   disabledButton: { opacity: 0.55 },
   secondaryButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
-  reportBox: { backgroundColor: palette.panel, borderRadius: 16, padding: 14, gap: 10 },
-  reportTitle: { color: palette.onHero, fontSize: 17, fontWeight: 'bold' },
-  emptyText: { color: '#E5E7EB', fontSize: 13 },
-  fieldGroup: { gap: 6 },
-  fieldLabel: { color: palette.onHero, fontSize: 13, fontWeight: 'bold' },
-  fieldInput: { backgroundColor: palette.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: '#222' },
-  fieldInputMultiline: { minHeight: 92 },
-  doubleColumn: { flexDirection: 'row', gap: 10 },
-  columnItem: { flex: 1 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  reportBox: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  reportTitle: { color: palette.onHero, fontSize: metrics.font(17, 0.88), fontWeight: 'bold' },
+  emptyText: { color: '#E5E7EB', fontSize: tokens.typography.label },
+  fieldGroup: { gap: metrics.spacing(6, 0.8) },
+  fieldLabel: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: 'bold' },
+  fieldInput: { backgroundColor: palette.surface, borderRadius: tokens.radii.sm, paddingHorizontal: tokens.spacing.sm + metrics.spacing(2), paddingVertical: tokens.spacing.sm + metrics.spacing(2), color: '#222', fontSize: tokens.typography.bodyLg },
+  fieldInputMultiline: { minHeight: metrics.size(92) },
+  doubleColumn: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
+  columnItem: { flexGrow: 1, flexBasis: metrics.compactWidth ? '100%' : 0 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: metrics.spacing(4, 0.75) },
   switchLabel: { color: palette.onHero, fontWeight: 'bold' },
-  reportCard: { backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 12, padding: 10, gap: 4 },
+  reportCard: { backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: tokens.radii.sm, padding: tokens.spacing.sm, gap: metrics.spacing(4, 0.75) },
   reportCardTitle: { color: palette.onHero, fontWeight: 'bold' },
-  reportCardDate: { color: '#D7CCC8', fontSize: 12 },
-  reportCardMeta: { color: '#FDE68A', fontSize: 12 },
-  reportCardContent: { color: '#F3F4F6', fontSize: 13 },
-  primaryButton: { backgroundColor: palette.primaryButton, borderRadius: 28, paddingVertical: 15, alignItems: 'center' },
+  reportCardDate: { color: '#D7CCC8', fontSize: tokens.typography.caption },
+  reportCardMeta: { color: '#FDE68A', fontSize: tokens.typography.caption },
+  reportCardContent: { color: '#F3F4F6', fontSize: tokens.typography.label },
+  primaryButton: { backgroundColor: palette.primaryButton, borderRadius: tokens.radii.pill, paddingVertical: metrics.spacing(15), alignItems: 'center' },
   primaryButtonText: { color: palette.primaryButtonText, fontWeight: 'bold' },
-  contactSection: { backgroundColor: palette.panel, borderRadius: 16, padding: 14, gap: 10 },
-  backButton: { backgroundColor: palette.secondaryButton, borderRadius: 28, paddingVertical: 14, alignItems: 'center' },
+  contactSection: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  backButton: { backgroundColor: palette.secondaryButton, borderRadius: tokens.radii.pill, paddingVertical: tokens.spacing.md, alignItems: 'center' },
   backButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: palette.surface, borderRadius: 20, padding: 20, maxHeight: '80%' },
-  modalTitle: { color: palette.text, fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
-  modalInfoText: { color: '#4B5563', fontSize: 14 },
-  pointDetailContent: { gap: 8, marginBottom: 18 },
-  galleryContent: { gap: 12 },
-  modalEmptyText: { color: '#6B7280', textAlign: 'center' },
-  galleryCard: { gap: 6 },
-  galleryMeta: { color: '#6B7280', fontSize: 12 },
-  galleryPhoto: { width: '100%', height: 180, borderRadius: 14, resizeMode: 'cover' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: metrics.screenPadding },
+  modalCard: { backgroundColor: palette.surface, borderRadius: tokens.radii.lg, padding: tokens.spacing.lg, maxHeight: '88%', width: '100%', maxWidth: metrics.modalMaxWidth, alignSelf: 'center' },
+  modalTitle: { color: palette.text, fontSize: metrics.cardTitleSize, fontWeight: 'bold', textAlign: 'center', marginBottom: tokens.spacing.md },
+  modalInfoText: { color: '#4B5563', fontSize: tokens.typography.body },
+  pointDetailContent: { gap: tokens.spacing.xs, marginBottom: tokens.spacing.lg },
+  galleryContent: { gap: tokens.spacing.sm },
+  modalEmptyText: { color: '#6B7280', textAlign: 'center', fontSize: tokens.typography.body },
+  galleryCard: { gap: metrics.spacing(6, 0.8) },
+  galleryMeta: { color: '#6B7280', fontSize: tokens.typography.caption },
+  galleryPhoto: { width: '100%', height: metrics.size(180), borderRadius: tokens.radii.sm, resizeMode: 'cover' },
 });
 
 export default CoordinatorEventDetailScreen;
