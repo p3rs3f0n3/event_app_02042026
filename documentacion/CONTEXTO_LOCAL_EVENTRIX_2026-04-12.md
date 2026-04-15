@@ -65,6 +65,13 @@
 - `slug`, `scheme` y `android.package` siguen con `eventapp` / `com.eventapp.mobile`; esto fue deliberado para no romper Expo/EAS/deep links.
 - Hay documentación histórica y nombres internos de repositorio/clases con `EventApp`; no se tocaron porque no impactan branding visible inmediato y podrían afectar referencias existentes.
 
+## Preferencia operativa del usuario
+- El usuario dejó documentado que un agente puede ejecutar operaciones seguras de QA aunque él no esté frente al PC, siempre que siga estrictamente los flujos `safe_*`.
+- La autorización ahora cubre explícitamente: deploy seguro del backend a VPS, build seguro de APK, EAS Update seguro y release QA orquestado cuando corresponda.
+- Para backend deploy / APK / EAS Update / release QA se debe correr primero el `--dry-run` correspondiente y luego el comando real.
+- Esta preferencia NO habilita comandos manuales destructivos, bypass de los scripts seguros ni acciones sobre datos reales por fuera del camino `safe_*` documentado.
+- Si una tarea exige salir del flujo `safe_*`, usar scripts no documentados o tocar datos reales/manualmente, se debe pedir confirmación explícita antes de continuar.
+
 ## Archivos clave para próximas sesiones
 - `mobile/src/screens/LoginScreen.js` — gate legal post-login; si más adelante agregan auth real, este flujo debería dejar de confiar en `userId` plano.
 - `mobile/src/config/appMetadata.js` — fuente de verdad de branding y términos.

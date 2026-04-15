@@ -36,7 +36,8 @@ IMPORTANTE:
 - NO usar `npm run db:init` en la VPS ni en una base con informacion que se deba preservar.
 - En la VPS, el deploy normal consiste en sincronizar codigo y reconstruir solo `eventapp-backend`.
 - Para la operacion real de la VPS, ver `documentacion/MANUAL_DEPLOY_VPS_EVENTAPP.txt`.
-- Flujo recomendado de deploy seguro: `python scripts/safe_deploy_vps_backend.py --allow-dirty-remote-repo`
+- Flujo recomendado de deploy seguro: `python scripts/safe_deploy_vps_backend.py --dry-run --allow-dirty-remote-repo` y luego `python scripts/safe_deploy_vps_backend.py --allow-dirty-remote-repo`.
+- Preferencia operativa documentada: si el usuario pide deploy del backend y no puede estar presente frente al PC, el agente puede ejecutar este flujo SIEMPRE que use `safe_deploy_vps_backend.py`, haga `--dry-run` primero y reporte el resultado final.
 
 Scripts y acciones peligrosas fuera de desarrollo local:
 
@@ -74,6 +75,12 @@ Flujo recomendado para APK seguro:
 python scripts/safe_mobile_apk_build.py --dry-run
 python scripts/safe_mobile_apk_build.py
 ```
+
+Preferencia operativa documentada:
+
+- Si el usuario pide generar APK / EAS Update y no puede estar presente frente al PC, el agente puede ejecutar estos flujos SIEMPRE que use los scripts `safe_*`, haga `--dry-run` primero y luego reporte el resultado final.
+- Si dentro del mismo pedido corresponde un release QA completo, el agente también puede ejecutar el orquestador `safe_release_qa.py` con `--dry-run` previo.
+- Esta autorización NO habilita comandos manuales destructivos, bypass de los scripts seguros ni cambios sobre datos reales fuera de los flujos `safe_*` documentados.
 
 Flujo recomendado para EAS Update seguro:
 

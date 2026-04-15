@@ -8,7 +8,34 @@ Este documento define los UNICOS caminos recomendados para operaciones sensibles
 - No improvisar comandos destructivos.
 - No ejecutar scripts peligrosos sin entenderlos completos.
 
+## Autorización operativa para agentes
+
+- El usuario autoriza que un agente ejecute operaciones de QA y deploy SOLO usando flujos `safe_*` cuando la tarea lo pida explícitamente y el usuario no pueda estar presente frente al PC.
+- Esta autorización cubre de forma explícita:
+  - deploy seguro del backend a la VPS
+  - build seguro de APK mobile
+  - EAS Update seguro de QA
+  - release QA orquestado cuando corresponda dentro del flujo seguro
+- Esta autorización aplica a:
+  - `python scripts/safe_deploy_vps_backend.py --dry-run --allow-dirty-remote-repo`
+  - `python scripts/safe_deploy_vps_backend.py --allow-dirty-remote-repo`
+  - `python scripts/safe_mobile_apk_build.py --dry-run`
+  - `python scripts/safe_mobile_apk_build.py`
+  - `python scripts/safe_eas_update.py --dry-run`
+  - `python scripts/safe_eas_update.py`
+  - `python scripts/safe_release_qa.py --dry-run --allow-dirty-remote-repo`
+  - `python scripts/safe_release_qa.py --allow-dirty-remote-repo`
+- Condiciones obligatorias:
+  - siempre correr primero el `--dry-run` cuando exista
+  - no reemplazar estos scripts por comandos manuales equivalentes
+  - no tocar datos reales fuera de estos flujos seguros
+  - reportar al final el resultado de cada paso ejecutado, incluyendo healthcheck/backend, build ID, URL del APK/update y cualquier warning relevante
+  - si el flujo sale del camino `safe_*`, requiere scripts no documentados o necesita acciones manuales sobre datos reales, pedir confirmación explícita antes de continuar
+
 ## 1) Deploy seguro del backend a VPS
+
+Autorización explícita:
+- Si el usuario pide deploy del backend y no está frente al PC, el agente puede ejecutar ESTE flujo y solo ESTE flujo, con `--dry-run` previo.
 
 Script recomendado:
 
@@ -36,6 +63,9 @@ Qué NO hace:
 - no restaura backups
 
 ## 2) Build seguro de APK Android
+
+Autorización explícita:
+- Si el usuario pide APK de QA y no está frente al PC, el agente puede ejecutar ESTE flujo y solo ESTE flujo, con `--dry-run` previo.
 
 Script recomendado:
 
@@ -79,6 +109,10 @@ Qué valida:
 - API URL correcta antes de publicar
 
 ## 4) Orquestador seguro para QA release
+
+Autorización explícita:
+- Si la tarea requiere backend + APK + publicación QA, el agente puede usar este orquestador seguro con `--dry-run` previo.
+- Si no hace falta release QA completo, se deben ejecutar solo los `safe_*` puntuales necesarios.
 
 Script recomendado:
 
