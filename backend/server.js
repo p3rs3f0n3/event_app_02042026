@@ -110,6 +110,58 @@ const appendEmailDeliveryMetadata = (record, emailDelivery) => ({
   emailDelivery,
 });
 
+const formatCsvDate = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toISOString();
+};
+
+const escapeCsvValue = (value) => {
+  const normalized = String(value ?? '');
+  if (!/[",\n\r]/.test(normalized)) {
+    return normalized;
+  }
+
+  return `"${normalized.replace(/"/g, '""')}"`;
+};
+
+const buildCsv = ({ headers, rows }) => {
+  const csvHeader = headers.map((header) => escapeCsvValue(header.label)).join(',');
+  const csvRows = (Array.isArray(rows) ? rows : []).map((row) => headers
+    .map((header) => escapeCsvValue(row?.[header.key]))
+    .join(','));
+
+  return `\uFEFF${[csvHeader, ...csvRows].join('\n')}`;
+};
+
+const resolveAdminActor = async (req, res) => {
+  const actorUserId = Number(req.query?.actorUserId);
+  if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
+    badRequest(res, 'El actor administrativo es obligatorio');
+    return null;
+  }
+
+  const actor = await req.app.locals.repository.findUserById(actorUserId);
+  if (!actor) {
+    res.status(404).json({ message: 'Usuario administrador no encontrado' });
+    return null;
+  }
+
+  if (String(actor.role || '').toUpperCase() !== 'ADMIN') {
+    res.status(403).json({ message: 'No tienes permisos para exportar listados administrativos' });
+    return null;
+  }
+
+  return actor;
+};
+
 const sendProfileWelcomeEmail = async (req, { email, recipientName, roleLabel, username, password }) => {
   return req.app.locals.welcomeEmailService.sendWelcomeCredentialsEmail({
     to: email,
@@ -761,6 +813,68 @@ app.post('/api/admin/staff/:id/inactivate', asyncHandler(async (req, res) => {
     ...result,
     auditLogs: await req.app.locals.repository.getAuditLogsForEntity({ entityType: 'staff', entityId: result.id, limit: 10 }),
   });
+}));
+
+app.get('/api/export/coordinators', asyncHandler(async (req, res) => {
+  const actor = await resolveAdminActor(req, res);
+  if (!actor) {
+    return null;
+  }
+
+  const coordinators = await req.app.locals.repository.getAdminCoordinators();
+  const csvContent = buildCsv({
+    headers: [
+      { key: 'fullName', label: 'nombre' },
+      { key: 'username', label: 'usuario' },
+      { key: 'cedula', label: 'cedula' },
+      { key: 'city', label: 'ciudad' },
+      { key: 'email', label: 'email' },
+      { key: 'phone', label: 'telefono' },
+      { key: 'whatsappPhone', label: 'whatsapp' },
+      { key: 'status', label: 'estado' },
+      { key: 'createdAt', label: 'fecha_creacion' },
+    ],
+    rows: (Array.isArray(coordinators) ? coordinators : []).map((coordinator) => ({
+      ...coordinator,
+      status: coordinator?.isActive === false ? 'INACTIVO' : 'ACTIVO',
+      createdAt: formatCsvDate(coordinator?.createdAt || coordinator?.created_at),
+    })),
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="coordinadores_eventrix.csv"');
+  return res.status(200).send(csvContent);
+}));
+
+app.get('/api/export/staff', asyncHandler(async (req, res) => {
+  const actor = await resolveAdminActor(req, res);
+  if (!actor) {
+    return null;
+  }
+
+  const staff = await req.app.locals.repository.getAdminStaff();
+  const csvContent = buildCsv({
+    headers: [
+      { key: 'fullName', label: 'nombre' },
+      { key: 'cedula', label: 'cedula' },
+      { key: 'city', label: 'ciudad' },
+      { key: 'category', label: 'categoria' },
+      { key: 'sexo', label: 'sexo' },
+      { key: 'phone', label: 'telefono' },
+      { key: 'email', label: 'email' },
+      { key: 'status', label: 'estado' },
+      { key: 'createdAt', label: 'fecha_creacion' },
+    ],
+    rows: (Array.isArray(staff) ? staff : []).map((staffMember) => ({
+      ...staffMember,
+      status: staffMember?.isActive === false ? 'INACTIVO' : 'ACTIVO',
+      createdAt: formatCsvDate(staffMember?.createdAt || staffMember?.created_at),
+    })),
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="staff_eventrix.csv"');
+  return res.status(200).send(csvContent);
 }));
 
 app.get('/api/colombia-cities', asyncHandler(async (req, res) => {

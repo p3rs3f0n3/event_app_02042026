@@ -115,6 +115,18 @@ export const createAdminStaffCategory = async (name) => withApiErrorHandling(asy
 export const createAdminStaff = async (data) => withApiErrorHandling(async () => (await getAPI().post('/admin/staff', data)).data);
 export const updateAdminStaff = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/staff/${id}`, data)).data);
 export const inactivateAdminStaff = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/staff/${id}/inactivate`, data)).data);
+export const exportAdminCoordinatorsCsv = async ({ actorUserId }) => withApiErrorHandling(async () => (
+  await getAPI().get('/export/coordinators', {
+    params: { actorUserId },
+    responseType: 'text',
+  })
+).data);
+export const exportAdminStaffCsv = async ({ actorUserId }) => withApiErrorHandling(async () => (
+  await getAPI().get('/export/staff', {
+    params: { actorUserId },
+    responseType: 'text',
+  })
+).data);
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
 export const addColombiaCity = async (name) => withApiErrorHandling(async () => (await getAPI().post('/colombia-cities', { name })).data);
 export const createEvent = async (data) => withApiErrorHandling(async () => (await getAPI().post('/events', data)).data);

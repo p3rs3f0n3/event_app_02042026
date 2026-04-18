@@ -278,16 +278,17 @@ class PostgresEventAppRepository {
   async findUserById(id) {
     const result = await query(
       `
-        SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email,
-               is_active AS "isActive", terms_accepted AS "termsAccepted", terms_accepted_at AS "termsAcceptedAt"
-        FROM users
-        WHERE id = $1
+        SELECT u.id, u.username, u.full_name AS "fullName", u.phone, u.whatsapp_phone AS "whatsappPhone", u.email,
+               r.code AS role, u.is_active AS "isActive", u.terms_accepted AS "termsAccepted", u.terms_accepted_at AS "termsAcceptedAt"
+        FROM users u
+        INNER JOIN roles r ON r.id = u.role_id
+        WHERE u.id = $1
         LIMIT 1
       `,
       [Number(id)],
     );
 
-    return result.rows[0] || null;
+    return result.rows[0] ? sanitizeUserRecord(result.rows[0]) : null;
   }
 
   async acceptUserTerms({ userId }) {

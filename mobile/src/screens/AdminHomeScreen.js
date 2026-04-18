@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { APP_DISPLAY_NAME } from '../config/appMetadata';
 
@@ -23,6 +23,7 @@ import {
   getAdminExecutives,
   getAdminStaff,
   getColombiaCities,
+  getBaseUrl,
   updateAdminClient,
   updateAdminCoordinator,
   updateAdminExecutive,
@@ -31,6 +32,7 @@ import {
 import UserProfileCard from '../components/UserProfileCard';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, getResponsiveTokens, SHADOWS } from '../theme/tokens';
+import { downloadFile } from '../utils/downloadFile';
 import { useResponsiveMetrics } from '../utils/responsive';
 import { getUserDisplayName } from '../utils/user';
 
@@ -374,6 +376,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
   const [checkingExecutiveCedula, setCheckingExecutiveCedula] = useState(false);
   const [checkingCoordinatorCedula, setCheckingCoordinatorCedula] = useState(false);
   const [checkingStaffCedula, setCheckingStaffCedula] = useState(false);
+  const [exportingList, setExportingList] = useState(null);
   const [feedback, setFeedback] = useState({ tone: 'muted', message: '' });
   const [showCityModal, setShowCityModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -458,6 +461,69 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       setLoading(false);
     }
   }, [applyFeedback]);
+
+  const exportAdminListCsv = useCallback(async ({ endpointPath, fileName, label, action = 'share' }) => {
+    const actorUserId = Number(user?.id);
+    if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
+      applyFeedback('error', 'No pudimos identificar al administrador que solicita la descarga. Vuelve a iniciar sesión.');
+      return;
+    }
+
+    const baseUrl = getBaseUrl();
+    if (!baseUrl) {
+      applyFeedback('error', 'Primero configura la URL de backend para poder descargar el listado.');
+      return;
+    }
+
+    const exportKey = `${fileName}:${action}`;
+    setExportingList(exportKey);
+    try {
+      const queryPrefix = endpointPath.includes('?') ? '&' : '?';
+      const response = await downloadFile({
+        baseUrl,
+        endpointPath: `${endpointPath}${queryPrefix}actorUserId=${encodeURIComponent(String(actorUserId))}`,
+        filename: fileName,
+        mimeType: 'text/csv',
+        dialogTitle: `Listado de ${label}`,
+        action,
+      });
+
+      if (action === 'save') {
+        applyFeedback('success', `Listado de ${label} guardado correctamente en la carpeta seleccionada.`);
+      } else if (response.shareAvailable) {
+        applyFeedback('success', `Listado de ${label} descargado correctamente.`);
+      } else {
+        applyFeedback('warning', `Listado de ${label} descargado en ${response.uri}.`);
+      }
+    } catch (error) {
+      applyFeedback(
+        'error',
+        typeof error?.message === 'string'
+          ? error.message
+          : `No se pudo descargar el listado de ${label}. Revisa tu conexión e intenta nuevamente.`,
+      );
+    } finally {
+      setExportingList(null);
+    }
+  }, [applyFeedback, user?.id]);
+
+  const handleExportCoordinators = useCallback(async (action = 'share') => {
+    await exportAdminListCsv({
+      endpointPath: '/export/coordinators',
+      fileName: 'coordinadores_eventrix.csv',
+      label: 'coordinadores',
+      action,
+    });
+  }, [exportAdminListCsv]);
+
+  const handleExportStaff = useCallback(async (action = 'share') => {
+    await exportAdminListCsv({
+      endpointPath: '/export/staff',
+      fileName: 'staff_eventrix.csv',
+      label: 'staff',
+      action,
+    });
+  }, [exportAdminListCsv]);
 
   useEffect(() => {
     loadAll();
@@ -1555,6 +1621,24 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <StatusBadge label={isEditingCoordinator ? 'Modo actualización' : 'Modo alta'} tone={isEditingCoordinator ? 'warning' : 'info'} />
         </View>
         <Text style={styles.helperText}>{isEditingCoordinator ? 'Estás editando un coordinador existente. Puedes actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Comienza por la cédula. La verificamos y, si ya existe, autocompletamos la ficha. En alta, todos los campos visibles son obligatorios.'}</Text>
+        <View style={styles.exportActionsRow}>
+          <AppButton
+            title={exportingList === 'coordinadores_eventrix.csv:share' ? 'PREPARANDO...' : 'COMPARTIR LISTADO'}
+            variant="secondary"
+            style={styles.exportActionButton}
+            onPress={() => handleExportCoordinators('share')}
+            disabled={Boolean(exportingList) || saving}
+          />
+          {Platform.OS === 'android' ? (
+            <AppButton
+              title={exportingList === 'coordinadores_eventrix.csv:save' ? 'GUARDANDO...' : 'GUARDAR EN CARPETA'}
+              variant="secondary"
+              style={styles.exportActionButton}
+              onPress={() => handleExportCoordinators('save')}
+              disabled={Boolean(exportingList) || saving}
+            />
+          ) : null}
+        </View>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
             <InputRow label={`Cédula${!isEditingCoordinator ? ' *' : ''}`} value={coordinatorForm.cedula} onChangeText={handleCoordinatorCedulaChange} placeholder="Documento" />
@@ -1697,6 +1781,24 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <StatusBadge label={isEditingStaff ? 'Modo actualización' : 'Modo alta'} tone={isEditingStaff ? 'warning' : 'info'} />
         </View>
         <Text style={styles.helperText}>{isEditingStaff ? 'Estás editando una persona de staff existente. Puedes actualizar cualquier dato recuperado y dejar trazabilidad del cambio.' : 'Comienza por la cédula. La verificamos y, si ya existe, autocompletamos la ficha.'}</Text>
+        <View style={styles.exportActionsRow}>
+          <AppButton
+            title={exportingList === 'staff_eventrix.csv:share' ? 'PREPARANDO...' : 'COMPARTIR LISTADO'}
+            variant="secondary"
+            style={styles.exportActionButton}
+            onPress={() => handleExportStaff('share')}
+            disabled={Boolean(exportingList) || saving}
+          />
+          {Platform.OS === 'android' ? (
+            <AppButton
+              title={exportingList === 'staff_eventrix.csv:save' ? 'GUARDANDO...' : 'GUARDAR EN CARPETA'}
+              variant="secondary"
+              style={styles.exportActionButton}
+              onPress={() => handleExportStaff('save')}
+              disabled={Boolean(exportingList) || saving}
+            />
+          ) : null}
+        </View>
         <View style={styles.lookupRow}>
           <View style={styles.lookupInputWrap}>
             <InputRow label="Cédula" value={staffForm.cedula} onChangeText={handleStaffCedulaChange} placeholder="Documento" />
@@ -2097,6 +2199,8 @@ const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   categoryOptionCode: { color: palette.textMuted, fontSize: tokens.typography.caption },
   formActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
   formActionButton: { flex: 1 },
+  exportActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm, marginTop: tokens.spacing.xs },
+  exportActionButton: { flex: 1 },
   inactivateButton: { marginTop: tokens.spacing.xs },
   inlineNotice: {
     borderRadius: tokens.radii.md,
