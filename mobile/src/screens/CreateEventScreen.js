@@ -25,6 +25,36 @@ const getClientDescription = (client) => [client?.username ? `@${client.username
 
 const getClientLabel = (client) => client?.razonSocial || client?.fullName || client?.contactFullName || '';
 
+const getCreateEventErrorPresentation = (error) => {
+  const message = error?.message || error?.response?.data?.message || 'No se pudo conectar al API';
+
+  if (error?.origin === 'api-validation') {
+    return {
+      title: 'Validación del servidor',
+      message,
+    };
+  }
+
+  if (error?.origin === 'backend') {
+    return {
+      title: 'Error del servidor',
+      message,
+    };
+  }
+
+  if (error?.origin === 'network') {
+    return {
+      title: 'Error de conexión',
+      message,
+    };
+  }
+
+  return {
+    title: 'Error',
+    message,
+  };
+};
+
 const findMatchingClient = (clients, eventLike) => {
   const explicitClientId = Number(eventLike?.clientUserId);
   if (Number.isInteger(explicitClientId) && explicitClientId > 0) {
@@ -465,8 +495,8 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     if (new Date(eventData.endDate) < minimumEndDate) {
       Alert.alert('Fecha inválida', 'La fecha fin no puede ser anterior a la fecha de inicio'); return false;
     }
-    if (new Date(eventData.endDate) <= new Date(eventData.startDate)) {
-      Alert.alert('Fecha Inválida', 'La fecha fin debe ser posterior'); return false;
+    if (new Date(eventData.endDate) < new Date(eventData.startDate)) {
+      Alert.alert('Fecha inválida', 'La fecha fin no puede ser anterior a la fecha de inicio'); return false;
     }
     return true;
   };
@@ -478,7 +508,7 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     if (currentPoint.phone.length > 10) {
       return Alert.alert('Error', 'El teléfono de contacto no puede superar 10 dígitos');
     }
-    if (new Date(currentPoint.endTime).getTime() <= new Date(currentPoint.startTime).getTime()) {
+    if (getUtcMinutes(currentPoint.endTime) <= getUtcMinutes(currentPoint.startTime)) {
       return Alert.alert('Error', 'Hora fin debe ser posterior a inicio');
     }
     const normalizedPoint = {
@@ -534,7 +564,19 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       const payload = { ...eventData, createdByUserId: user?.id, cities: finalCities };
       if (eventToEdit) await updateEvent(eventToEdit.id, payload); else await createEvent(payload);
       Alert.alert('Éxito', 'Evento registrado'); onBack();
-    } catch (e) { Alert.alert('Error', e?.response?.data?.message || 'No se pudo conectar al API'); }
+    } catch (error) {
+      const presentation = getCreateEventErrorPresentation(error);
+
+      console.error('❌ Create event failed', {
+        action: eventToEdit ? 'update-event' : 'create-event',
+        origin: error?.origin || 'unknown',
+        status: error?.status || error?.response?.status || null,
+        message: error?.message || null,
+        backendMessage: error?.response?.data?.message || null,
+      });
+
+      Alert.alert(presentation.title, presentation.message);
+    }
   };
 
   const validateAvailabilityContext = () => {

@@ -10,6 +10,14 @@ const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '
 const normalizeEmail = (value) => normalizeString(value).toLowerCase();
 const normalizePhoneDigits = (value) => String(value || '').replace(/\D/g, '');
 const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
+const getUtcMinutes = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return (date.getUTCHours() * 60) + date.getUTCMinutes();
+};
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 const isValidEmail = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const STAFF_MEASUREMENT_PATTERN = /^\d{1,3}([.,]\d{1,2})?$/;
@@ -85,7 +93,7 @@ const validateEventPayload = (payload) => {
   }
   if (!isValidIdValue(createdByUserId)) return 'El usuario creador del evento es requerido';
   if (!isValidDateValue(startDate) || !isValidDateValue(endDate)) return 'Las fechas del evento son inválidas';
-  if (new Date(endDate).getTime() <= new Date(startDate).getTime()) return 'La fecha fin debe ser posterior al inicio';
+  if (new Date(endDate).getTime() < new Date(startDate).getTime()) return 'La fecha fin no puede ser anterior al inicio';
   if (!Array.isArray(cities) || cities.length === 0) return 'El evento debe tener al menos una ciudad';
 
   for (const city of cities) {
@@ -107,7 +115,7 @@ const validateEventPayload = (payload) => {
         return 'Cada punto debe tener un coordinador válido';
       }
       if (!isValidDateValue(point.startTime) || !isValidDateValue(point.endTime)) return 'Los horarios de cada punto son obligatorios';
-      if (new Date(point.endTime).getTime() <= new Date(point.startTime).getTime()) return 'La hora fin de cada punto debe ser posterior al inicio';
+      if (getUtcMinutes(point.endTime) <= getUtcMinutes(point.startTime)) return 'La hora fin de cada punto debe ser posterior al inicio';
       if (point.assignedStaff && !Array.isArray(point.assignedStaff)) return 'El personal asignado debe ser una lista';
     }
   }

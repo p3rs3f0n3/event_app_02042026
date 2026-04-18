@@ -10,6 +10,12 @@ mobile/web-build/
 mobile/expo-env.d.ts
 mobile/.kotlin/
 
+documentacion/
+
+consolas.bat
+
+tas-done-alert.ps1
+
 .DS_Store
 npm-debug.*
 yarn-debug.*

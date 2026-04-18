@@ -40,7 +40,7 @@ const hasDateRangeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
     return false;
   }
 
-  return normalizedLeftStart.getTime() < normalizedRightEnd.getTime() && normalizedRightStart.getTime() < normalizedLeftEnd.getTime();
+  return normalizedLeftStart.getTime() <= normalizedRightEnd.getTime() && normalizedRightStart.getTime() <= normalizedLeftEnd.getTime();
 };
 
 const normalizePointOriginalRef = (value = {}) => {

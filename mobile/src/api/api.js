@@ -17,11 +17,27 @@ const extractApiErrorMessage = (error) => {
   return 'No se pudo conectar con el servicio';
 };
 
+const createApiError = (error) => {
+  const message = extractApiErrorMessage(error);
+  const status = Number(error?.response?.status) || null;
+  const apiError = new Error(message);
+
+  apiError.name = 'ApiRequestError';
+  apiError.status = status;
+  apiError.origin = status
+    ? (status >= 500 ? 'backend' : 'api-validation')
+    : (error?.request ? 'network' : 'client');
+  apiError.response = error?.response;
+  apiError.cause = error;
+
+  return apiError;
+};
+
 const withApiErrorHandling = async (request) => {
   try {
     return await request();
   } catch (error) {
-    throw extractApiErrorMessage(error);
+    throw createApiError(error);
   }
 };
 
@@ -100,9 +116,9 @@ export const createAdminStaff = async (data) => withApiErrorHandling(async () =>
 export const updateAdminStaff = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/admin/staff/${id}`, data)).data);
 export const inactivateAdminStaff = async (id, data) => withApiErrorHandling(async () => (await getAPI().post(`/admin/staff/${id}/inactivate`, data)).data);
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
-export const addColombiaCity = async (name) => (await getAPI().post('/colombia-cities', { name })).data;
-export const createEvent = async (data) => (await getAPI().post('/events', data)).data;
-export const updateEvent = async (id, data) => (await getAPI().put(`/events/${id}`, data)).data;
+export const addColombiaCity = async (name) => withApiErrorHandling(async () => (await getAPI().post('/colombia-cities', { name })).data);
+export const createEvent = async (data) => withApiErrorHandling(async () => (await getAPI().post('/events', data)).data);
+export const updateEvent = async (id, data) => withApiErrorHandling(async () => (await getAPI().put(`/events/${id}`, data)).data);
 export const inactivateEvent = async (id, data) => (await getAPI().post(`/events/${id}/inactivate`, data)).data;
 export const addCoordinatorEventPhoto = async (id, data) => (await getAPI().post(`/events/${id}/photos`, data)).data;
 export const addCoordinatorEventReport = async (id, data) => (await getAPI().post(`/events/${id}/reports`, data)).data;

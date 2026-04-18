@@ -47,6 +47,32 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
+const summarizeCreateEventPayload = (payload = {}) => ({
+  name: normalizeString(payload?.name),
+  createdByUserId: Number(payload?.createdByUserId) || null,
+  clientUserId: Number(payload?.clientUserId) || null,
+  cityCount: Array.isArray(payload?.cities) ? payload.cities.length : 0,
+  pointCount: Array.isArray(payload?.cities)
+    ? payload.cities.reduce((total, city) => total + (Array.isArray(city?.points) ? city.points.length : 0), 0)
+    : 0,
+  startDate: payload?.startDate || null,
+  endDate: payload?.endDate || null,
+});
+
+const serializeErrorForLog = (error) => ({
+  name: error?.name || 'Error',
+  message: error?.message || 'Sin mensaje',
+  code: error?.code || null,
+  detail: error?.detail || null,
+  constraint: error?.constraint || null,
+  table: error?.table || null,
+  column: error?.column || null,
+  where: error?.where || null,
+  routine: error?.routine || null,
+  operation: error?.operation || null,
+  stack: typeof error?.stack === 'string' ? error.stack.split('\n').slice(0, 5).join('\n') : null,
+});
+
 const normalizeAdminPhonePayload = (payload = {}) => ({
   phone: normalizePhoneDigits(payload.phone).slice(0, 10),
   whatsappPhone: normalizePhoneDigits(payload.whatsappPhone).slice(0, 10),
@@ -803,10 +829,19 @@ app.post('/api/events', asyncHandler(async (req, res) => {
     return badRequest(res, assignmentConflict);
   }
 
-  const newE = await req.app.locals.repository.createEvent(stripDraftAssignmentMetadata({
-    ...req.body,
-    image: normalizeEventImagePayload(req.body.image),
-  }));
+  let newE;
+
+  try {
+    newE = await req.app.locals.repository.createEvent(stripDraftAssignmentMetadata({
+      ...req.body,
+      image: normalizeEventImagePayload(req.body.image),
+    }));
+  } catch (error) {
+    error.operation = 'create-event';
+    error.createEventSummary = summarizeCreateEventPayload(req.body);
+    throw error;
+  }
+
   return res.status(201).json(newE);
 }));
 app.put('/api/events/:id', asyncHandler(async (req, res) => {
@@ -979,7 +1014,14 @@ app.get('/api/health', asyncHandler(async (req, res) => {
 }));
 
 app.use((error, req, res, next) => {
-  console.error('❌ API error', error);
+  console.error('❌ API error', {
+    request: {
+      method: req.method,
+      path: req.originalUrl,
+    },
+    error: serializeErrorForLog(error),
+    createEventSummary: error?.createEventSummary || null,
+  });
 
   if (res.headersSent) {
     return next(error);

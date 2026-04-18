@@ -125,23 +125,23 @@ const InputRow = ({
   return (
     <View style={sharedStyles.fieldWrap}>
       <Text style={sharedStyles.fieldLabel}>{label}</Text>
-    {onPress ? (
-      <Pressable style={sharedStyles.inputShell} onPress={onPress}>
-        <Text style={[sharedStyles.inputText, !value && sharedStyles.placeholderText]}>{value || placeholder || 'Seleccionar'}</Text>
-      </Pressable>
-    ) : (
-      <TextInput
-        style={[sharedStyles.inputShell, sharedStyles.textInput, multiline && sharedStyles.textArea]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
-        multiline={multiline}
-        editable={editable}
-        keyboardType={keyboardType}
-        maxLength={maxLength}
-      />
-    )}
+      {onPress ? (
+        <Pressable style={sharedStyles.inputShell} onPress={onPress}>
+          <Text style={[sharedStyles.inputText, !value && sharedStyles.placeholderText]}>{value || placeholder || 'Seleccionar'}</Text>
+        </Pressable>
+      ) : (
+        <TextInput
+          style={[sharedStyles.inputShell, sharedStyles.textInput, multiline && sharedStyles.textArea]}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor="#94A3B8"
+          multiline={multiline}
+          editable={editable}
+          keyboardType={keyboardType}
+          maxLength={maxLength}
+        />
+      )}
     </View>
   );
 };
@@ -1873,7 +1873,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
 
       <SurfaceCard style={styles.heroCard}>
         <Text style={styles.cardTitle}>Control administrativo con persistencia real</Text>
-        <Text style={styles.heroText}>El módulo valida duplicados por identificador principal, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar. Inactivos actuales: {inactiveCounts.clients} clientes, {inactiveCounts.executives} ejecutivos, {inactiveCounts.coordinators} coordinadores y {inactiveCounts.staff} staff.</Text>
+        <Text style={styles.heroText}>El módulo valida duplicados por identificador principal, permite pasar a modo actualización con historial visible y ahora también inactiva sin borrar.</Text>
       </SurfaceCard>
 
       {feedback.message ? (
