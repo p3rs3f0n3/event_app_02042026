@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useEffect } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Check, LockKeyhole, FileText, ShieldCheck, UserRound, Wifi } from 'lucide-react-native';
+import { LockKeyhole, FileText, ShieldCheck, UserRound, Wifi } from 'lucide-react-native';
 
 import { acceptTerms, getBaseUrl, login, setBaseUrl } from '../api/api';
 import BrandMark from '../components/BrandMark';
@@ -259,9 +259,6 @@ const LoginScreen = ({ onLogin, appConfig }) => {
             </ScrollView>
 
             <View style={styles.termsStatusRow}>
-              <View style={[styles.checkbox, pendingTermsUser?.termsAccepted && styles.checkboxActive]}>
-                {pendingTermsUser?.termsAccepted ? <Check color="#FFFFFF" size={14} strokeWidth={3} /> : null}
-              </View>
               <Text style={styles.termsStatusText}>{pendingTermsUser?.termsAccepted ? 'Ya fueron aceptados para esta cuenta.' : `La cuenta ${pendingTermsUser?.username || ''} aún no aceptó los términos. Debes confirmarlos para continuar.`}</Text>
             </View>
 
@@ -340,20 +337,6 @@ const createStyles = (palette, metrics, tokens) => StyleSheet.create({
     borderColor: palette.inputBorder,
     padding: tokens.spacing.sm + metrics.spacing(2),
     backgroundColor: '#FFFFFF',
-  },
-  checkbox: {
-    width: metrics.size(22, 0.9),
-    height: metrics.size(22, 0.9),
-    borderRadius: metrics.radius(6, 0.5),
-    borderWidth: 1.5,
-    borderColor: palette.inputBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  checkboxActive: {
-    backgroundColor: palette.hero,
-    borderColor: palette.hero,
   },
   termsActionCopy: { flex: 1, gap: 2 },
   termsActionTitle: { color: COLORS.brand.body, fontSize: tokens.typography.label, fontWeight: '700' },
