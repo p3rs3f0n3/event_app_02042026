@@ -13,4 +13,4 @@ for ($index = 0; $index -lt $safeCount; $index += 1) {
     Start-Sleep -Milliseconds 120
 }
 
-[System.Windows.Forms.MessageBox]::Show($Message, 'Event App', 'OK', 'Information') | Out-Null
+[System.Windows.Forms.MessageBox]::Show($Message, 'Eventrix', 'OK', 'Information') | Out-Null
