@@ -14,6 +14,104 @@ const getCoordinatorDisplayName = (coordinator) => coordinator?.name || coordina
 const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
 const MAX_EVENT_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const getEventImagePreviewUri = (image) => (typeof image === 'string' ? image : image?.uri || null);
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const parseDateValue = (value) => {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatTimeLabel = (value) => {
+  const parsed = parseDateValue(value);
+  if (!parsed) {
+    return 'Sin dato';
+  }
+
+  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatDateLabel = (value) => {
+  const parsed = parseDateValue(value);
+  if (!parsed) {
+    return 'Sin fecha';
+  }
+
+  return parsed.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+};
+
+const normalizeEventTimeRange = (startTime, endTime) => {
+  const startDate = parseDateValue(startTime);
+  const endDate = parseDateValue(endTime);
+
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  const startMinutes = (startDate.getUTCHours() * 60) + startDate.getUTCMinutes();
+  const endMinutes = (endDate.getUTCHours() * 60) + endDate.getUTCMinutes();
+
+  if (startMinutes === endMinutes) {
+    return { startDate, endDate, durationMinutes: 0, sameTime: true, isValid: false };
+  }
+
+  const normalizedEndDate = new Date(endDate.getTime());
+  if (normalizedEndDate.getTime() <= startDate.getTime()) {
+    normalizedEndDate.setTime(normalizedEndDate.getTime() + DAY_MS);
+  }
+
+  const durationMinutes = (normalizedEndDate.getTime() - startDate.getTime()) / 60000;
+
+  return {
+    startDate,
+    endDate: normalizedEndDate,
+    durationMinutes,
+    sameTime: false,
+    isValid: durationMinutes > 0 && durationMinutes <= 1440,
+    crossesMidnight: endMinutes < startMinutes,
+  };
+};
+
+const getDailyTimeSegments = (startTime, endTime) => {
+  const startDate = parseDateValue(startTime);
+  const endDate = parseDateValue(endTime);
+
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  const startMinutes = (startDate.getUTCHours() * 60) + startDate.getUTCMinutes();
+  const endMinutes = (endDate.getUTCHours() * 60) + endDate.getUTCMinutes();
+
+  if (startMinutes === endMinutes) {
+    return null;
+  }
+
+  return endMinutes > startMinutes
+    ? [{ start: startMinutes, end: endMinutes }]
+    : [
+      { start: startMinutes, end: 1440 },
+      { start: 0, end: endMinutes },
+    ];
+};
+
+const hasTimeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
+  const leftSegments = getDailyTimeSegments(leftStart, leftEnd);
+  const rightSegments = getDailyTimeSegments(rightStart, rightEnd);
+
+  if (!leftSegments || !rightSegments) {
+    return false;
+  }
+
+  return leftSegments.some((leftSegment) => rightSegments.some((rightSegment) => leftSegment.start < rightSegment.end && rightSegment.start < leftSegment.end));
+};
+
+const getEventSchedulePreview = ({ startDate, endDate, startTime, endTime }) => {
+  if (!startDate || !endDate || !startTime || !endTime) {
+    return null;
+  }
+
+  return `Del ${formatDateLabel(startDate)} al ${formatDateLabel(endDate)}, de ${formatTimeLabel(startTime)} a ${formatTimeLabel(endTime)}`;
+};
 
 const startOfToday = () => {
   const today = new Date();
@@ -160,28 +258,6 @@ const buildInitialEventData = (eventToEdit = null) => ({
   cities: attachOriginalRefsToCities(eventToEdit?.cities, eventToEdit?.id),
 });
 
-const getUtcMinutes = (value) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return (date.getUTCHours() * 60) + date.getUTCMinutes();
-};
-
-const hasTimeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
-  const leftStartMinutes = getUtcMinutes(leftStart);
-  const leftEndMinutes = getUtcMinutes(leftEnd);
-  const rightStartMinutes = getUtcMinutes(rightStart);
-  const rightEndMinutes = getUtcMinutes(rightEnd);
-
-  if ([leftStartMinutes, leftEndMinutes, rightStartMinutes, rightEndMinutes].some((value) => value === null)) {
-    return false;
-  }
-
-  return leftStartMinutes < rightEndMinutes && rightStartMinutes < leftEndMinutes;
-};
-
 const InputField = ({ styles, label, value, onChangeText, placeholder, editable = true, onPress, keyboardType = 'default', maxLength, autoCapitalize = 'sentences' }) => (
   <View style={styles.inputContainer}>
     <Text style={styles.label}>{label}</Text>
@@ -253,6 +329,21 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     [apiLists.clients, eventData.clientId, eventData.clientUserId],
   );
   const eventImagePreviewUri = useMemo(() => getEventImagePreviewUri(eventData.image), [eventData.image]);
+  const editingEventSchedulePreview = useMemo(() => {
+    if (!isEditingEvent) {
+      return null;
+    }
+
+    const firstCity = Array.isArray(eventData.cities) ? eventData.cities[0] : null;
+    const firstPoint = Array.isArray(firstCity?.points) ? firstCity.points[0] : null;
+
+    return getEventSchedulePreview({
+      startDate: eventData.startDate,
+      endDate: eventData.endDate,
+      startTime: firstPoint?.startTime,
+      endTime: firstPoint?.endTime,
+    });
+  }, [eventData.cities, eventData.endDate, eventData.startDate, isEditingEvent]);
 
   const resolvedCityName = (isNewCity ? manualCityName : currentCityName).trim();
   const filteredCategories = useMemo(() => {
@@ -501,6 +592,27 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     return true;
   };
 
+  const validatePointSchedule = (startTime, endTime) => {
+    const normalizedRange = normalizeEventTimeRange(startTime, endTime);
+
+    if (!normalizedRange) {
+      Alert.alert('Error', 'Defina la hora de inicio y finalización');
+      return null;
+    }
+
+    if (normalizedRange.sameTime) {
+      Alert.alert('Error', 'La hora fin no puede ser igual a la hora de inicio');
+      return null;
+    }
+
+    if (!normalizedRange.isValid) {
+      Alert.alert('Error', 'El bloque horario no puede superar 24 horas');
+      return null;
+    }
+
+    return normalizedRange;
+  };
+
   const handleAddPoint = () => {
     if (!currentPoint.establishment || !currentPoint.address || !currentPoint.contact || !currentPoint.phone || !currentPoint.coordinator || !currentPoint.startTime || !currentPoint.endTime) {
       return Alert.alert('Error', 'Complete establecimiento, dirección, contacto, teléfono, horarios y coordinador');
@@ -508,12 +620,15 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
     if (currentPoint.phone.length > 10) {
       return Alert.alert('Error', 'El teléfono de contacto no puede superar 10 dígitos');
     }
-    if (getUtcMinutes(currentPoint.endTime) <= getUtcMinutes(currentPoint.startTime)) {
-      return Alert.alert('Error', 'Hora fin debe ser posterior a inicio');
+    const normalizedSchedule = validatePointSchedule(currentPoint.startTime, currentPoint.endTime);
+    if (!normalizedSchedule) {
+      return;
     }
     const normalizedPoint = {
       ...currentPoint,
       phone: normalizePhoneValue(currentPoint.phone),
+      startTime: normalizedSchedule.startDate,
+      endTime: normalizedSchedule.endDate,
     };
 
     if (editingPointIndex !== null) {
@@ -561,7 +676,27 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
           if (editingCityIndex !== null) finalCities[editingCityIndex] = { name: cityName, points: cityPoints }; else finalCities.push({ name: cityName, points: cityPoints });
       }
       if (finalCities.length === 0) return Alert.alert('Error', 'El evento debe tener contenido');
-      const payload = { ...eventData, createdByUserId: user?.id, cities: finalCities };
+      const payload = {
+        ...eventData,
+        createdByUserId: user?.id,
+        cities: finalCities.map((city) => ({
+          ...city,
+          points: Array.isArray(city.points)
+            ? city.points.map((point) => {
+              const normalizedSchedule = normalizeEventTimeRange(point.startTime, point.endTime);
+              if (!normalizedSchedule || !normalizedSchedule.isValid) {
+                return point;
+              }
+
+              return {
+                ...point,
+                startTime: normalizedSchedule.startDate.toISOString(),
+                endTime: normalizedSchedule.endDate.toISOString(),
+              };
+            })
+            : [],
+        })),
+      };
       if (eventToEdit) await updateEvent(eventToEdit.id, payload); else await createEvent(payload);
       Alert.alert('Éxito', 'Evento registrado'); onBack();
     } catch (error) {
@@ -603,13 +738,18 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       return;
     }
 
+    const normalizedSchedule = validatePointSchedule(currentPoint.startTime, currentPoint.endTime);
+    if (!normalizedSchedule) {
+      return;
+    }
+
     setLoading(true);
     try {
       const localAvailability = getLocalAvailability();
       const coords = await getCoordinators({
         city: resolvedCityName,
-        startTime: currentPoint.startTime?.toISOString?.() || currentPoint.startTime,
-        endTime: currentPoint.endTime?.toISOString?.() || currentPoint.endTime,
+        startTime: normalizedSchedule.startDate.toISOString(),
+        endTime: normalizedSchedule.endDate.toISOString(),
         eventStartDate: eventData.startDate?.toISOString?.() || eventData.startDate,
         eventEndDate: eventData.endDate?.toISOString?.() || eventData.endDate,
         excludeEventId: currentPoint.__originalRef?.eventId,
@@ -640,6 +780,11 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       return;
     }
 
+    const normalizedSchedule = validatePointSchedule(currentPoint.startTime, currentPoint.endTime);
+    if (!normalizedSchedule) {
+      return;
+    }
+
     setLoading(true);
     try {
       const localAvailability = getLocalAvailability();
@@ -647,8 +792,8 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
       const res = await getStaff({
         city: resolvedCityName,
         category,
-        startTime: currentPoint.startTime?.toISOString?.() || currentPoint.startTime,
-        endTime: currentPoint.endTime?.toISOString?.() || currentPoint.endTime,
+        startTime: normalizedSchedule.startDate.toISOString(),
+        endTime: normalizedSchedule.endDate.toISOString(),
         eventStartDate: eventData.startDate?.toISOString?.() || eventData.startDate,
         eventEndDate: eventData.endDate?.toISOString?.() || eventData.endDate,
         excludeEventId: currentPoint.__originalRef?.eventId,
@@ -763,11 +908,21 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 </>
               ) : null}
             </View>
+            {isEditingEvent ? (
+              <View style={styles.editConfirmationCard}>
+                <Text style={styles.editConfirmationTitle}>Confirmación de edición</Text>
+                <Text style={styles.helperText}>Revisá estos datos antes de continuar. El rango horario se aplicará a todos los días del evento.</Text>
+                <Text style={styles.editConfirmationText}>Fechas: {eventData.startDate?.toLocaleDateString('es-CO') || 'Sin fecha'} → {eventData.endDate?.toLocaleDateString('es-CO') || 'Sin fecha'}</Text>
+                <Text style={styles.editConfirmationText}>{editingEventSchedulePreview || 'Completá el horario para ver el resumen completo.'}</Text>
+                <Text style={styles.editConfirmationText}>Ciudades: {eventData.cities?.length || 0} · Puntos: {eventData.cities?.reduce((total, city) => total + (Array.isArray(city?.points) ? city.points.length : 0), 0) || 0}</Text>
+              </View>
+            ) : null}
              <InputField styles={styles} label="Cliente *" value={selectedClient?.fullName || eventData.client} placeholder="Buscar por NIT o nombre..." editable={false} onPress={() => setShowClientSearch(true)} />
              {selectedClient ? <Text style={styles.helperText}>{getClientDescription(selectedClient)}{selectedClient?.nit ? ` · NIT ${selectedClient.nit}` : ''}</Text> : <Text style={styles.helperText}>Busca clientes desde la base por NIT o nombre.</Text>}
             <InputField styles={styles} label="Nombre de evento *" value={eventData.name} onChangeText={(t) => setEventData({...eventData, name: t})} />
             <TouchableOpacity onPress={() => setShowPicker('start_date')}><InputField styles={styles} label="Inicio *" value={eventData.startDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
             <TouchableOpacity onPress={() => setShowPicker('end_date')}><InputField styles={styles} label="Fin *" value={eventData.endDate?.toLocaleDateString() || 'Calendario...'} editable={false} /></TouchableOpacity>
+            <Text style={styles.helperText}>El horario seleccionado se aplicará a todos los días del evento.</Text>
             <TouchableOpacity style={styles.actionButton} onPress={() => { if (validateEventMetadata()) setStep(2); }}><Text style={styles.actionText}>SIGUIENTE</Text></TouchableOpacity>
             <TouchableOpacity style={styles.actionButton} onPress={onBack}><Text style={styles.actionText}>REGRESAR</Text></TouchableOpacity>
           </View>
@@ -786,13 +941,17 @@ const CreateEventScreen = ({ onBack, user, eventToEdit = null }) => {
                 <Text style={styles.helperText}>Puedes escribir la dirección manualmente, pegar un enlace o abrir una búsqueda externa en Google Maps.</Text>
                 <TouchableOpacity style={styles.secondaryActionButton} onPress={openGoogleMapsSearch}><Text style={styles.secondaryActionText}>BUSCAR EN GOOGLE MAPS</Text></TouchableOpacity>
                 <InputField styles={styles} label="Contacto Punto de Venta *" value={currentPoint.contact} onChangeText={(t) => setCurrentPoint({...currentPoint, contact: t})} />
-                <InputField styles={styles} label="Telefono Contacto *" value={currentPoint.phone} onChangeText={(t) => setCurrentPoint({...currentPoint, phone: normalizePhoneValue(t)})} keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'} maxLength={10} autoCapitalize="none" />
-                <Text style={styles.helperText}>Solo números, máximo 10 dígitos.</Text>
-                  <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
-                 <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
-                 <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{coordinatorButtonText}</Text></TouchableOpacity>
-                 {currentPoint.coordinator ? <Text style={styles.helperText}>Coordinador seleccionado: {getCoordinatorDisplayName(currentPoint.coordinator)}</Text> : null}
-                 {currentPoint.assignedStaff.length ? <Text style={styles.helperText}>Staff asignado: {getAssignedStaffLabel(currentPoint)}</Text> : null}
+                 <InputField styles={styles} label="Telefono Contacto *" value={currentPoint.phone} onChangeText={(t) => setCurrentPoint({...currentPoint, phone: normalizePhoneValue(t)})} keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'} maxLength={10} autoCapitalize="none" />
+                 <Text style={styles.helperText}>Solo números, máximo 10 dígitos.</Text>
+                   <TouchableOpacity onPress={() => setShowPicker('start_time')}><InputField styles={styles} label="Hora Inicio *" value={currentPoint.startTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowPicker('end_time')}><InputField styles={styles} label="Hora Fin *" value={currentPoint.endTime?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Seleccionar...'} editable={false} /></TouchableOpacity>
+                 <Text style={styles.helperText}>El horario seleccionado se aplicará a todos los días del evento.</Text>
+                 {getEventSchedulePreview({ startDate: eventData.startDate, endDate: eventData.endDate, startTime: currentPoint.startTime, endTime: currentPoint.endTime }) ? (
+                   <Text style={styles.schedulePreviewText}>{getEventSchedulePreview({ startDate: eventData.startDate, endDate: eventData.endDate, startTime: currentPoint.startTime, endTime: currentPoint.endTime })}</Text>
+                 ) : null}
+                  <TouchableOpacity style={styles.assignButton} onPress={fetchCoordinatorsForCity}><Text style={styles.assignText}>{coordinatorButtonText}</Text></TouchableOpacity>
+                  {currentPoint.coordinator ? <Text style={styles.helperText}>Coordinador seleccionado: {getCoordinatorDisplayName(currentPoint.coordinator)}</Text> : null}
+                  {currentPoint.assignedStaff.length ? <Text style={styles.helperText}>Staff asignado: {getAssignedStaffLabel(currentPoint)}</Text> : null}
                <TouchableOpacity style={styles.addPointBtn} onPress={handleAddPoint}><Text style={styles.addPointText}>{pointActionText}</Text></TouchableOpacity>
              </View>
              <View style={styles.listPreview}>{cityPoints.map((p, i) => <TouchableOpacity key={i} style={styles.previewRow} onPress={() => (isEditingEvent ? handleSelectPointForEdit(p, i) : setPointInDetail({ point: p, cityName: resolvedCityName }))}><Text style={styles.previewTxt}>✅ {p.establishment}</Text><Text style={styles.previewMeta}>{getPointPreviewSummary(p)}</Text><Text style={styles.previewHint}>{isEditingEvent ? 'Toca para cargar este punto y editarlo' : 'Toca para ver el detalle del punto'}</Text></TouchableOpacity>)}
@@ -975,10 +1134,14 @@ const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   imageActionsTitle: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: 'bold' },
   imageRemoveLink: { alignSelf: 'flex-start', paddingVertical: 4 },
   imageRemoveText: { color: palette.onHero, fontSize: tokens.typography.caption, fontWeight: 'bold', textDecorationLine: 'underline' },
+  editConfirmationCard: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: tokens.radii.sm, padding: tokens.spacing.sm + metrics.spacing(2), marginBottom: tokens.spacing.xs, gap: tokens.spacing.xs, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  editConfirmationTitle: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: '800' },
+  editConfirmationText: { color: palette.onHero, fontSize: tokens.typography.caption, lineHeight: metrics.font(18, 0.8), opacity: 0.9 },
   inputContainer: { marginBottom: metrics.spacing(10) },
   label: { color: palette.onHero, fontSize: tokens.typography.label, marginBottom: 2, fontWeight: 'bold' },
   input: { color: palette.onHero, fontSize: tokens.typography.bodyLg, paddingVertical: metrics.spacing(5, 0.75) },
   helperText: { color: palette.onHero, fontSize: tokens.typography.caption, marginTop: -4, marginBottom: tokens.spacing.xs, opacity: 0.8 },
+  schedulePreviewText: { color: palette.onHero, fontSize: tokens.typography.body, fontWeight: '700', marginTop: metrics.spacing(6), marginBottom: tokens.spacing.xs },
   divider: { height: 1, backgroundColor: palette.onHero, marginBottom: tokens.spacing.xs, opacity: 0.5 },
   pointFrame: { backgroundColor: palette.panel, padding: metrics.spacing(15), borderRadius: tokens.radii.sm, marginVertical: tokens.spacing.xs, borderLeftWidth: 4, borderLeftColor: palette.primaryButton },
   pointTitle: { color: palette.primaryButton, fontSize: metrics.font(15, 0.85), fontWeight: 'bold', marginBottom: metrics.spacing(10) },

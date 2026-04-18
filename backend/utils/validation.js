@@ -1,3 +1,4 @@
+const { normalizeDateTimeRange } = require('./timeRanges');
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const normalizeMeridiemTimeString = (value) => String(value || '')
   .trim()
@@ -10,14 +11,6 @@ const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '
 const normalizeEmail = (value) => normalizeString(value).toLowerCase();
 const normalizePhoneDigits = (value) => String(value || '').replace(/\D/g, '');
 const isValidDateValue = (value) => !Number.isNaN(new Date(value).getTime());
-const getUtcMinutes = (value) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return (date.getUTCHours() * 60) + date.getUTCMinutes();
-};
 const isValidIdValue = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
 const isValidEmail = (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const STAFF_MEASUREMENT_PATTERN = /^\d{1,3}([.,]\d{1,2})?$/;
@@ -115,7 +108,10 @@ const validateEventPayload = (payload) => {
         return 'Cada punto debe tener un coordinador válido';
       }
       if (!isValidDateValue(point.startTime) || !isValidDateValue(point.endTime)) return 'Los horarios de cada punto son obligatorios';
-      if (getUtcMinutes(point.endTime) <= getUtcMinutes(point.startTime)) return 'La hora fin de cada punto debe ser posterior al inicio';
+      const normalizedRange = normalizeDateTimeRange(point.startTime, point.endTime);
+      if (!normalizedRange) return 'Los horarios de cada punto son obligatorios';
+      if (normalizedRange.sameTime) return 'La hora fin de cada punto no puede ser igual a la hora de inicio';
+      if (!normalizedRange.isValid) return 'El bloque horario de cada punto no puede superar 24 horas';
       if (point.assignedStaff && !Array.isArray(point.assignedStaff)) return 'El personal asignado debe ser una lista';
     }
   }

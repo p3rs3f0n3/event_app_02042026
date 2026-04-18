@@ -1,33 +1,11 @@
 const { normalizeString } = require('./validation');
+const { hasTimeOverlap, normalizeEventSchedulePayload } = require('./timeRanges');
 const { resolveEventInactivation } = require('./eventLifecycle');
-
 const normalizeCityName = (value) => normalizeString(value).toLowerCase();
 
 const parseDate = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const getUtcMinutes = (value) => {
-  const date = parseDate(value);
-  if (!date) {
-    return null;
-  }
-
-  return (date.getUTCHours() * 60) + date.getUTCMinutes();
-};
-
-const hasTimeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
-  const leftStartMinutes = getUtcMinutes(leftStart);
-  const leftEndMinutes = getUtcMinutes(leftEnd);
-  const rightStartMinutes = getUtcMinutes(rightStart);
-  const rightEndMinutes = getUtcMinutes(rightEnd);
-
-  if ([leftStartMinutes, leftEndMinutes, rightStartMinutes, rightEndMinutes].some((value) => value === null)) {
-    return false;
-  }
-
-  return leftStartMinutes < rightEndMinutes && rightStartMinutes < leftEndMinutes;
 };
 
 const hasDateRangeOverlap = (leftStart, leftEnd, rightStart, rightEnd) => {
@@ -217,6 +195,7 @@ module.exports = {
   collectScheduledAssignments,
   hasDateRangeOverlap,
   hasTimeOverlap,
+  normalizeEventSchedulePayload,
   normalizePointOriginalRef,
   stripDraftAssignmentMetadata,
   validateDraftAssignments,

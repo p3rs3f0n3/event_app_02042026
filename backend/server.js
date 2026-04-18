@@ -7,6 +7,7 @@ const { createWelcomeEmailService } = require('./utils/mailer');
 const {
   collectScheduledAssignments,
   normalizePointOriginalRef,
+  normalizeEventSchedulePayload,
   stripDraftAssignmentMetadata,
   validateDraftAssignments,
 } = require('./utils/availability');
@@ -930,13 +931,18 @@ app.get('/api/client/events', asyncHandler(async (req, res) => {
   return res.json(await req.app.locals.repository.getClientEvents({ userId }));
 }));
 app.post('/api/events', asyncHandler(async (req, res) => {
-  const validationError = validateEventPayload(req.body);
+  const preparedEventPayload = normalizeEventSchedulePayload(stripDraftAssignmentMetadata({
+    ...req.body,
+    image: normalizeEventImagePayload(req.body.image),
+  }));
+
+  const validationError = validateEventPayload(preparedEventPayload);
   if (validationError) {
     return badRequest(res, validationError);
   }
 
   const assignmentConflict = validateDraftAssignments({
-    draftEvent: req.body,
+    draftEvent: preparedEventPayload,
     existingEvents: await req.app.locals.repository.getEvents(),
   });
   if (assignmentConflict) {
@@ -946,10 +952,7 @@ app.post('/api/events', asyncHandler(async (req, res) => {
   let newE;
 
   try {
-    newE = await req.app.locals.repository.createEvent(stripDraftAssignmentMetadata({
-      ...req.body,
-      image: normalizeEventImagePayload(req.body.image),
-    }));
+    newE = await req.app.locals.repository.createEvent(preparedEventPayload);
   } catch (error) {
     error.operation = 'create-event';
     error.createEventSummary = summarizeCreateEventPayload(req.body);
@@ -972,23 +975,25 @@ app.put('/api/events/:id', asyncHandler(async (req, res) => {
     return badRequest(res, 'El evento está inactivo y no admite edición');
   }
 
-  const validationError = validateEventPayload(req.body);
+  const preparedEventPayload = normalizeEventSchedulePayload(stripDraftAssignmentMetadata({
+    ...req.body,
+    image: normalizeEventImagePayload(req.body.image),
+  }));
+
+  const validationError = validateEventPayload(preparedEventPayload);
   if (validationError) {
     return badRequest(res, validationError);
   }
 
   const assignmentConflict = validateDraftAssignments({
-    draftEvent: req.body,
+    draftEvent: preparedEventPayload,
     existingEvents: await req.app.locals.repository.getEvents(),
   });
   if (assignmentConflict) {
     return badRequest(res, assignmentConflict);
   }
 
-  const updatedEvent = await req.app.locals.repository.updateEvent(req.params.id, stripDraftAssignmentMetadata({
-    ...req.body,
-    image: normalizeEventImagePayload(req.body.image),
-  }));
+  const updatedEvent = await req.app.locals.repository.updateEvent(req.params.id, preparedEventPayload);
   if (updatedEvent) {
     return res.json(updatedEvent);
   }
