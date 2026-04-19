@@ -120,8 +120,8 @@ const buildClientReportHtml = ({ event, report, points }) => `
         <div class="summary-row"><strong>Fin:</strong> ${escapeHtml(formatDate(event.endDate))}</div>
         <div class="summary-row"><strong>Ciudades:</strong> ${escapeHtml(event.cities?.length || 0)}</div>
         <div class="summary-row"><strong>Puntos operativos:</strong> ${escapeHtml(points || 0)}</div>
-        <div class="summary-row"><strong>Ejecutivo:</strong> ${escapeHtml(event.executiveContact?.fullName || 'No informado')}</div>
-        <div class="summary-row"><strong>Email ejecutivo:</strong> ${escapeHtml(event.executiveContact?.email || 'Sin email')}</div>
+        <div class="summary-row"><strong>Ejecutivo:</strong> ${escapeHtml(event.executive?.name || event.executive?.fullName || 'No informado')}</div>
+        <div class="summary-row"><strong>Email ejecutivo:</strong> ${escapeHtml(event.executive?.email || 'Sin email')}</div>
       </div>
 
       ${renderSection('Resumen ejecutivo', report.executiveSummary)}

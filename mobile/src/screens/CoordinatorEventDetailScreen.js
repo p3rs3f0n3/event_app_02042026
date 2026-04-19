@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +17,7 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { addCoordinatorEventPhoto, addCoordinatorEventReport } from '../api/api';
+import { addCoordinatorEventPhoto, addCoordinatorEventReport, endEvent as endEventApi, startEvent as startEventApi } from '../api/api';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { getEventStatus } from '../utils/eventLifecycle';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
@@ -28,6 +29,7 @@ const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.f
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_PHOTO_SIZE_MB = 10;
 const VALID_PHOTO_FORMATS_LABEL = 'JPG, PNG, WEBP y HEIC';
+const formatWatermarkDate = (date) => new Date(date).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 const formatDate = (date) => {
   if (!date) return 'Sin fecha';
   return new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -140,10 +142,19 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const [reportForm, setReportForm] = useState(createEmptyReportForm());
   const [reportTimePicker, setReportTimePicker] = useState(null);
   const [reportComposerExpanded, setReportComposerExpanded] = useState(false);
+  const [milestoneMode, setMilestoneMode] = useState(null);
+  const [milestoneVisible, setMilestoneVisible] = useState(false);
+  const [milestoneUploading, setMilestoneUploading] = useState(false);
+  const [milestonePhotoUri, setMilestonePhotoUri] = useState(null);
+  const [milestoneLocation, setMilestoneLocation] = useState(null);
+  const [milestoneTimestamp, setMilestoneTimestamp] = useState(null);
+  const milestonePreviewRef = useRef(null);
 
   const photos = useMemo(() => normalizePhotos(currentEvent?.photos), [currentEvent?.photos]);
   const reports = useMemo(() => normalizeReports(currentEvent?.reports), [currentEvent?.reports]);
-  const eventStatus = currentEvent?.eventStatus || getEventStatus(currentEvent);
+  const eventStatus = getEventStatus(currentEvent);
+  const executive = currentEvent?.executive || event?.executive || null;
+  const hasExecutiveAssociation = Boolean(executive?.id);
   const isEventFinalized = eventStatus === 'finalized';
   const isEventNotStarted = eventStatus === 'not_started';
   const canManageReports = eventStatus === 'active';
@@ -156,11 +167,11 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const handleContactExecutive = async (channel) => {
     try {
       if (channel === 'whatsapp') {
-        await contactByWhatsApp(currentEvent?.executiveContact);
+        await contactByWhatsApp(executive);
         return;
       }
 
-      await contactByPhoneCall(currentEvent?.executiveContact);
+      await contactByPhoneCall(executive);
     } catch (error) {
       Alert.alert('Error', 'No se pudo abrir la acción de contacto.');
     }
@@ -337,6 +348,98 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
     setReportComposerExpanded((current) => !current);
   };
 
+  const closeMilestoneCapture = () => {
+    setMilestoneMode(null);
+    setMilestoneVisible(false);
+    setMilestoneUploading(false);
+    setMilestonePhotoUri(null);
+    setMilestoneLocation(null);
+    setMilestoneTimestamp(null);
+  };
+
+  const handleOpenMilestoneCapture = async (mode) => {
+    try {
+      if (mode === 'start' && eventStatus !== 'not_started') {
+        Alert.alert('No disponible', 'El evento ya fue iniciado o está finalizado.');
+        return;
+      }
+
+      if (mode === 'end' && eventStatus !== 'active') {
+        Alert.alert('No disponible', 'El evento debe estar iniciado para poder finalizarlo.');
+        return;
+      }
+
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!cameraPermission.granted) {
+        Alert.alert('Permiso requerido', 'Necesitas permitir la cámara para registrar el evento.');
+        return;
+      }
+
+      const locationPermission = await Location.requestForegroundPermissionsAsync().catch(() => ({ granted: false }));
+
+      const cameraResult = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 0.8,
+        base64: false,
+      });
+
+      if (cameraResult.canceled || !cameraResult.assets?.[0]) {
+        return;
+      }
+
+      const currentPosition = locationPermission.granted
+        ? await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest }).catch(() => null)
+        : null;
+
+      setMilestoneMode(mode);
+      setMilestonePhotoUri(cameraResult.assets[0].uri);
+      setMilestoneLocation(currentPosition?.coords || null);
+      setMilestoneTimestamp(new Date());
+      setMilestoneVisible(true);
+    } catch (error) {
+      Alert.alert('Error', error?.message || 'No se pudo abrir la captura del evento.');
+    }
+  };
+
+  const handleConfirmMilestone = async () => {
+    if (!milestoneMode || !milestonePhotoUri) {
+      return;
+    }
+
+    try {
+      setMilestoneUploading(true);
+      const timestampIso = milestoneTimestamp?.toISOString?.() || new Date().toISOString();
+      const mimeType = 'image/jpeg';
+      const formData = new FormData();
+      formData.append('userId', String(user?.id || ''));
+      formData.append('timestamp', timestampIso);
+      if (milestoneLocation?.latitude != null) {
+        formData.append('lat', String(milestoneLocation.latitude));
+      }
+      if (milestoneLocation?.longitude != null) {
+        formData.append('lon', String(milestoneLocation.longitude));
+      }
+      formData.append('photo', {
+        uri: milestonePhotoUri,
+        name: `${milestoneMode}_${Date.now()}.jpg`,
+        type: mimeType,
+      });
+
+      const updatedEvent = milestoneMode === 'start'
+        ? await startEventApi(currentEvent.id, formData)
+        : await endEventApi(currentEvent.id, formData);
+
+      updateEventState(updatedEvent);
+      Alert.alert('Éxito', milestoneMode === 'start' ? 'Evento iniciado correctamente' : 'Evento finalizado correctamente');
+      closeMilestoneCapture();
+    } catch (error) {
+      console.error('Milestone confirm failed:', error);
+      Alert.alert('Error', error?.response?.data?.message || error?.message || 'No se pudo completar la acción.');
+    } finally {
+      setMilestoneUploading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}> 
       <ScrollView contentContainerStyle={[styles.scrollContent, { padding: metrics.screenPadding }]}> 
@@ -350,7 +453,19 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           <Text style={styles.metaText}>Desde: {formatDate(currentEvent?.startDate)}</Text>
           <Text style={styles.metaText}>Hasta: {formatDate(currentEvent?.endDate)}</Text>
           <Text style={styles.metaText}>Puntos asignados: {currentEvent?.assignmentSummary?.pointsCount || 0}</Text>
-          <Text style={styles.metaText}>Ejecutivo: {currentEvent?.executiveContact?.fullName || currentEvent?.executiveContact?.username || 'No disponible'}</Text>
+          <Text style={styles.metaText}>Ejecutivo: {currentEvent?.executive?.name || currentEvent?.executive?.fullName || 'No disponible'}</Text>
+          <View style={styles.milestoneActionsRow}>
+            {eventStatus === 'not_started' ? (
+              <TouchableOpacity style={styles.milestoneActionButton} onPress={() => handleOpenMilestoneCapture('start')}>
+                <Text style={styles.milestoneActionText}>INICIAR EVENTO</Text>
+              </TouchableOpacity>
+            ) : null}
+            {eventStatus === 'active' ? (
+              <TouchableOpacity style={styles.milestoneActionButton} onPress={() => handleOpenMilestoneCapture('end')}>
+                <Text style={styles.milestoneActionText}>FINALIZAR EVENTO</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -484,19 +599,19 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
 
         <View style={styles.contactSection}>
           <Text style={styles.sectionTitle}>Contactar al ejecutivo</Text>
-          <Text style={styles.helperText}>Evento creado por: {currentEvent?.executiveContact?.fullName || currentEvent?.executiveContact?.username || 'No disponible'}</Text>
+          <Text style={styles.helperText}>Evento creado por: {currentEvent?.executive?.name || currentEvent?.executive?.fullName || 'No disponible'}</Text>
           <View style={styles.rowButtons}>
             <TouchableOpacity
-              style={[styles.secondaryButton, !hasDirectContactPhone(currentEvent?.executiveContact) && styles.disabledButton]}
+              style={[styles.secondaryButton, !hasExecutiveAssociation && styles.disabledButton]}
               onPress={() => handleContactExecutive('call')}
-              disabled={!hasDirectContactPhone(currentEvent?.executiveContact)}
+              disabled={!hasExecutiveAssociation}
             >
               <Text style={styles.secondaryButtonText}>LLAMAR</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.secondaryButton, !hasDirectContactPhone(currentEvent?.executiveContact) && styles.disabledButton]}
+              style={[styles.secondaryButton, !hasExecutiveAssociation && styles.disabledButton]}
               onPress={() => handleContactExecutive('whatsapp')}
-              disabled={!hasDirectContactPhone(currentEvent?.executiveContact)}
+              disabled={!hasExecutiveAssociation}
             >
               <Text style={styles.secondaryButtonText}>WHATSAPP</Text>
             </TouchableOpacity>
@@ -507,6 +622,38 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           <Text style={styles.backButtonText}>REGRESAR A EVENTOS</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal visible={milestoneVisible} transparent animationType="fade" onRequestClose={closeMilestoneCapture}>
+        <View style={styles.milestoneModalOverlay}>
+          <View style={styles.milestoneModalCard}>
+            <Text style={styles.modalTitle}>{milestoneMode === 'start' ? 'Confirmar inicio' : 'Confirmar finalización'}</Text>
+            <Text style={styles.helperText}>Revisá la foto, el timestamp y la ubicación antes de confirmar.</Text>
+
+            <View ref={milestonePreviewRef} collapsable={false} style={styles.milestonePreviewFrame}>
+              {milestonePhotoUri ? <Image source={{ uri: milestonePhotoUri }} style={styles.milestonePreviewImage} /> : null}
+              <View style={styles.milestoneWatermark}>
+                <Text style={styles.milestoneWatermarkTitle}>Eventrix</Text>
+                <Text style={styles.milestoneWatermarkText}>{milestoneMode === 'start' ? 'Inicio' : 'Fin'}</Text>
+                <Text style={styles.milestoneWatermarkText}>{formatWatermarkDate(milestoneTimestamp || new Date())}</Text>
+                <Text style={styles.milestoneWatermarkText} numberOfLines={2}>
+                  {milestoneLocation?.latitude && milestoneLocation?.longitude
+                    ? `GPS: ${milestoneLocation.latitude.toFixed(6)}, ${milestoneLocation.longitude.toFixed(6)}`
+                    : 'GPS no disponible'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.milestoneActionsRow}>
+              <TouchableOpacity style={styles.milestoneActionButton} onPress={handleConfirmMilestone} disabled={milestoneUploading}>
+                <Text style={styles.milestoneActionText}>{milestoneUploading ? 'SUBIENDO...' : 'CONFIRMAR'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.milestoneActionButton, styles.milestoneCancelButton]} onPress={closeMilestoneCapture} disabled={milestoneUploading}>
+                <Text style={styles.milestoneActionText}>CANCELAR</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={galleryVisible} transparent animationType="fade" onRequestClose={() => setGalleryVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -616,6 +763,17 @@ const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   disabledButton: { opacity: 0.55 },
   secondaryButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
   reportBox: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  milestoneActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm, marginTop: tokens.spacing.sm },
+  milestoneActionButton: { flexGrow: 1, flexBasis: metrics.compactWidth ? '100%' : 0, backgroundColor: palette.primaryButton, borderRadius: tokens.radii.pill, paddingVertical: tokens.spacing.md, alignItems: 'center' },
+  milestoneCancelButton: { backgroundColor: palette.secondaryButton },
+  milestoneActionText: { color: palette.primaryButtonText, fontWeight: 'bold' },
+  milestoneModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', padding: tokens.spacing.lg },
+  milestoneModalCard: { backgroundColor: palette.panel, borderRadius: tokens.radii.lg, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  milestonePreviewFrame: { borderRadius: tokens.radii.md, overflow: 'hidden', backgroundColor: '#0F172A', minHeight: metrics.size(260) },
+  milestonePreviewImage: { width: '100%', height: metrics.size(260), resizeMode: 'cover' },
+  milestoneWatermark: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.7)', padding: tokens.spacing.sm },
+  milestoneWatermarkTitle: { color: '#FFFFFF', fontWeight: '800', fontSize: tokens.typography.body },
+  milestoneWatermarkText: { color: '#E5E7EB', fontSize: tokens.typography.caption },
   reportHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.spacing.sm },
   reportHeaderCopy: { flex: 1, gap: tokens.spacing.xs },
   reportTitle: { color: palette.onHero, fontSize: metrics.font(17, 0.88), fontWeight: 'bold' },

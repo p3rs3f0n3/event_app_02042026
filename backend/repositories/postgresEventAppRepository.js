@@ -1,11 +1,13 @@
 const { pool, query } = require('../db/postgres/pool');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
-const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
+const { buildCoordinatorPhoto, buildCoordinatorReport, buildEventMilestonePhoto, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
-const { enrichEventLifecycle, getEventStatus } = require('../utils/eventLifecycle');
+const { buildEventResponse } = require('../utils/eventResponse');
+const { enrichEventLifecycle, getEventStatus, toLocalCalendarKey } = require('../utils/eventLifecycle');
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const { normalizeString } = require('../utils/validation');
 const { comparePassword, createPasswordHash } = require('../utils/passwords');
+const { storeEventUploadFromBuffer } = require('../utils/eventUploads');
 const {
   DEFAULT_PROFILE_PHOTO,
   isDocumentEquivalent,
@@ -158,8 +160,18 @@ const mapEventRow = (row, clients = []) => {
     imageMetadata: normalizedImage.metadata,
     startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
     endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
+    executiveId: row.created_by_user_id,
     createdByUserId: row.created_by_user_id,
     status: row.status,
+    eventStatus: row.event_status,
+    startRealAt: row.start_real_at instanceof Date ? row.start_real_at.toISOString() : row.start_real_at,
+    endRealAt: row.end_real_at instanceof Date ? row.end_real_at.toISOString() : row.end_real_at,
+    startLat: row.start_lat,
+    startLon: row.start_lon,
+    endLat: row.end_lat,
+    endLon: row.end_lon,
+    startPhotoUrl: row.start_photo_url || null,
+    endPhotoUrl: row.end_photo_url || null,
     reports: Array.isArray(row.reports) ? row.reports.map(normalizeReportEntry).filter(Boolean) : [],
     photos: Array.isArray(row.photos) ? row.photos.map(normalizePhotoEntry).filter(Boolean) : [],
     executiveReport: normalizeExecutiveReportEntry(row.executive_report, {
@@ -170,6 +182,24 @@ const mapEventRow = (row, clients = []) => {
     manualInactivationComment: row.manual_inactivation_comment,
     manualInactivatedByUserId: row.manual_inactivated_by_user_id,
   };
+};
+
+const mergeEventPhotos = (legacyPhotos = [], dbPhotos = []) => {
+  const merged = new Map();
+
+  [...legacyPhotos, ...dbPhotos].forEach((photo) => {
+    const normalized = normalizePhotoEntry(photo);
+    if (!normalized?.uri) {
+      return;
+    }
+
+    const key = normalized.uri;
+    if (!merged.has(key)) {
+      merged.set(key, normalized);
+    }
+  });
+
+  return Array.from(merged.values());
 };
 
 const executeQuery = (client, text, params = []) => (client ? client.query(text, params) : query(text, params));
@@ -248,7 +278,7 @@ class PostgresEventAppRepository {
   async authenticateUser({ username, password }) {
     const result = await query(
       `
-        SELECT u.id, u.username, u.full_name, u.phone, u.whatsapp_phone, u.email, u.password_hash, u.terms_accepted, u.terms_accepted_at, r.code AS role
+        SELECT u.id, u.username, u.full_name, u.phone, u.whatsapp_phone, u.email, u.expo_push_token, u.password_hash, u.terms_accepted, u.terms_accepted_at, r.code AS role
         FROM users u
         INNER JOIN roles r ON r.id = u.role_id
         WHERE LOWER(u.username) = LOWER($1) AND u.is_active = TRUE
@@ -269,6 +299,7 @@ class PostgresEventAppRepository {
       phone: user.phone || null,
       whatsappPhone: user.whatsapp_phone || null,
       email: user.email || null,
+      expoPushToken: user.expo_push_token || null,
       role: user.role,
       termsAccepted: user.terms_accepted ?? false,
       termsAcceptedAt: user.terms_accepted_at instanceof Date ? user.terms_accepted_at.toISOString() : user.terms_accepted_at,
@@ -278,7 +309,7 @@ class PostgresEventAppRepository {
   async findUserById(id) {
     const result = await query(
       `
-        SELECT u.id, u.username, u.full_name AS "fullName", u.phone, u.whatsapp_phone AS "whatsappPhone", u.email,
+        SELECT u.id, u.username, u.full_name AS "fullName", u.phone, u.whatsapp_phone AS "whatsappPhone", u.email, u.expo_push_token AS "expoPushToken",
                r.code AS role, u.is_active AS "isActive", u.terms_accepted AS "termsAccepted", u.terms_accepted_at AS "termsAcceptedAt"
         FROM users u
         INNER JOIN roles r ON r.id = u.role_id
@@ -301,6 +332,7 @@ class PostgresEventAppRepository {
         WHERE id = $1
           AND is_active = TRUE
         RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email,
+                  expo_push_token AS "expoPushToken",
                   is_active AS "isActive", terms_accepted AS "termsAccepted", terms_accepted_at AS "termsAcceptedAt",
                   (SELECT code FROM roles WHERE id = users.role_id) AS role
       `,
@@ -363,6 +395,31 @@ class PostgresEventAppRepository {
       id: user.id,
       username: user.username,
     };
+  }
+
+  async saveExpoPushToken({ userId, expoPushToken }) {
+    const result = await query(
+      `
+        UPDATE users
+        SET expo_push_token = $2,
+            updated_at = NOW()
+        WHERE id = $1 AND is_active = TRUE
+        RETURNING id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email, expo_push_token AS "expoPushToken",
+                  is_active AS "isActive", terms_accepted AS "termsAccepted", terms_accepted_at AS "termsAcceptedAt",
+                  (SELECT code FROM roles WHERE id = users.role_id) AS role
+      `,
+      [Number(userId), expoPushToken || null],
+    );
+
+    if (result.rowCount === 0) {
+      const existing = await query('SELECT id, is_active AS "isActive" FROM users WHERE id = $1 LIMIT 1', [Number(userId)]);
+      if (existing.rowCount === 0) {
+        return { errorCode: 'USER_NOT_FOUND' };
+      }
+      return { errorCode: 'USER_INACTIVE' };
+    }
+
+    return sanitizeUserRecord(result.rows[0]);
   }
 
   async getClients({ search, includeInactive = false } = {}) {
@@ -610,29 +667,12 @@ class PostgresEventAppRepository {
     }
 
     const events = await this.getEvents();
-    const executiveIds = [...new Set(events.map((event) => Number(event.createdByUserId)).filter((id) => Number.isInteger(id) && id > 0))];
-    const executiveContactsById = new Map();
-
-    if (executiveIds.length > 0) {
-        const usersResult = await query(
-          `
-          SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
-          FROM users
-          WHERE id = ANY($1::bigint[])
-        `,
-        [executiveIds],
-      );
-
-      usersResult.rows.forEach((row) => {
-        executiveContactsById.set(Number(row.id), normalizeExecutiveContact(row));
-      });
-    }
 
     return events
       .map((event) => mapCoordinatorEvent({
         event,
         coordinatorProfile,
-        executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
+        executiveContact: event.executiveContact || null,
       }))
       .filter(Boolean);
   }
@@ -1407,18 +1447,7 @@ class PostgresEventAppRepository {
       [Number.isInteger(Number(createdByUserId)) && Number(createdByUserId) > 0 ? Number(createdByUserId) : null],
     );
 
-    return result.rows.map((row) => mapEventRow(row, clients)).map(enrichEventLifecycle);
-  }
-
-  async getClientEvents({ userId }) {
-    const normalizedUserId = Number(userId);
-
-    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
-      return [];
-    }
-
-    const events = await this.getEvents();
-    const clientProfile = await this.findClientByUserId(normalizedUserId);
+    const events = result.rows.map((row) => mapEventRow(row, clients));
     const executiveIds = [...new Set(events.map((event) => Number(event.createdByUserId)).filter((id) => Number.isInteger(id) && id > 0))];
     const executiveContactsById = new Map();
 
@@ -1436,12 +1465,67 @@ class PostgresEventAppRepository {
         executiveContactsById.set(Number(row.id), normalizeExecutiveContact(row));
       });
     }
+    const eventIds = events.map((event) => Number(event.id)).filter((id) => Number.isInteger(id) && id > 0);
+
+    if (eventIds.length === 0) {
+      return events.map((event) => buildEventResponse(event, {
+        executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
+      }));
+    }
+
+    const galleryResult = await query(
+      `
+        SELECT event_id, milestone_type, photo_url AS uri, photo_path, mime_type AS "mimeType", file_name AS "fileName", file_size AS "fileSize",
+               latitude AS lat, longitude AS lon, created_by_user_id AS "createdByUserId", created_at AS "createdAt"
+        FROM event_photos
+        WHERE event_id = ANY($1::bigint[])
+        ORDER BY created_at ASC, id ASC
+      `,
+      [eventIds],
+    );
+
+    const galleryByEventId = new Map();
+    galleryResult.rows.forEach((row) => {
+      const eventPhotos = galleryByEventId.get(Number(row.event_id)) || [];
+      eventPhotos.push({
+        id: `${row.milestone_type || 'photo'}-${row.event_id}-${row.createdAt || Date.now()}`,
+        uri: row.uri,
+        createdAt: row.createdAt,
+        source: row.milestone_type || 'gallery',
+        mimeType: row.mimeType,
+        fileName: row.fileName,
+        fileSize: row.fileSize,
+        lat: row.lat,
+        lon: row.lon,
+        author: null,
+        eventId: Number(row.event_id),
+      });
+      galleryByEventId.set(Number(row.event_id), eventPhotos);
+    });
+
+    return events.map((event) => buildEventResponse({
+      ...event,
+      photos: mergeEventPhotos(event.photos, galleryByEventId.get(Number(event.id)) || []),
+    }, {
+      executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
+    }));
+  }
+
+  async getClientEvents({ userId }) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      return [];
+    }
+
+    const events = await this.getEvents();
+    const clientProfile = await this.findClientByUserId(normalizedUserId);
 
     return events
       .filter((event) => Number(event.clientUserId) === normalizedUserId || (clientProfile && Number(event.clientId) === Number(clientProfile.clientId)))
       .map((event) => sanitizeEventForClient({
         event,
-        executiveContact: executiveContactsById.get(Number(event.createdByUserId)) || null,
+        executiveContact: event.executiveContact || null,
       }));
   }
 
@@ -1454,8 +1538,8 @@ class PostgresEventAppRepository {
 
         const eventResult = await client.query(
           `
-          INSERT INTO events (name, client, client_id, client_user_id, image, start_date, end_date, status, reports, photos, executive_report, created_by_user_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
+          INSERT INTO events (name, client, client_id, client_user_id, image, start_date, end_date, event_status, status, reports, photos, executive_report, created_by_user_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_started', 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
           RETURNING id
         `,
         [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
@@ -1493,6 +1577,7 @@ class PostgresEventAppRepository {
               start_date = $7,
               end_date = $8,
               created_by_user_id = COALESCE(created_by_user_id, $9),
+              event_status = COALESCE(event_status, 'not_started'),
               manual_inactivated_at = NULL,
               manual_inactivation_comment = NULL,
               manual_inactivated_by_user_id = NULL,
@@ -1548,8 +1633,10 @@ class PostgresEventAppRepository {
   async #getEventById(id) {
     const result = await query(
       `
-        SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
-               e.client_id,
+        SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.event_status, e.start_real_at, e.end_real_at,
+               e.start_lat, e.start_lon, e.end_lat, e.end_lon, e.start_photo_url, e.end_photo_url,
+               e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
+                e.client_id,
                e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
                COALESCE(
                   json_agg(
@@ -1575,7 +1662,48 @@ class PostgresEventAppRepository {
       return null;
     }
 
-    return enrichEventLifecycle(mapEventRow(result.rows[0], await this.getClients()));
+    const event = mapEventRow(result.rows[0], await this.getClients());
+    const galleryResult = await query(
+      `
+        SELECT id, event_id, milestone_type, photo_url AS uri, photo_path, mime_type AS "mimeType", file_name AS "fileName", file_size AS "fileSize",
+               latitude AS lat, longitude AS lon, created_by_user_id AS "createdByUserId", created_at AS "createdAt"
+        FROM event_photos
+        WHERE event_id = $1
+        ORDER BY created_at ASC, id ASC
+      `,
+      [id],
+    );
+
+    const galleryPhotos = galleryResult.rows.map((row) => ({
+      id: `${row.milestone_type || 'photo'}-${row.id}`,
+      uri: row.uri,
+      createdAt: row.createdAt,
+      source: row.milestone_type || 'gallery',
+      mimeType: row.mimeType,
+      fileName: row.fileName,
+      fileSize: row.fileSize,
+      lat: row.lat,
+      lon: row.lon,
+      author: null,
+      eventId: Number(row.event_id),
+    }));
+
+    const executiveContactResult = await query(
+      `
+        SELECT id, username, full_name AS "fullName", phone, whatsapp_phone AS "whatsappPhone", email
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [Number(event.createdByUserId) || null],
+    );
+
+    return buildEventResponse({
+      ...event,
+      photos: mergeEventPhotos(event.photos, galleryPhotos),
+    }, {
+      executiveContact: normalizeExecutiveContact(executiveContactResult.rows[0] || null),
+    });
   }
 
   async findClientByUserId(userId) {
@@ -2037,6 +2165,191 @@ class PostgresEventAppRepository {
       `,
       [Number(id), JSON.stringify([...event.reports.map(normalizeReportEntry).filter(Boolean), report])],
     );
+
+    return this.#getEventById(Number(id));
+  }
+
+  async startEvent(id, payload) {
+    const event = await this.#getEventById(Number(id));
+    if (!event) {
+      return null;
+    }
+
+    const eventStatus = getEventStatus(event);
+    if (eventStatus === 'active') {
+      return { errorCode: 'EVENT_ALREADY_STARTED' };
+    }
+
+    if (eventStatus === 'finalized') {
+      return { errorCode: 'EVENT_FINALIZED' };
+    }
+
+    const coordinatorProfile = await this.findCoordinatorProfileByUserId(payload.userId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const executiveContact = normalizeExecutiveContact(await this.findUserById(event.createdByUserId));
+    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+      return false;
+    }
+
+    const todayKey = toLocalCalendarKey(new Date());
+    const startKey = toLocalCalendarKey(event.startDate);
+    const endKey = toLocalCalendarKey(event.endDate);
+    if (!todayKey || !startKey || !endKey || todayKey < startKey || todayKey > endKey) {
+      return { errorCode: 'EVENT_OUT_OF_RANGE' };
+    }
+
+    const timestampDate = new Date(payload.timestamp || Date.now());
+    if (Number.isNaN(timestampDate.getTime()) || Math.abs(Date.now() - timestampDate.getTime()) > 5 * 60 * 1000) {
+      return { errorCode: 'STALE_TIMESTAMP' };
+    }
+
+    const storedPhoto = await storeEventUploadFromBuffer({
+      buffer: payload.photoFile?.buffer,
+      mimeType: payload.photoFile?.mimetype || payload.mimeType,
+      fileName: payload.photoFile?.originalname || payload.fileName,
+    });
+
+    const milestonePhoto = buildEventMilestonePhoto({
+      uri: storedPhoto.publicUrl,
+      mimeType: storedPhoto.mimeType,
+      fileSize: payload.fileSize,
+      fileName: storedPhoto.fileName,
+      user: await this.findUserById(payload.userId),
+      event,
+      milestoneType: 'start_photo',
+      lat: payload.lat,
+      lon: payload.lon,
+      timestamp: payload.timestamp || new Date().toISOString(),
+    });
+
+    const photos = [...event.photos.map(normalizePhotoEntry).filter(Boolean), milestonePhoto];
+
+    await query(
+      `
+        INSERT INTO event_photos (
+          event_id, milestone_type, photo_url, photo_path, mime_type, file_name, file_size, latitude, longitude, created_by_user_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (event_id, milestone_type) DO UPDATE SET
+          photo_url = EXCLUDED.photo_url,
+          photo_path = EXCLUDED.photo_path,
+          mime_type = EXCLUDED.mime_type,
+          file_name = EXCLUDED.file_name,
+          file_size = EXCLUDED.file_size,
+          latitude = EXCLUDED.latitude,
+          longitude = EXCLUDED.longitude,
+          created_by_user_id = EXCLUDED.created_by_user_id,
+          updated_at = NOW()
+      `,
+      [Number(id), 'start_photo', storedPhoto.publicUrl, storedPhoto.absolutePath, storedPhoto.mimeType, storedPhoto.fileName, storedPhoto.size, payload.lat ?? null, payload.lon ?? null, Number(payload.userId)],
+    );
+
+    await query(
+      `
+        UPDATE events
+        SET event_status = 'active',
+            start_real_at = COALESCE(start_real_at, $2::timestamptz),
+            start_lat = COALESCE(start_lat, $3::numeric),
+            start_lon = COALESCE(start_lon, $4::numeric),
+            start_photo_url = COALESCE(start_photo_url, $5),
+            photos = $6::jsonb,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+        [Number(id), milestonePhoto.createdAt, payload.lat ?? null, payload.lon ?? null, storedPhoto.publicUrl, JSON.stringify(photos)],
+      );
+
+    return this.#getEventById(Number(id));
+  }
+
+  async endEvent(id, payload) {
+    const event = await this.#getEventById(Number(id));
+    if (!event) {
+      return null;
+    }
+
+    const eventStatus = getEventStatus(event);
+    if (eventStatus === 'finalized') {
+      return { errorCode: 'EVENT_FINALIZED' };
+    }
+
+    if (eventStatus !== 'active') {
+      return { errorCode: 'EVENT_NOT_STARTED' };
+    }
+
+    const coordinatorProfile = await this.findCoordinatorProfileByUserId(payload.userId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const executiveContact = normalizeExecutiveContact(await this.findUserById(event.createdByUserId));
+    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+      return false;
+    }
+
+    const timestampDate = new Date(payload.timestamp || Date.now());
+    if (Number.isNaN(timestampDate.getTime()) || Math.abs(Date.now() - timestampDate.getTime()) > 5 * 60 * 1000) {
+      return { errorCode: 'STALE_TIMESTAMP' };
+    }
+
+    const storedPhoto = await storeEventUploadFromBuffer({
+      buffer: payload.photoFile?.buffer,
+      mimeType: payload.photoFile?.mimetype || payload.mimeType,
+      fileName: payload.photoFile?.originalname || payload.fileName,
+    });
+
+    const milestonePhoto = buildEventMilestonePhoto({
+      uri: storedPhoto.publicUrl,
+      mimeType: storedPhoto.mimeType,
+      fileSize: payload.fileSize,
+      fileName: storedPhoto.fileName,
+      user: await this.findUserById(payload.userId),
+      event,
+      milestoneType: 'end_photo',
+      lat: payload.lat,
+      lon: payload.lon,
+      timestamp: payload.timestamp || new Date().toISOString(),
+    });
+
+    const photos = [...event.photos.map(normalizePhotoEntry).filter(Boolean), milestonePhoto];
+
+    await query(
+      `
+        INSERT INTO event_photos (
+          event_id, milestone_type, photo_url, photo_path, mime_type, file_name, file_size, latitude, longitude, created_by_user_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (event_id, milestone_type) DO UPDATE SET
+          photo_url = EXCLUDED.photo_url,
+          photo_path = EXCLUDED.photo_path,
+          mime_type = EXCLUDED.mime_type,
+          file_name = EXCLUDED.file_name,
+          file_size = EXCLUDED.file_size,
+          latitude = EXCLUDED.latitude,
+          longitude = EXCLUDED.longitude,
+          created_by_user_id = EXCLUDED.created_by_user_id,
+          updated_at = NOW()
+      `,
+      [Number(id), 'end_photo', storedPhoto.publicUrl, storedPhoto.absolutePath, storedPhoto.mimeType, storedPhoto.fileName, storedPhoto.size, payload.lat ?? null, payload.lon ?? null, Number(payload.userId)],
+    );
+
+    await query(
+      `
+        UPDATE events
+        SET event_status = 'finalized',
+            end_real_at = COALESCE(end_real_at, $2::timestamptz),
+            end_lat = COALESCE(end_lat, $3::numeric),
+            end_lon = COALESCE(end_lon, $4::numeric),
+            end_photo_url = COALESCE(end_photo_url, $5),
+            photos = $6::jsonb,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+        [Number(id), milestonePhoto.createdAt, payload.lat ?? null, payload.lon ?? null, storedPhoto.publicUrl, JSON.stringify(photos)],
+      );
 
     return this.#getEventById(Number(id));
   }

@@ -222,6 +222,7 @@ const sanitizeUserRecord = (user) => ({
   phone: user.phone || null,
   whatsappPhone: user.whatsappPhone || user.whatsapp_phone || null,
   email: user.email || null,
+  expoPushToken: user.expoPushToken || user.expo_push_token || null,
   role: user.role,
   isActive: user.isActive ?? user.is_active ?? true,
   termsAccepted: user.termsAccepted ?? user.terms_accepted ?? false,

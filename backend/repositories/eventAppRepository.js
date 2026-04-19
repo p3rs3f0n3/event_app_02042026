@@ -1,9 +1,10 @@
 const fs = require('fs');
 const { comparePassword } = require('../utils/passwords');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
-const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
+const { buildCoordinatorPhoto, buildCoordinatorReport, buildEventMilestonePhoto, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
-const { enrichEventLifecycle, getEventStatus } = require('../utils/eventLifecycle');
+const { buildEventResponse } = require('../utils/eventResponse');
+const { getEventStatus, toLocalCalendarKey } = require('../utils/eventLifecycle');
 const { matchesClientIdentityConflict, normalizeClientMutationPayload } = require('../utils/adminClientPayload');
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const {
@@ -121,6 +122,7 @@ const normalizeUser = (user) => ({
   isActive: user.isActive ?? user.is_active ?? true,
   termsAccepted: user.termsAccepted ?? user.terms_accepted ?? false,
   termsAcceptedAt: user.termsAcceptedAt || user.terms_accepted_at || null,
+  expoPushToken: user.expoPushToken || user.expo_push_token || null,
 });
 
 const normalizeEvent = (event, clients = []) => {
@@ -133,6 +135,7 @@ const normalizeEvent = (event, clients = []) => {
     ...event,
     image: normalizedImage.uri,
     imageMetadata: normalizedImage.metadata,
+    executiveId: Number(event.executiveId || event.createdByUserId || event.created_by_user_id || DEFAULT_EXECUTIVE_USER_ID),
     createdByUserId: Number(event.createdByUserId || event.created_by_user_id || DEFAULT_EXECUTIVE_USER_ID),
     clientId: resolveClientId({
       rawClientId: event.clientId || event.client_id,
@@ -365,6 +368,7 @@ class EventAppRepository {
       phone: user.phone || null,
       whatsappPhone: user.whatsappPhone || user.whatsapp_phone || null,
       email: user.email || null,
+      expoPushToken: user.expoPushToken || user.expo_push_token || null,
       role: user.role,
       termsAccepted: user.termsAccepted ?? false,
       termsAcceptedAt: user.termsAcceptedAt || null,
@@ -597,7 +601,7 @@ class EventAppRepository {
       .map((event) => mapCoordinatorEvent({
         event,
         coordinatorProfile,
-        executiveContact: normalizeExecutiveContact(this.db.users.find((user) => Number(user.id) === Number(event.createdByUserId)) || null),
+        executiveContact: event.executiveContact || normalizeExecutiveContact(this.db.users.find((user) => Number(user.id) === Number(event.createdByUserId)) || null),
       }))
       .filter(Boolean);
   }
@@ -1214,7 +1218,12 @@ class EventAppRepository {
   getEvents({ createdByUserId } = {}) {
     const normalizedUserId = Number(createdByUserId);
     const clients = this.getClients();
-    const events = this.db.events.map((event) => normalizeEvent(event, clients)).map(enrichEventLifecycle);
+    const events = this.db.events.map((event) => {
+      const normalizedEvent = normalizeEvent(event, clients);
+      return buildEventResponse(normalizedEvent, {
+        executiveContact: normalizeExecutiveContact(this.findUserById(normalizedEvent.createdByUserId)),
+      });
+    });
 
     if (Number.isInteger(normalizedUserId) && normalizedUserId > 0) {
       return events.filter((event) => Number(event.createdByUserId) === normalizedUserId);
@@ -1236,7 +1245,7 @@ class EventAppRepository {
       .filter((event) => Number(event.clientUserId) === normalizedUserId || (clientProfile && Number(event.clientId) === Number(clientProfile.id)))
       .map((event) => sanitizeEventForClient({
         event,
-        executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+        executiveContact: event.executiveContact || normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
       }));
   }
 
@@ -1258,7 +1267,9 @@ class EventAppRepository {
 
     this.db.events.push(newEvent);
     this.save();
-    return enrichEventLifecycle(newEvent);
+    return buildEventResponse(newEvent, {
+      executiveContact: normalizeExecutiveContact(this.findUserById(newEvent.createdByUserId)),
+    });
   }
 
   updateEvent(id, eventData) {
@@ -1284,12 +1295,16 @@ class EventAppRepository {
         manualInactivatedByUserId: null,
       }, this.getClients());
     this.save();
-    return enrichEventLifecycle(this.db.events[eventIndex]);
+    return buildEventResponse(this.db.events[eventIndex], {
+      executiveContact: normalizeExecutiveContact(this.findUserById(this.db.events[eventIndex].createdByUserId)),
+    });
   }
 
   getEventById(id) {
     const event = this.db.events.find((item) => Number(item.id) === Number(id));
-    return event ? enrichEventLifecycle(normalizeEvent(event, this.getClients())) : null;
+    return event ? buildEventResponse(normalizeEvent(event, this.getClients()), {
+      executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+    }) : null;
   }
 
   inactivateEvent(id, { createdByUserId, comment }) {
@@ -1306,7 +1321,9 @@ class EventAppRepository {
     }, this.getClients());
 
     this.save();
-    return enrichEventLifecycle(normalizeEvent(this.db.events[eventIndex], this.getClients()));
+    return buildEventResponse(normalizeEvent(this.db.events[eventIndex], this.getClients()), {
+      executiveContact: normalizeExecutiveContact(this.findUserById(this.db.events[eventIndex].createdByUserId)),
+    });
   }
 
   inactivateClient(clientId, { actorUserId }) {
@@ -1492,7 +1509,9 @@ class EventAppRepository {
 
     this.save();
     return mapCoordinatorEvent({
-      event: enrichEventLifecycle(normalizeEvent(this.db.events[eventIndex], this.getClients())),
+      event: buildEventResponse(normalizeEvent(this.db.events[eventIndex], this.getClients()), {
+        executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+      }),
       coordinatorProfile,
       executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
     });
@@ -1543,7 +1562,9 @@ class EventAppRepository {
 
     this.save();
     return mapCoordinatorEvent({
-      event: enrichEventLifecycle(normalizeEvent(this.db.events[eventIndex], this.getClients())),
+      event: buildEventResponse(normalizeEvent(this.db.events[eventIndex], this.getClients()), {
+        executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
+      }),
       coordinatorProfile,
       executiveContact: normalizeExecutiveContact(this.findUserById(event.createdByUserId)),
     });
@@ -1583,7 +1604,156 @@ class EventAppRepository {
     }, this.getClients());
 
     this.save();
-    return enrichEventLifecycle(normalizeEvent(this.db.events[eventIndex], this.getClients()));
+    return buildEventResponse(normalizeEvent(this.db.events[eventIndex], this.getClients()), {
+      executiveContact: normalizeExecutiveContact(this.findUserById(this.db.events[eventIndex].createdByUserId)),
+    });
+  }
+
+  saveExpoPushToken({ userId, expoPushToken }) {
+    const userIndex = this.db.users.findIndex((user) => Number(user.id) === Number(userId));
+    if (userIndex === -1) {
+      return { errorCode: 'USER_NOT_FOUND' };
+    }
+
+    const currentUser = this.db.users[userIndex];
+    if (currentUser.isActive === false) {
+      return { errorCode: 'USER_INACTIVE' };
+    }
+
+    this.db.users[userIndex] = {
+      ...currentUser,
+      expoPushToken: expoPushToken || null,
+    };
+
+    this.save();
+    return sanitizeUserRecord(this.db.users[userIndex]);
+  }
+
+  startEvent(id, payload) {
+    const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
+    if (eventIndex === -1) {
+      return null;
+    }
+
+    const event = normalizeEvent(this.db.events[eventIndex], this.getClients());
+    const eventStatus = getEventStatus(event);
+    if (eventStatus === 'active') {
+      return { errorCode: 'EVENT_ALREADY_STARTED' };
+    }
+
+    if (eventStatus === 'finalized') {
+      return { errorCode: 'EVENT_FINALIZED' };
+    }
+
+    const coordinatorProfile = this.findCoordinatorProfileByUserId(payload.userId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const executiveContact = normalizeExecutiveContact(this.findUserById(event.createdByUserId));
+    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+      return false;
+    }
+
+    const todayKey = toLocalCalendarKey(new Date());
+    const startKey = toLocalCalendarKey(event.startDate);
+    const endKey = toLocalCalendarKey(event.endDate);
+    if (!todayKey || !startKey || !endKey || todayKey < startKey || todayKey > endKey) {
+      return { errorCode: 'EVENT_OUT_OF_RANGE' };
+    }
+
+    const timestampDate = new Date(payload.timestamp || Date.now());
+    if (Number.isNaN(timestampDate.getTime()) || Math.abs(Date.now() - timestampDate.getTime()) > 5 * 60 * 1000) {
+      return { errorCode: 'STALE_TIMESTAMP' };
+    }
+
+    const milestonePhoto = buildEventMilestonePhoto({
+      uri: payload.photoUri,
+      mimeType: payload.mimeType,
+      fileSize: payload.fileSize,
+      fileName: payload.fileName,
+      user: this.findUserById(payload.userId),
+      event,
+      milestoneType: 'start_photo',
+      lat: payload.lat,
+      lon: payload.lon,
+      timestamp: payload.timestamp || new Date().toISOString(),
+    });
+
+    this.db.events[eventIndex] = normalizeEvent({
+      ...event,
+      eventStatus: 'active',
+      startRealAt: milestonePhoto.createdAt,
+      startLat: payload.lat ?? null,
+      startLon: payload.lon ?? null,
+      startPhotoUrl: payload.photoUri || null,
+      photos: [...event.photos.map(normalizePhotoEntry).filter(Boolean), milestonePhoto],
+    }, this.getClients());
+
+    this.save();
+    return buildEventResponse(normalizeEvent(this.db.events[eventIndex], this.getClients()), {
+      executiveContact: normalizeExecutiveContact(this.findUserById(this.db.events[eventIndex].createdByUserId)),
+    });
+  }
+
+  endEvent(id, payload) {
+    const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
+    if (eventIndex === -1) {
+      return null;
+    }
+
+    const event = normalizeEvent(this.db.events[eventIndex], this.getClients());
+    const eventStatus = getEventStatus(event);
+    if (eventStatus === 'finalized') {
+      return { errorCode: 'EVENT_FINALIZED' };
+    }
+
+    if (eventStatus !== 'active') {
+      return { errorCode: 'EVENT_NOT_STARTED' };
+    }
+
+    const coordinatorProfile = this.findCoordinatorProfileByUserId(payload.userId);
+    if (!coordinatorProfile) {
+      return false;
+    }
+
+    const executiveContact = normalizeExecutiveContact(this.findUserById(event.createdByUserId));
+    if (!mapCoordinatorEvent({ event, coordinatorProfile, executiveContact })) {
+      return false;
+    }
+
+    const timestampDate = new Date(payload.timestamp || Date.now());
+    if (Number.isNaN(timestampDate.getTime()) || Math.abs(Date.now() - timestampDate.getTime()) > 5 * 60 * 1000) {
+      return { errorCode: 'STALE_TIMESTAMP' };
+    }
+
+    const milestonePhoto = buildEventMilestonePhoto({
+      uri: payload.photoUri,
+      mimeType: payload.mimeType,
+      fileSize: payload.fileSize,
+      fileName: payload.fileName,
+      user: this.findUserById(payload.userId),
+      event,
+      milestoneType: 'end_photo',
+      lat: payload.lat,
+      lon: payload.lon,
+      timestamp: payload.timestamp || new Date().toISOString(),
+    });
+
+    this.db.events[eventIndex] = normalizeEvent({
+      ...event,
+      eventStatus: 'finalized',
+      endRealAt: milestonePhoto.createdAt,
+      endLat: payload.lat ?? null,
+      endLon: payload.lon ?? null,
+      endPhotoUrl: payload.photoUri || null,
+      photos: [...event.photos.map(normalizePhotoEntry).filter(Boolean), milestonePhoto],
+    }, this.getClients());
+
+    this.save();
+    return buildEventResponse(normalizeEvent(this.db.events[eventIndex], this.getClients()), {
+      executiveContact: normalizeExecutiveContact(this.findUserById(this.db.events[eventIndex].createdByUserId)),
+    });
   }
 
   #nextId(collection) {

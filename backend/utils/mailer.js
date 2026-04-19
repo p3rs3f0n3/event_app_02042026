@@ -30,6 +30,24 @@ const getMailConfigurationStatus = (smtpConfig = {}) => {
   return { enabled: true, reason: null };
 };
 
+const createSmtpTransporter = (smtpConfig = {}) => {
+  const configStatus = getMailConfigurationStatus(smtpConfig);
+  const transporter = configStatus.enabled
+    ? nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: Number(smtpConfig.port),
+      secure: Boolean(smtpConfig.secure),
+      requireTLS: Boolean(smtpConfig.requireTls),
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.password,
+      },
+    })
+    : null;
+
+  return { configStatus, transporter };
+};
+
 const escapeHtml = (value) => String(value || '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -74,20 +92,39 @@ const buildWelcomeEmailContent = ({ recipientName, roleLabel, username, password
   };
 };
 
+const buildEventMilestoneEmailContent = ({ milestoneType, recipientName, eventName }) => {
+  const safeRecipientName = recipientName || 'hola';
+  const safeEventName = eventName || 'tu evento';
+  const isStart = milestoneType === 'event_start';
+  const subject = isStart ? `Evento iniciado: ${safeEventName}` : `Evento finalizado: ${safeEventName}`;
+  const textIntro = isStart
+    ? `El evento "${safeEventName}" acaba de iniciar.`
+    : `El evento "${safeEventName}" ha finalizado.`;
+
+  return {
+    subject,
+    text: [
+      `Hola ${safeRecipientName},`,
+      '',
+      textIntro,
+      '',
+      'Ingresa a Eventrix para ver los detalles.',
+      '',
+      'Equipo Eventrix',
+    ].join('\n'),
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #1F2937; line-height: 1.6;">
+        <p>Hola <strong>${escapeHtml(safeRecipientName)}</strong>,</p>
+        <p>${escapeHtml(textIntro)}</p>
+        <p>Ingresa a <strong>Eventrix</strong> para ver los detalles.</p>
+        <p>Equipo Eventrix</p>
+      </div>
+    `,
+  };
+};
+
 const createWelcomeEmailService = ({ smtpConfig, logger = console }) => {
-  const configStatus = getMailConfigurationStatus(smtpConfig);
-  const transporter = configStatus.enabled
-    ? nodemailer.createTransport({
-      host: smtpConfig.host,
-      port: Number(smtpConfig.port),
-      secure: Boolean(smtpConfig.secure),
-      requireTLS: Boolean(smtpConfig.requireTls),
-      auth: {
-        user: smtpConfig.user,
-        pass: smtpConfig.password,
-      },
-    })
-    : null;
+  const { configStatus, transporter } = createSmtpTransporter(smtpConfig);
 
   return {
     async sendWelcomeCredentialsEmail({ to, recipientName, roleLabel, username, password }) {
@@ -154,6 +191,88 @@ const createWelcomeEmailService = ({ smtpConfig, logger = console }) => {
   };
 };
 
+const createEventNotificationEmailService = ({ smtpConfig, logger = console }) => {
+  const { configStatus, transporter } = createSmtpTransporter(smtpConfig);
+
+  return {
+    async sendEventMilestoneEmail({ to, recipientName, recipientRole, milestoneType, eventName, eventId }) {
+      if (!hasValue(to)) {
+        logger.warn('⚠️ Event notification email skipped', {
+          to,
+          recipientRole,
+          eventId,
+          milestoneType,
+          reason: 'missing-email',
+        });
+
+        return {
+          status: 'skipped',
+          message: 'Mail del evento pendiente: el perfil no tiene email válido para envío.',
+        };
+      }
+
+      if (!configStatus.enabled || !transporter) {
+        logger.warn('⚠️ Event notification email skipped', {
+          to,
+          recipientRole,
+          eventId,
+          milestoneType,
+          reason: configStatus.reason,
+        });
+
+        return {
+          status: 'skipped',
+          message: `Mail del evento pendiente: ${configStatus.reason}`,
+        };
+      }
+
+      const emailContent = buildEventMilestoneEmailContent({
+        milestoneType,
+        recipientName,
+        eventName,
+      });
+
+      try {
+        const info = await transporter.sendMail({
+          from: buildFromAddress(smtpConfig),
+          to,
+          subject: emailContent.subject,
+          text: emailContent.text,
+          html: emailContent.html,
+        });
+
+        logger.info('✅ Event notification email sent', {
+          to,
+          recipientRole,
+          eventId,
+          milestoneType,
+          messageId: info.messageId,
+        });
+
+        return {
+          status: 'sent',
+          message: `Mail del evento enviado a ${to}.`,
+          messageId: info.messageId,
+        };
+      } catch (error) {
+        logger.warn('⚠️ Event notification email failed', {
+          to,
+          recipientRole,
+          eventId,
+          milestoneType,
+          error: error.message,
+        });
+
+        return {
+          status: 'failed',
+          message: 'Mail del evento pendiente: no se pudo entregar por SMTP.',
+        };
+      }
+    },
+  };
+};
+
 module.exports = {
   createWelcomeEmailService,
+  createEventNotificationEmailService,
 };

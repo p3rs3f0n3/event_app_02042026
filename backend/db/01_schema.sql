@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(40),
   whatsapp_phone VARCHAR(40),
   email VARCHAR(160),
+  expo_push_token TEXT,
   password_hash TEXT NOT NULL,
   role_id BIGINT NOT NULL REFERENCES roles(id),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(40);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_phone VARCHAR(40);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(160);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 
@@ -168,6 +170,15 @@ CREATE TABLE IF NOT EXISTS events (
   image TEXT NOT NULL,
   start_date TIMESTAMPTZ NOT NULL,
   end_date TIMESTAMPTZ NOT NULL,
+  event_status VARCHAR(30) NOT NULL DEFAULT 'not_started',
+  start_real_at TIMESTAMPTZ,
+  end_real_at TIMESTAMPTZ,
+  start_lat NUMERIC,
+  start_lon NUMERIC,
+  end_lat NUMERIC,
+  end_lon NUMERIC,
+  start_photo_url TEXT,
+  end_photo_url TEXT,
   status VARCHAR(30) NOT NULL DEFAULT 'Pendiente',
   reports JSONB NOT NULL DEFAULT '[]'::jsonb,
   photos JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -182,6 +193,15 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivation_comment TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS manual_inactivated_by_user_id BIGINT REFERENCES users(id);
 ALTER TABLE events ADD COLUMN IF NOT EXISTS client_user_id BIGINT REFERENCES users(id);
 ALTER TABLE events ADD COLUMN IF NOT EXISTS client_id BIGINT REFERENCES clients(id);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS event_status VARCHAR(30) NOT NULL DEFAULT 'not_started';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS start_real_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_real_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS start_lat NUMERIC;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS start_lon NUMERIC;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_lat NUMERIC;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_lon NUMERIC;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS start_photo_url TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_photo_url TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS executive_report JSONB;
 
 CREATE TABLE IF NOT EXISTS event_cities (

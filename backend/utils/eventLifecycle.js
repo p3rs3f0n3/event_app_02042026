@@ -16,17 +16,44 @@ const toLocalCalendarKey = (date) => {
   ].join('-');
 };
 
+const normalizeEventStatus = (value) => {
+  const status = String(value || '').toLowerCase();
+
+  if (status === 'started') {
+    return 'active';
+  }
+
+  if (status === 'active' || status === 'not_started' || status === 'finalized') {
+    return status;
+  }
+
+  return status;
+};
+
 const getEventStatus = (event, now = new Date()) => {
   const currentKey = toLocalCalendarKey(now);
   const startKey = toLocalCalendarKey(event?.startDate || event?.start_date);
   const endKey = toLocalCalendarKey(event?.endDate || event?.end_date);
-
-  if (!currentKey || !startKey || !endKey) {
-    return 'finalized';
-  }
+  const storedStatus = normalizeEventStatus(event?.eventStatus || event?.event_status);
 
   if (event?.manualInactivatedAt || event?.manual_inactivated_at || event?.inactiveReason === 'manual') {
     return 'finalized';
+  }
+
+  if (storedStatus === 'finalized') {
+    return 'finalized';
+  }
+
+  if (storedStatus === 'active') {
+    if (currentKey && endKey && currentKey > endKey) {
+      return 'finalized';
+    }
+
+    return 'active';
+  }
+
+  if (!currentKey || !startKey || !endKey) {
+    return 'not_started';
   }
 
   if (currentKey < startKey) {
@@ -92,5 +119,6 @@ module.exports = {
   isEventCurrentlyActive,
   parseDate,
   resolveEventInactivation,
+  normalizeEventStatus,
   toLocalCalendarKey,
 };

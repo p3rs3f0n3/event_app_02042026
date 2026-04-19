@@ -186,6 +186,25 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
   };
 };
 
+const buildEventMilestonePhoto = ({ uri, mimeType, fileSize, fileName, user, event, milestoneType, lat, lon, timestamp }) => ({
+  id: `${milestoneType}-${Date.now()}`,
+  uri,
+  createdAt: timestamp || new Date().toISOString(),
+  source: milestoneType,
+  mimeType: normalizeString(mimeType) || null,
+  fileName: normalizeString(fileName) || null,
+  fileSize: Number.isFinite(Number(fileSize)) ? Number(fileSize) : null,
+  milestoneType,
+  lat: Number.isFinite(Number(lat)) ? Number(lat) : null,
+  lon: Number.isFinite(Number(lon)) ? Number(lon) : null,
+  author: {
+    userId: Number(user?.id || 0) || null,
+    fullName: normalizeString(user?.fullName || user?.username) || 'Coordinador',
+    role: 'COORDINADOR',
+  },
+  eventId: Number(event?.id || 0) || null,
+});
+
 const parseMeridiemTimeToMinutes = (value) => {
   const normalizedValue = normalizeString(value)
     .replace(/\u00A0/g, ' ')
@@ -234,6 +253,7 @@ const validateCoordinatorReportTimeRange = ({ event, startTime, endTime }) => {
 module.exports = {
   buildCoordinatorPhoto,
   buildCoordinatorReport,
+  buildEventMilestonePhoto,
   normalizePhotoEntry,
   parseMeridiemTimeToMinutes,
   normalizeReportEntry,

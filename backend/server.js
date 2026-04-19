@@ -1,9 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const { config } = require('./config/env');
 const { getRoleConfig, getRoleConfigList } = require('./config/roles');
 const { createRepository } = require('./repositories');
-const { createWelcomeEmailService } = require('./utils/mailer');
+const { createWelcomeEmailService, createEventNotificationEmailService } = require('./utils/mailer');
+const { sendExpoPushNotification } = require('./utils/pushNotifications');
 const {
   collectScheduledAssignments,
   normalizePointOriginalRef,
@@ -39,6 +43,8 @@ const { normalizeStaffSexo } = require('./utils/staffMeasurements');
 const APP_DISPLAY_NAME = 'Eventrix';
 
 const app = express();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const uploadsPath = path.join(__dirname, 'uploads');
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -175,6 +181,21 @@ const sendProfileWelcomeEmail = async (req, { email, recipientName, roleLabel, u
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
+app.use('/uploads', express.static(uploadsPath));
+
+app.get('/uploads/events/:fileName', (req, res) => {
+  const safeFileName = path.basename(normalizeString(req.params.fileName));
+  if (!safeFileName) {
+    return res.status(400).json({ message: 'Archivo inválido' });
+  }
+
+  const filePath = path.join(uploadsPath, 'events', safeFileName);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ message: 'Archivo no encontrado' });
+  }
+
+  return res.sendFile(filePath);
+});
 
 app.get('/api/app-config', asyncHandler(async (req, res) => {
   return res.json({
@@ -229,6 +250,22 @@ app.post('/api/terms/accept', asyncHandler(async (req, res) => {
   });
 }));
 
+app.post('/api/notifications/send', asyncHandler(async (req, res) => {
+  const token = normalizeString(req.body?.expoPushToken || req.body?.to);
+  if (!token) {
+    return badRequest(res, 'El token de notificación es obligatorio');
+  }
+
+  const result = await sendExpoPushNotification({
+    expoPushToken: token,
+    title: normalizeString(req.body?.title) || 'Eventrix',
+    body: normalizeString(req.body?.body) || '',
+    data: req.body?.data || {},
+  });
+
+  return res.status(result?.ok ? 200 : 502).json(result);
+}));
+
 app.post('/api/change-password', asyncHandler(async (req, res) => {
   const validationError = validateChangePasswordPayload(req.body);
   if (validationError) {
@@ -254,6 +291,24 @@ app.post('/api/change-password', asyncHandler(async (req, res) => {
     userId: result.id,
     username: result.username,
   });
+}));
+
+app.post('/api/notifications/token', asyncHandler(async (req, res) => {
+  const userId = Number(req.body?.userId);
+  const expoPushToken = normalizeString(req.body?.expoPushToken);
+  if (!Number.isInteger(userId) || userId <= 0 || !expoPushToken) {
+    return badRequest(res, 'Usuario y token de notificación son obligatorios');
+  }
+
+  const updatedUser = await req.app.locals.repository.saveExpoPushToken({ userId, expoPushToken });
+  if (updatedUser?.errorCode === 'USER_NOT_FOUND') {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+  if (updatedUser?.errorCode === 'USER_INACTIVE') {
+    return res.status(409).json({ message: 'El usuario está inactivo' });
+  }
+
+  return res.json(updatedUser);
 }));
 
 app.get('/api/coordinators', asyncHandler(async (req, res) => {
@@ -1052,6 +1107,253 @@ app.post('/api/events/:id/photos', asyncHandler(async (req, res) => {
   return res.json(updatedEvent);
 }));
 
+const notifyClientAboutMilestone = async (repository, event, milestoneType) => {
+  try {
+    const clientUserId = Number(event?.clientUserId || 0);
+    if (!Number.isInteger(clientUserId) || clientUserId <= 0) {
+      return { skipped: true, reason: 'missing-client-user' };
+    }
+
+    const clientUser = await repository.findUserById(clientUserId);
+    if (!clientUser?.expoPushToken) {
+      return { skipped: true, reason: 'missing-token' };
+    }
+
+    const bodies = {
+      event_start: 'Tu evento acaba de iniciar, ¿te gustaría ver la foto de inicio? Ingresa ya a Eventrix.',
+      event_end: 'Tu evento ha finalizado, ¿te gustaría ver la foto final? Ingresa ya a Eventrix.',
+    };
+
+    return sendExpoPushNotification({
+      expoPushToken: clientUser.expoPushToken,
+      title: 'Eventrix',
+      body: bodies[milestoneType] || 'Eventrix',
+      data: {
+        eventId: event.id,
+        type: milestoneType,
+      },
+    });
+  } catch (error) {
+    return { ok: false, error: error?.message || 'notification-failed' };
+  }
+};
+
+const buildEventMilestoneNotification = (event, recipientRole, milestoneType) => {
+  const eventName = normalizeString(event?.name) || 'el evento';
+  const isStart = milestoneType === 'event_start';
+  const title = 'Eventrix';
+  const body = recipientRole === 'executive'
+    ? (isStart
+      ? `El evento "${eventName}" ya inició. Revisa Eventrix para ver la evidencia de inicio.`
+      : `El evento "${eventName}" ha finalizado. Revisa Eventrix para ver la evidencia final.`)
+    : (isStart
+      ? `Tu evento "${eventName}" ya inició. Ingresa a Eventrix para verlo.`
+      : `Tu evento "${eventName}" ha finalizado. Ingresa a Eventrix para verlo.`);
+
+  return {
+    title,
+    body,
+    data: {
+      eventId: Number(event?.id) || null,
+      type: milestoneType,
+    },
+    eventName,
+  };
+};
+
+const notifyEventMilestoneRecipient = async ({
+  repository,
+  eventNotificationEmailService,
+  event,
+  milestoneType,
+  recipientRole,
+  userId,
+}) => {
+  try {
+    const normalizedUserId = Number(userId);
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) {
+      console.log(`ℹ️ Event ${milestoneType} notification skipped`, { recipientRole, reason: 'missing-user-id', eventId: event?.id || null });
+      return;
+    }
+
+    const user = await repository.findUserById(normalizedUserId);
+    if (!user) {
+      console.log(`ℹ️ Event ${milestoneType} notification skipped`, { recipientRole, userId: normalizedUserId, reason: 'user-not-found', eventId: event?.id || null });
+      return;
+    }
+
+    const notification = buildEventMilestoneNotification(event, recipientRole, milestoneType);
+    const recipientLabel = `${recipientRole}#${normalizedUserId}`;
+
+    const [pushOutcome, emailOutcome] = await Promise.allSettled([
+      sendExpoPushNotification({
+        expoPushToken: user.expoPushToken,
+        title: notification.title,
+        body: notification.body,
+        data: notification.data,
+      }),
+      eventNotificationEmailService.sendEventMilestoneEmail({
+        to: user.email,
+        recipientName: user.fullName,
+        recipientRole,
+        milestoneType,
+        eventName: notification.eventName,
+        eventId: event?.id || null,
+      }),
+    ]);
+
+    if (pushOutcome.status === 'fulfilled') {
+      const result = pushOutcome.value;
+      if (result?.ok) {
+        console.log(`✅ Event ${milestoneType} push sent`, {
+          recipient: recipientLabel,
+          userId: normalizedUserId,
+          eventId: event?.id || null,
+        });
+      } else if (result?.skipped) {
+        console.log(`ℹ️ Event ${milestoneType} push skipped`, {
+          recipient: recipientLabel,
+          userId: normalizedUserId,
+          eventId: event?.id || null,
+          reason: result.reason || 'skipped',
+        });
+      } else {
+        console.warn(`⚠️ Event ${milestoneType} push failed`, {
+          recipient: recipientLabel,
+          userId: normalizedUserId,
+          eventId: event?.id || null,
+          status: result?.status || null,
+          error: result?.error || result?.payload || null,
+        });
+      }
+    } else {
+      console.warn(`⚠️ Event ${milestoneType} push failed`, {
+        recipient: recipientLabel,
+        userId: normalizedUserId,
+        eventId: event?.id || null,
+        error: pushOutcome.reason?.message || 'push-notification-rejected',
+      });
+    }
+
+    if (emailOutcome.status === 'rejected') {
+      console.warn(`⚠️ Event ${milestoneType} email failed`, {
+        recipient: recipientLabel,
+        userId: normalizedUserId,
+        eventId: event?.id || null,
+        error: emailOutcome.reason?.message || 'email-notification-rejected',
+      });
+    }
+  } catch (error) {
+    console.error(`❌ Event ${milestoneType} notification error`, {
+      recipientRole,
+      userId: Number(userId) || null,
+      eventId: event?.id || null,
+      error: error?.message || 'notification-failed',
+    });
+  }
+};
+
+const notifyEventStartRecipients = async (repository, event, eventNotificationEmailService) => {
+  const recipients = [
+    { recipientRole: 'executive', userId: event?.createdByUserId },
+    { recipientRole: 'client', userId: event?.clientUserId },
+  ];
+
+  await Promise.allSettled(recipients.map((recipient) => notifyEventMilestoneRecipient({
+    repository,
+    eventNotificationEmailService,
+    event,
+    milestoneType: 'event_start',
+    recipientRole: recipient.recipientRole,
+    userId: recipient.userId,
+  })));
+};
+
+app.post('/api/events/:id/start', upload.single('photo'), asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return badRequest(res, 'La foto es obligatoria');
+  }
+
+  const userId = Number(req.body.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return badRequest(res, 'El usuario es obligatorio');
+  }
+
+  const updatedEvent = await req.app.locals.repository.startEvent(req.params.id, {
+    userId,
+    photoFile: req.file,
+    lat: req.body.lat == null || req.body.lat === '' ? null : Number(req.body.lat),
+    lon: req.body.lon == null || req.body.lon === '' ? null : Number(req.body.lon),
+    timestamp: normalizeString(req.body.timestamp),
+  });
+
+  if (updatedEvent?.errorCode === 'EVENT_ALREADY_STARTED') {
+    return res.status(409).json({ message: 'El evento ya fue iniciado' });
+  }
+  if (updatedEvent?.errorCode === 'EVENT_FINALIZED') {
+    return res.status(409).json({ message: 'El evento ya ha finalizado' });
+  }
+  if (updatedEvent?.errorCode === 'EVENT_OUT_OF_RANGE') {
+    return res.status(409).json({ message: 'No puedes iniciar el evento fuera de su horario programado' });
+  }
+  if (updatedEvent?.errorCode === 'STALE_TIMESTAMP') {
+    return res.status(409).json({ message: 'La evidencia debe capturarse en el momento' });
+  }
+  if (updatedEvent === false) {
+    return res.status(403).json({ message: 'El coordinador no está autorizado para iniciar este evento' });
+  }
+  if (!updatedEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
+
+  void notifyEventStartRecipients(req.app.locals.repository, updatedEvent, req.app.locals.eventNotificationEmailService)
+    .catch((error) => {
+      console.error('❌ Event start notification dispatch failed', {
+        eventId: updatedEvent?.id || null,
+        error: error?.message || 'notification-dispatch-failed',
+      });
+    });
+  return res.json(updatedEvent);
+}));
+
+app.post('/api/events/:id/end', upload.single('photo'), asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return badRequest(res, 'La foto es obligatoria');
+  }
+
+  const userId = Number(req.body.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return badRequest(res, 'El usuario es obligatorio');
+  }
+
+  const updatedEvent = await req.app.locals.repository.endEvent(req.params.id, {
+    userId,
+    photoFile: req.file,
+    lat: req.body.lat == null || req.body.lat === '' ? null : Number(req.body.lat),
+    lon: req.body.lon == null || req.body.lon === '' ? null : Number(req.body.lon),
+    timestamp: normalizeString(req.body.timestamp),
+  });
+
+  if (updatedEvent?.errorCode === 'EVENT_NOT_STARTED') {
+    return res.status(409).json({ message: 'El evento aún no ha sido iniciado' });
+  }
+  if (updatedEvent?.errorCode === 'EVENT_FINALIZED') {
+    return res.status(409).json({ message: 'El evento ya ha finalizado' });
+  }
+  if (updatedEvent?.errorCode === 'STALE_TIMESTAMP') {
+    return res.status(409).json({ message: 'La evidencia debe capturarse en el momento' });
+  }
+  if (updatedEvent === false) {
+    return res.status(403).json({ message: 'El coordinador no está autorizado para finalizar este evento' });
+  }
+  if (!updatedEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
+
+  await notifyClientAboutMilestone(req.app.locals.repository, updatedEvent, 'event_end');
+  return res.json(updatedEvent);
+}));
+
 app.post('/api/events/:id/reports', asyncHandler(async (req, res) => {
   const validationError = validateCoordinatorReportPayload(req.body);
   if (validationError) {
@@ -1170,8 +1472,10 @@ app.use((error, req, res, next) => {
 const bootstrap = async () => {
   const repository = createRepository();
   const welcomeEmailService = createWelcomeEmailService({ smtpConfig: config.smtp });
+  const eventNotificationEmailService = createEventNotificationEmailService({ smtpConfig: config.smtp });
   app.locals.repository = repository;
   app.locals.welcomeEmailService = welcomeEmailService;
+  app.locals.eventNotificationEmailService = eventNotificationEmailService;
 
   if (typeof repository.ping === 'function') {
     await repository.ping();

@@ -16,17 +16,44 @@ const toLocalCalendarKey = (value) => {
   ].join('-');
 };
 
+export const normalizeEventStatus = (value) => {
+  const status = String(value || '').toLowerCase();
+
+  if (status === 'started') {
+    return 'active';
+  }
+
+  if (status === 'active' || status === 'not_started' || status === 'finalized') {
+    return status;
+  }
+
+  return status;
+};
+
 export const getEventStatus = (event, now = new Date()) => {
   const currentKey = toLocalCalendarKey(now);
   const startKey = toLocalCalendarKey(event?.startDate || event?.start_date);
   const endKey = toLocalCalendarKey(event?.endDate || event?.end_date);
-
-  if (!currentKey || !startKey || !endKey) {
-    return 'finalized';
-  }
+  const storedStatus = normalizeEventStatus(event?.eventStatus || event?.event_status);
 
   if (event?.inactiveReason === 'manual' || event?.manualInactivatedAt || event?.manual_inactivated_at) {
     return 'finalized';
+  }
+
+  if (storedStatus === 'finalized') {
+    return 'finalized';
+  }
+
+  if (storedStatus === 'active') {
+    if (currentKey && endKey && currentKey > endKey) {
+      return 'finalized';
+    }
+
+    return 'active';
+  }
+
+  if (!currentKey || !startKey || !endKey) {
+    return 'not_started';
   }
 
   if (currentKey < startKey) {
@@ -43,7 +70,7 @@ export const getEventStatus = (event, now = new Date()) => {
 export const isEventCurrentlyActive = (event, now = new Date()) => getEventStatus(event, now) === 'active';
 
 export const getInactiveBadgeLabel = (event) => {
-  const status = event?.eventStatus || getEventStatus(event);
+  const status = getEventStatus(event);
   if (status === 'active') {
     return null;
   }
@@ -56,7 +83,7 @@ export const getInactiveBadgeLabel = (event) => {
 };
 
 export const getInactiveDescription = (event) => {
-  const status = event?.eventStatus || getEventStatus(event);
+  const status = getEventStatus(event);
   if (status === 'active') {
     return null;
   }

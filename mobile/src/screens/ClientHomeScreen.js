@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { getClientEvents } from '../api/api';
 import { APP_DISPLAY_NAME } from '../config/appMetadata';
 import UserProfileCard from '../components/UserProfileCard';
 import { normalizeExecutiveReport } from '../utils/executiveReport';
-import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
+import { contactByPhoneCall, contactByWhatsApp } from '../utils/contact';
 import { getUserDisplayName } from '../utils/user';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
@@ -14,13 +14,14 @@ import { useResponsiveMetrics } from '../utils/responsive';
 
 const formatDate = (value) => new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
+const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationData = null, onNotificationHandled = null }) => {
   const [currentView, setCurrentView] = useState('menu');
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const lastHandledNotificationIdRef = useRef(null);
   const displayUsername = getUserDisplayName(user);
   const metrics = useResponsiveMetrics();
   const tokens = getResponsiveTokens(metrics);
@@ -44,6 +45,24 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       fetchEvents();
     }
   }, [currentView, user?.id]);
+
+  useEffect(() => {
+    const notificationId = notificationData?.notificationId || null;
+    const eventId = notificationData?.data?.eventId;
+
+    if (!notificationId || !eventId || !events.length || lastHandledNotificationIdRef.current === notificationId) {
+      return;
+    }
+
+    const nextEvent = events.find((event) => Number(event.id) === Number(eventId));
+    if (nextEvent) {
+      lastHandledNotificationIdRef.current = notificationId;
+      setSelectedPhoto(null);
+      setSelectedEvent(nextEvent);
+      setCurrentView('detail');
+      onNotificationHandled?.(notificationId);
+    }
+  }, [notificationData, events, onNotificationHandled]);
 
   const handleDownloadPdf = async (event, report, points) => {
     setDownloadingPdf(true);
@@ -127,6 +146,8 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
     const event = selectedEvent;
     const report = normalizeExecutiveReport(event?.executiveReport);
     const points = (event?.cities || []).reduce((total, city) => total + (city.points?.length || 0), 0);
+    const executive = event?.executive || null;
+    const hasExecutiveAssociation = Boolean(executive?.id);
 
     return (
       <ScreenShell palette={palette}>
@@ -141,13 +162,27 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
           <Text style={styles.detailRow}>Puntos operativos: {points}</Text>
         </SurfaceCard>
 
+        {Array.isArray(event?.photos) && event.photos.length > 0 ? (
+          <SurfaceCard>
+            <Text style={styles.cardTitle}>Galería del evento</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
+              {event.photos.map((photo) => (
+                <TouchableOpacity key={photo.id} style={styles.photoCard} activeOpacity={0.9} onPress={() => setSelectedPhoto(photo)}>
+                  <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+                  <Text style={styles.photoCaption}>{photo.milestoneType === 'start_photo' ? 'Foto inicio' : photo.milestoneType === 'end_photo' ? 'Foto fin' : 'Foto'}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </SurfaceCard>
+        ) : null}
+
         <SurfaceCard>
           <Text style={styles.cardTitle}>Contacto ejecutivo</Text>
-          <Text style={styles.detailRow}>{event?.executiveContact?.fullName || 'Ejecutivo no informado'}</Text>
-          <Text style={styles.detailRow}>{event?.executiveContact?.email || 'Sin email'}</Text>
+          <Text style={styles.detailRow}>{event?.executive?.name || event?.executive?.fullName || 'Ejecutivo no informado'}</Text>
+          <Text style={styles.detailRow}>{event?.executive?.email || 'Sin email'}</Text>
           <View style={styles.contactRow}>
-            <AppButton title="LLAMAR" variant="secondary" style={styles.contactButton} disabled={!hasDirectContactPhone(event?.executiveContact)} onPress={() => contactByPhoneCall(event?.executiveContact)} />
-            <AppButton title="WHATSAPP" variant="secondary" style={styles.contactButton} disabled={!hasDirectContactPhone(event?.executiveContact)} onPress={() => contactByWhatsApp(event?.executiveContact)} />
+            <AppButton title="LLAMAR" variant="secondary" style={styles.contactButton} disabled={!hasExecutiveAssociation} onPress={() => contactByPhoneCall(executive)} />
+            <AppButton title="WHATSAPP" variant="secondary" style={styles.contactButton} disabled={!hasExecutiveAssociation} onPress={() => contactByWhatsApp(executive)} />
           </View>
         </SurfaceCard>
 

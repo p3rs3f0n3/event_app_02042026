@@ -1,4 +1,5 @@
 const { normalizeString } = require('./validation');
+const { buildEventResponse } = require('./eventResponse');
 
 const VALID_REPORT_STATUSES = new Set(['draft', 'published']);
 
@@ -112,13 +113,16 @@ const sanitizePublishedExecutiveReport = (report, assets = {}) => {
   return normalizedReport;
 };
 
-const sanitizeEventForClient = ({ event, executiveContact }) => ({
-  ...event,
-  reports: [],
-  photos: [],
-  executiveReport: sanitizePublishedExecutiveReport(event.executiveReport, { photos: event.photos }),
-  executiveContact: executiveContact || null,
-});
+const sanitizeEventForClient = ({ event, executiveContact }) => {
+  const canonicalEvent = buildEventResponse(event, { executiveContact });
+
+  return {
+    ...canonicalEvent,
+    reports: [],
+    photos: [],
+    executiveReport: sanitizePublishedExecutiveReport(canonicalEvent.executiveReport, { photos: canonicalEvent.photos }),
+  };
+};
 
 module.exports = {
   VALID_REPORT_STATUSES,
