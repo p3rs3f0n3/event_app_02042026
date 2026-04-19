@@ -1076,6 +1076,14 @@ app.post('/api/events/:id/reports', asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'El coordinador no está autorizado para cargar informes en este evento' });
   }
 
+  if (updatedEvent?.errorCode === 'EVENT_NOT_STARTED') {
+    return res.status(409).json({ message: 'El evento aún no ha iniciado' });
+  }
+
+  if (updatedEvent?.errorCode === 'EVENT_FINALIZED') {
+    return res.status(409).json({ message: 'El evento ha finalizado' });
+  }
+
   if (updatedEvent?.errorCode === 'INVALID_REPORT_TIME_RANGE') {
     return badRequest(res, updatedEvent.message);
   }
@@ -1110,6 +1118,14 @@ app.put('/api/events/:id/executive-report', asyncHandler(async (req, res) => {
 
   if (updatedEvent === false) {
     return res.status(403).json({ message: 'No puedes guardar el informe final de un evento de otro ejecutivo' });
+  }
+
+  if (updatedEvent?.errorCode === 'EVENT_NOT_STARTED') {
+    return res.status(409).json({ message: 'El evento aún no ha iniciado' });
+  }
+
+  if (updatedEvent?.errorCode === 'EVENT_FINALIZED') {
+    return res.status(409).json({ message: 'El evento ha finalizado' });
   }
 
   if (updatedEvent?.errorCode === 'EXECUTIVE_REPORT_LOCKED') {

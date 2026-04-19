@@ -2,7 +2,7 @@ const { pool, query } = require('../db/postgres/pool');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
-const { enrichEventLifecycle } = require('../utils/eventLifecycle');
+const { enrichEventLifecycle, getEventStatus } = require('../utils/eventLifecycle');
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const { normalizeString } = require('../utils/validation');
 const { comparePassword, createPasswordHash } = require('../utils/passwords');
@@ -1961,6 +1961,11 @@ class PostgresEventAppRepository {
       return null;
     }
 
+    const eventStatus = getEventStatus(event);
+    if (eventStatus !== 'active') {
+      return { errorCode: eventStatus === 'not_started' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
+    }
+
     if (Number(event.createdByUserId) !== Number(payload.authorUserId)) {
       return false;
     }
@@ -1994,6 +1999,11 @@ class PostgresEventAppRepository {
     const event = await this.#getEventById(Number(id));
     if (!event) {
       return null;
+    }
+
+    const eventStatus = getEventStatus(event);
+    if (eventStatus !== 'active') {
+      return { errorCode: eventStatus === 'not_started' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
     }
 
     const coordinatorProfile = await this.findCoordinatorProfileByUserId(payload.authorUserId);

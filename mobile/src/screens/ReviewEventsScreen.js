@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Ale
 
 import { getEvents, inactivateEvent } from '../api/api';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
-import { getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLifecycle';
+import { getEventStatus, getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLifecycle';
 import { getUserDisplayName } from '../utils/user';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 import { useResponsiveMetrics } from '../utils/responsive';
@@ -42,8 +42,8 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
 
   const formatDate = (date) => new Date(date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (date) => new Date(date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const activeEvents = events.filter((event) => !event.isInactive);
-  const inactiveEvents = events.filter((event) => event.isInactive);
+  const activeEvents = events.filter((event) => (event.eventStatus || getEventStatus(event)) === 'active');
+  const inactiveEvents = events.filter((event) => (event.eventStatus || getEventStatus(event)) !== 'active');
 
   const toggleSection = (section) => {
     setExpandedSections((current) => ({
@@ -85,13 +85,13 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   };
 
   const EventCard = ({ event, onPress }) => (
-    <TouchableOpacity style={[styles.eventButton, event.isInactive && styles.eventButtonInactive]} onPress={onPress}>
-      <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventIcon, event.isInactive && styles.eventIconInactive]} />
-      <View style={[styles.eventInfo, event.isInactive && styles.eventInfoInactive]}>
+    <TouchableOpacity style={[styles.eventButton, (event.eventStatus || getEventStatus(event)) !== 'active' && styles.eventButtonInactive]} onPress={onPress}>
+      <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventIcon, (event.eventStatus || getEventStatus(event)) !== 'active' && styles.eventIconInactive]} />
+      <View style={[styles.eventInfo, (event.eventStatus || getEventStatus(event)) !== 'active' && styles.eventInfoInactive]}>
         <Text style={styles.eventTitle}>{event.name}</Text>
         <Text style={styles.eventSubtitle}>{event.client}</Text>
         <Text style={styles.description}>{formatDate(event.startDate)}</Text>
-        {event.isInactive ? <StatusBadge label={getInactiveBadgeLabel(event)} tone="muted" /> : null}
+        {(event.eventStatus || getEventStatus(event)) !== 'active' ? <StatusBadge label={getInactiveBadgeLabel(event)} tone="muted" /> : null}
       </View>
     </TouchableOpacity>
   );
@@ -150,12 +150,12 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
           </View>
         ))}
 
-        {!selectedEvent.isInactive ? (
-          <>
-            <AppButton title="EDITAR EVENTO" onPress={() => onEdit(selectedEvent)} />
-            <AppButton title="INACTIVAR EVENTO" variant="danger" onPress={() => setShowInactivationModal(true)} />
-          </>
-        ) : null}
+          {(selectedEvent.eventStatus || getEventStatus(selectedEvent)) === 'active' ? (
+            <>
+              <AppButton title="EDITAR EVENTO" onPress={() => onEdit(selectedEvent)} />
+              <AppButton title="INACTIVAR EVENTO" variant="danger" onPress={() => setShowInactivationModal(true)} />
+            </>
+          ) : null}
 
         <AppButton title="REGRESAR A LA LISTA" variant="secondary" onPress={() => setSelectedEvent(null)} />
 

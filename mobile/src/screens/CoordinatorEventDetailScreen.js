@@ -18,6 +18,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { addCoordinatorEventPhoto, addCoordinatorEventReport } from '../api/api';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
+import { getEventStatus } from '../utils/eventLifecycle';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { useResponsiveMetrics } from '../utils/responsive';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
@@ -27,8 +28,6 @@ const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.f
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_PHOTO_SIZE_MB = 10;
 const VALID_PHOTO_FORMATS_LABEL = 'JPG, PNG, WEBP y HEIC';
-const REPORT_TIME_TOLERANCE_MINUTES = 5;
-
 const formatDate = (date) => {
   if (!date) return 'Sin fecha';
   return new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -111,28 +110,6 @@ const getTimeMinutesFromDate = (value) => {
   return (date.getHours() * 60) + date.getMinutes();
 };
 
-const getCoordinatorEventTimeRange = (event) => {
-  const ranges = [];
-  for (const city of Array.isArray(event?.cities) ? event.cities : []) {
-    for (const point of Array.isArray(city?.points) ? city.points : []) {
-      const startMinutes = getTimeMinutesFromDate(point?.startTime);
-      const endMinutes = getTimeMinutesFromDate(point?.endTime);
-      if (startMinutes !== null && endMinutes !== null) {
-        ranges.push({ startMinutes, endMinutes });
-      }
-    }
-  }
-
-  if (!ranges.length) {
-    return null;
-  }
-
-  return {
-    minStartMinutes: Math.min(...ranges.map((item) => item.startMinutes)),
-    maxEndMinutes: Math.max(...ranges.map((item) => item.endMinutes)),
-  };
-};
-
 const Field = ({ styles, label, value, onChangeText, multiline = false, placeholder = '', editable = true }) => (
   <View style={styles.fieldGroup}>
     <Text style={styles.fieldLabel}>{label}</Text>
@@ -162,9 +139,14 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const [savingReport, setSavingReport] = useState(false);
   const [reportForm, setReportForm] = useState(createEmptyReportForm());
   const [reportTimePicker, setReportTimePicker] = useState(null);
+  const [reportComposerExpanded, setReportComposerExpanded] = useState(false);
 
   const photos = useMemo(() => normalizePhotos(currentEvent?.photos), [currentEvent?.photos]);
   const reports = useMemo(() => normalizeReports(currentEvent?.reports), [currentEvent?.reports]);
+  const eventStatus = currentEvent?.eventStatus || getEventStatus(currentEvent);
+  const isEventFinalized = eventStatus === 'finalized';
+  const isEventNotStarted = eventStatus === 'not_started';
+  const canManageReports = eventStatus === 'active';
 
   const updateEventState = (updatedEvent) => {
     setCurrentEvent(updatedEvent);
@@ -251,6 +233,14 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   };
 
   const handleSaveReport = async () => {
+    if (!canManageReports) {
+      Alert.alert(
+        isEventNotStarted ? 'Evento no iniciado' : 'Evento finalizado',
+        isEventNotStarted ? 'El evento aún no ha iniciado' : 'El evento ha finalizado',
+      );
+      return;
+    }
+
     if (!reportForm.startTime.trim() || !reportForm.endTime.trim()) {
         Alert.alert('Datos incompletos', 'Completa la hora de inicio y finalización.');
       return;
@@ -264,17 +254,13 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
     }
     const startMinutes = (parsedStartTime.getHours() * 60) + parsedStartTime.getMinutes();
     const endMinutes = (parsedEndTime.getHours() * 60) + parsedEndTime.getMinutes();
-    if (endMinutes <= startMinutes) {
-      Alert.alert('Hora inválida', 'La hora de finalización debe ser posterior a la hora de inicio.');
+    if (startMinutes === endMinutes) {
+      Alert.alert('Hora inválida', 'La hora de finalización debe ser distinta a la hora de inicio.');
       return;
     }
-    const eventTimeRange = getCoordinatorEventTimeRange(currentEvent);
-    if (eventTimeRange && ((startMinutes + REPORT_TIME_TOLERANCE_MINUTES) < eventTimeRange.minStartMinutes)) {
-      Alert.alert('Hora fuera de rango', 'La hora de inicio del informe debe ser igual o posterior al inicio del evento.');
-      return;
-    }
-    if (eventTimeRange && ((endMinutes + REPORT_TIME_TOLERANCE_MINUTES) < eventTimeRange.maxEndMinutes)) {
-      Alert.alert('Hora fuera de rango', 'La hora de finalización del informe debe ser igual o posterior al fin del evento.');
+    const durationMinutes = endMinutes > startMinutes ? (endMinutes - startMinutes) : (1440 - startMinutes) + endMinutes;
+    if (durationMinutes <= 0 || durationMinutes > 1440) {
+      Alert.alert('Hora inválida', 'El bloque horario del informe no puede superar 24 horas.');
       return;
     }
 
@@ -315,6 +301,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
       });
       updateEventState(updatedEvent);
       setReportForm(createEmptyReportForm());
+      setReportComposerExpanded(false);
       Alert.alert('Éxito', 'El informe quedó guardado y visible para el ejecutivo.');
     } catch (error) {
       Alert.alert('Error', error?.response?.data?.message || 'No se pudo guardar el informe.');
@@ -336,6 +323,18 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
       ...current,
       [target]: formatReportTime(selectedDate),
     }));
+  };
+
+  const handleToggleReportComposer = () => {
+    if (!canManageReports) {
+      Alert.alert(
+        isEventNotStarted ? 'Evento no iniciado' : 'Evento finalizado',
+        isEventNotStarted ? 'El evento aún no ha iniciado' : 'El evento ha finalizado',
+      );
+      return;
+    }
+
+    setReportComposerExpanded((current) => !current);
   };
 
   return (
@@ -397,61 +396,78 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           </View>
 
           <View style={styles.reportBox}>
-            <Text style={styles.reportTitle}>Informes del coordinador ({reports.length})</Text>
-            <Text style={styles.helperText}>Registra el cierre operativo del evento. Puedes cargar más de un informe y quedará guardado para consulta del ejecutivo.</Text>
-
-            <Field styles={styles} label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
-            <View style={styles.doubleColumn}>
-              <View style={styles.columnItem}>
-              <TouchableOpacity onPress={() => setReportTimePicker('startTime')}>
-                <Field styles={styles} label="Hora inicio *" value={reportForm.startTime} onChangeText={() => {}} placeholder="Seleccionar hora" editable={false} />
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.reportHeader} onPress={handleToggleReportComposer} activeOpacity={0.8}>
+              <View style={styles.reportHeaderCopy}>
+                <Text style={styles.reportTitle}>Informes del coordinador ({reports.length})</Text>
+                <Text style={styles.helperText}>Toca para abrir o cerrar el formulario. Inicia colapsado por defecto.</Text>
               </View>
-              <View style={styles.columnItem}>
-                <TouchableOpacity onPress={() => setReportTimePicker('endTime')}>
-                  <Field styles={styles} label="Hora finalización *" value={reportForm.endTime} onChangeText={() => {}} placeholder="Seleccionar hora" editable={false} />
+              <Text style={styles.reportHeaderToggle}>{!canManageReports ? '🔒' : (reportComposerExpanded ? '−' : '+')}</Text>
+            </TouchableOpacity>
+
+            {!canManageReports ? (
+              <Text style={styles.noticeText}>{isEventNotStarted ? 'El evento aún no ha iniciado' : 'El evento ha finalizado'}</Text>
+            ) : null}
+
+            {reportComposerExpanded && canManageReports ? (
+              <View style={styles.reportComposerCard}>
+                <Field styles={styles} label="Título opcional" value={reportForm.title} onChangeText={(value) => setReportForm((current) => ({ ...current, title: value }))} placeholder="Ej: Cierre día 1" />
+                <View style={styles.doubleColumn}>
+                  <View style={styles.columnItem}>
+                    <TouchableOpacity onPress={() => setReportTimePicker('startTime')}>
+                      <Field styles={styles} label="Hora inicio *" value={reportForm.startTime} onChangeText={() => {}} placeholder="Seleccionar hora" editable={false} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.columnItem}>
+                    <TouchableOpacity onPress={() => setReportTimePicker('endTime')}>
+                      <Field styles={styles} label="Hora finalización *" value={reportForm.endTime} onChangeText={() => {}} placeholder="Seleccionar hora" editable={false} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Field styles={styles} label="Inventario inicial *" value={reportForm.initialInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, initialInventory: value }))} multiline placeholder="Detalle del inventario al inicio" />
+                <Field styles={styles} label="Inventario final *" value={reportForm.finalInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, finalInventory: value }))} multiline placeholder="Detalle del inventario al cierre" />
+                <View style={styles.doubleColumn}>
+                  <View style={styles.columnItem}>
+                    <Field styles={styles} label="Impacto directo *" value={reportForm.directImpact} onChangeText={(value) => setReportForm((current) => ({ ...current, directImpact: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
+                  </View>
+                  <View style={styles.columnItem}>
+                    <Field styles={styles} label="Impacto indirecto *" value={reportForm.indirectImpact} onChangeText={(value) => setReportForm((current) => ({ ...current, indirectImpact: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
+                  </View>
+                </View>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>¿Hubo redención?</Text>
+                  <Switch
+                    value={reportForm.hasRedemptions}
+                    onValueChange={(value) => setReportForm((current) => ({ ...current, hasRedemptions: value, redemptionsCount: value ? current.redemptionsCount : '0' }))}
+                    trackColor={{ false: '#BCAAA4', true: '#FFCC80' }}
+                    thumbColor={reportForm.hasRedemptions ? '#6D4C41' : '#F5F5F5'}
+                  />
+                </View>
+
+                {reportForm.hasRedemptions && (
+                  <Field styles={styles} label="Cantidad de redenciones *" value={reportForm.redemptionsCount} onChangeText={(value) => setReportForm((current) => ({ ...current, redemptionsCount: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
+                )}
+
+                <Field styles={styles} label="Otros aspectos relevantes" value={reportForm.relevantAspects} onChangeText={(value) => setReportForm((current) => ({ ...current, relevantAspects: value }))} multiline placeholder="Novedades logísticas, incidentes, aprendizajes, etc." />
+
+                <TouchableOpacity style={styles.primaryButton} onPress={handleSaveReport} disabled={savingReport}>
+                  {savingReport ? <ActivityIndicator color="#4E342E" /> : <Text style={styles.primaryButtonText}>ENVIAR INFORME</Text>}
                 </TouchableOpacity>
               </View>
-            </View>
-            <Field styles={styles} label="Inventario inicial *" value={reportForm.initialInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, initialInventory: value }))} multiline placeholder="Detalle del inventario al inicio" />
-            <Field styles={styles} label="Inventario final *" value={reportForm.finalInventory} onChangeText={(value) => setReportForm((current) => ({ ...current, finalInventory: value }))} multiline placeholder="Detalle del inventario al cierre" />
-            <View style={styles.doubleColumn}>
-              <View style={styles.columnItem}>
-                <Field styles={styles} label="Impacto directo *" value={reportForm.directImpact} onChangeText={(value) => setReportForm((current) => ({ ...current, directImpact: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
-              </View>
-              <View style={styles.columnItem}>
-                <Field styles={styles} label="Impacto indirecto *" value={reportForm.indirectImpact} onChangeText={(value) => setReportForm((current) => ({ ...current, indirectImpact: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
-              </View>
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>¿Hubo redención?</Text>
-              <Switch
-                value={reportForm.hasRedemptions}
-                onValueChange={(value) => setReportForm((current) => ({ ...current, hasRedemptions: value, redemptionsCount: value ? current.redemptionsCount : '0' }))}
-                trackColor={{ false: '#BCAAA4', true: '#FFCC80' }}
-                thumbColor={reportForm.hasRedemptions ? '#6D4C41' : '#F5F5F5'}
-              />
-            </View>
-
-            {reportForm.hasRedemptions && (
-              <Field styles={styles} label="Cantidad de redenciones *" value={reportForm.redemptionsCount} onChangeText={(value) => setReportForm((current) => ({ ...current, redemptionsCount: value.replace(/[^0-9]/g, '') }))} placeholder="0" />
-            )}
-
-            <Field styles={styles} label="Otros aspectos relevantes" value={reportForm.relevantAspects} onChangeText={(value) => setReportForm((current) => ({ ...current, relevantAspects: value }))} multiline placeholder="Novedades logísticas, incidentes, aprendizajes, etc." />
-
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSaveReport} disabled={savingReport}>
-              {savingReport ? <ActivityIndicator color="#4E342E" /> : <Text style={styles.primaryButtonText}>GUARDAR INFORME</Text>}
-            </TouchableOpacity>
+            ) : null}
 
             {reports.length === 0 ? (
               <Text style={styles.emptyText}>Todavía no hay informes cargados para este evento.</Text>
             ) : (
               reports.map((report, index) => (
                 <View key={report.id || `${report.title}-${index}`} style={styles.reportCard}>
-                  <Text style={styles.reportCardTitle}>{report.title || `Informe ${index + 1}`}</Text>
-                  <Text style={styles.reportCardDate}>{formatDateTime(report.createdAt || report.date)}</Text>
+                  <View style={styles.reportCardHeader}>
+                    <Text style={styles.reportCardTitle}>{report.title || `Informe ${index + 1}`}</Text>
+                    <Text style={styles.reportStatusBadge}>{report.isSubmitted ? 'ENVIADO' : 'BORRADOR'}</Text>
+                  </View>
+                  <Text style={styles.reportCardDate}>{formatDateTime(report.submittedAt || report.createdAt || report.date)}</Text>
                   {!!report?.author?.fullName && <Text style={styles.reportCardMeta}>Autor: {report.author.fullName}</Text>}
+                  {report.isSubmitted ? <Text style={styles.reportCardNotice}>Este informe ya fue enviado y no puede ser editado.</Text> : null}
                   <Text style={styles.reportCardContent}>Inicio: {report.startTime || 'Sin dato'}</Text>
                   <Text style={styles.reportCardContent}>Finalización: {report.endTime || 'Sin dato'}</Text>
                   <Text style={styles.reportCardContent}>Inventario inicial: {report.initialInventory || 'Sin dato'}</Text>
@@ -600,8 +616,13 @@ const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   disabledButton: { opacity: 0.55 },
   secondaryButtonText: { color: palette.secondaryButtonText, fontWeight: 'bold' },
   reportBox: { backgroundColor: palette.panel, borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm },
+  reportHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.spacing.sm },
+  reportHeaderCopy: { flex: 1, gap: tokens.spacing.xs },
   reportTitle: { color: palette.onHero, fontSize: metrics.font(17, 0.88), fontWeight: 'bold' },
+  reportHeaderToggle: { color: palette.primaryButton, fontSize: metrics.font(24, 0.9), fontWeight: '800', lineHeight: metrics.font(24, 0.9) },
+  reportComposerCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: tokens.radii.sm, padding: tokens.spacing.md, gap: tokens.spacing.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   emptyText: { color: '#E5E7EB', fontSize: tokens.typography.label },
+  noticeText: { color: '#FDE68A', fontSize: tokens.typography.caption, fontWeight: '700' },
   fieldGroup: { gap: metrics.spacing(6, 0.8) },
   fieldLabel: { color: palette.onHero, fontSize: tokens.typography.label, fontWeight: 'bold' },
   fieldInput: { backgroundColor: palette.surface, borderRadius: tokens.radii.sm, paddingHorizontal: tokens.spacing.sm + metrics.spacing(2), paddingVertical: tokens.spacing.sm + metrics.spacing(2), color: '#222', fontSize: tokens.typography.bodyLg },
@@ -611,7 +632,10 @@ const createStyles = (palette, metrics, tokens) => StyleSheet.create({
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: metrics.spacing(4, 0.75) },
   switchLabel: { color: palette.onHero, fontWeight: 'bold' },
   reportCard: { backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: tokens.radii.sm, padding: tokens.spacing.sm, gap: metrics.spacing(4, 0.75) },
+  reportCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: tokens.spacing.sm },
   reportCardTitle: { color: palette.onHero, fontWeight: 'bold' },
+  reportStatusBadge: { color: palette.primaryButton, fontSize: tokens.typography.caption, fontWeight: '800' },
+  reportCardNotice: { color: '#FDE68A', fontSize: tokens.typography.caption, fontWeight: '700' },
   reportCardDate: { color: '#D7CCC8', fontSize: tokens.typography.caption },
   reportCardMeta: { color: '#FDE68A', fontSize: tokens.typography.caption },
   reportCardContent: { color: '#F3F4F6', fontSize: tokens.typography.label },

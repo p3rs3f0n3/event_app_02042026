@@ -5,7 +5,7 @@ import { getEvents, saveExecutiveEventReport } from '../api/api';
 import { ScreenShell, AppButton, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { createExecutiveReportDraft, normalizeExecutiveReport } from '../utils/executiveReport';
-import { getInactiveBadgeLabel } from '../utils/eventLifecycle';
+import { getEventStatus, getInactiveBadgeLabel } from '../utils/eventLifecycle';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 import { useResponsiveMetrics } from '../utils/responsive';
 
@@ -42,7 +42,7 @@ const createListSections = (events) => {
   };
 
   (Array.isArray(events) ? events : []).forEach((event) => {
-    const bucketKey = event?.isInactive ? 'inactive' : 'active';
+    const bucketKey = (event?.eventStatus || getEventStatus(event)) === 'active' ? 'active' : 'inactive';
     buckets[bucketKey].items.push(event);
   });
 

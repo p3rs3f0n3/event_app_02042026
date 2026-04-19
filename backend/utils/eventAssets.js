@@ -70,8 +70,11 @@ const normalizeReportEntry = (report, index = 0) => {
       title: `Informe ${index + 1}`,
       content: report,
       createdAt: null,
+      submittedAt: null,
       author: null,
       source: 'legacy',
+      status: 'submitted',
+      isSubmitted: true,
       startTime: null,
       endTime: null,
       initialInventory: null,
@@ -99,9 +102,12 @@ const normalizeReportEntry = (report, index = 0) => {
     title,
     content,
     createdAt: report.createdAt || report.created_at || report.date || null,
+    submittedAt: report.submittedAt || report.submitted_at || report.createdAt || report.created_at || report.date || null,
     date: report.date || report.createdAt || report.created_at || null,
     author: normalizeAuthor(report.author),
     source: normalizeString(report.source) || 'coordinator',
+    status: normalizeString(report.status) || (typeof report.isSubmitted === 'boolean' ? (report.isSubmitted ? 'submitted' : 'draft') : 'submitted'),
+    isSubmitted: typeof report.isSubmitted === 'boolean' ? report.isSubmitted : true,
     startTime: report.startTime || report.start_time || null,
     endTime: report.endTime || report.end_time || null,
     initialInventory: normalizeString(report.initialInventory || report.initial_inventory || '' ) || null,
@@ -157,8 +163,11 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
     title: normalizeString(payload.title) || 'Informe operativo del coordinador',
     content: contentParts.join('\n'),
     createdAt,
+    submittedAt: createdAt,
     date: createdAt,
     source: 'coordinator',
+    status: 'submitted',
+    isSubmitted: true,
     author: {
       userId: Number(user?.id || coordinatorProfile?.userId || 0) || null,
       fullName: normalizeString(user?.fullName || coordinatorProfile?.name || user?.username) || 'Coordinador',
@@ -204,58 +213,19 @@ const parseMeridiemTimeToMinutes = (value) => {
   return (normalizedHours * 60) + minutes;
 };
 
-const getCoordinatorEventTimeRange = (event) => {
-  const ranges = [];
-  for (const city of Array.isArray(event?.cities) ? event.cities : []) {
-    for (const point of Array.isArray(city?.points) ? city.points : []) {
-      const startMinutes = parseMeridiemTimeToMinutes(
-        point?.startTime instanceof Date
-          ? point.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-          : point?.startTime,
-      );
-      const endMinutes = parseMeridiemTimeToMinutes(
-        point?.endTime instanceof Date
-          ? point.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-          : point?.endTime,
-      );
-
-      if (startMinutes !== null && endMinutes !== null) {
-        ranges.push({ startMinutes, endMinutes });
-      }
-    }
-  }
-
-  if (!ranges.length) {
-    return null;
-  }
-
-  return {
-    minStartMinutes: Math.min(...ranges.map((item) => item.startMinutes)),
-    maxEndMinutes: Math.max(...ranges.map((item) => item.endMinutes)),
-  };
-};
-
 const validateCoordinatorReportTimeRange = ({ event, startTime, endTime }) => {
   const startMinutes = parseMeridiemTimeToMinutes(startTime);
   const endMinutes = parseMeridiemTimeToMinutes(endTime);
   if (startMinutes === null || endMinutes === null) {
     return 'La hora de inicio y finalización deben tener formato de hora válido';
   }
-  if (endMinutes <= startMinutes) {
-    return 'La hora de finalización debe ser posterior a la hora de inicio';
+  if (startMinutes === endMinutes) {
+    return 'La hora de finalización debe ser distinta a la hora de inicio';
   }
 
-  const range = getCoordinatorEventTimeRange(event);
-  if (!range) {
-    return null;
-  }
-
-  if ((startMinutes + COORDINATOR_REPORT_TIME_TOLERANCE_MINUTES) < range.minStartMinutes) {
-    return 'La hora de inicio del informe debe ser igual o posterior al inicio del evento';
-  }
-
-  if ((endMinutes + COORDINATOR_REPORT_TIME_TOLERANCE_MINUTES) < range.maxEndMinutes) {
-    return 'La hora de finalización del informe debe ser igual o posterior al fin del evento';
+  const durationMinutes = endMinutes > startMinutes ? (endMinutes - startMinutes) : (1440 - startMinutes) + endMinutes;
+  if (durationMinutes <= 0 || durationMinutes > 1440) {
+    return 'El bloque horario del informe no puede superar 24 horas';
   }
 
   return null;
@@ -264,7 +234,6 @@ const validateCoordinatorReportTimeRange = ({ event, startTime, endTime }) => {
 module.exports = {
   buildCoordinatorPhoto,
   buildCoordinatorReport,
-  getCoordinatorEventTimeRange,
   normalizePhotoEntry,
   parseMeridiemTimeToMinutes,
   normalizeReportEntry,

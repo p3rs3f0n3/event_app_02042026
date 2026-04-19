@@ -3,7 +3,7 @@ const { comparePassword } = require('../utils/passwords');
 const { mapCoordinatorEvent, normalizeExecutiveContact } = require('../utils/coordinatorEvents');
 const { buildCoordinatorPhoto, buildCoordinatorReport, normalizePhotoEntry, normalizeReportEntry, validateCoordinatorReportTimeRange } = require('../utils/eventAssets');
 const { buildExecutiveReport, normalizeExecutiveReportEntry, sanitizeEventForClient } = require('../utils/executiveReports');
-const { enrichEventLifecycle } = require('../utils/eventLifecycle');
+const { enrichEventLifecycle, getEventStatus } = require('../utils/eventLifecycle');
 const { matchesClientIdentityConflict, normalizeClientMutationPayload } = require('../utils/adminClientPayload');
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const {
@@ -1504,6 +1504,11 @@ class EventAppRepository {
       return null;
     }
 
+    const eventStatus = getEventStatus(this.db.events[eventIndex]);
+    if (eventStatus !== 'active') {
+      return { errorCode: eventStatus === 'not_started' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
+    }
+
     const coordinatorProfile = this.findCoordinatorProfileByUserId(payload.authorUserId);
     if (!coordinatorProfile) {
       return false;
@@ -1548,6 +1553,11 @@ class EventAppRepository {
     const eventIndex = this.db.events.findIndex((event) => Number(event.id) === Number(id));
     if (eventIndex === -1) {
       return null;
+    }
+
+    const eventStatus = getEventStatus(this.db.events[eventIndex]);
+    if (eventStatus !== 'active') {
+      return { errorCode: eventStatus === 'not_started' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
     }
 
     const event = normalizeEvent(this.db.events[eventIndex], this.getClients());
