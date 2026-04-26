@@ -1,9 +1,10 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Platform,
   Image,
   Modal,
@@ -17,32 +18,44 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { addCoordinatorEventPhoto, addCoordinatorEventReport, endEvent as endEventApi, startEvent as startEventApi } from '../api/api';
+import { addCoordinatorEventPhoto, addCoordinatorEventReport, endEvent as endEventApi, getCoordinatorEvents, startEvent as startEventApi } from '../api/api';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
-import { getEventStatus } from '../utils/eventLifecycle';
+import { getEventStatus, getEventVisualState, isEventStartable } from '../utils/eventLifecycle';
 import { contactByPhoneCall, contactByWhatsApp, hasDirectContactPhone } from '../utils/contact';
 import { useResponsiveMetrics } from '../utils/responsive';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
+import { StatusBadge } from '../components/ui';
 
 const getStaffDisplayName = (staffMember) => staffMember?.name || staffMember?.fullName || 'Sin nombre';
 
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_PHOTO_SIZE_MB = 10;
 const VALID_PHOTO_FORMATS_LABEL = 'JPG, PNG, WEBP y HEIC';
-const formatWatermarkDate = (date) => new Date(date).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+const formatWatermarkDate = (date) => {
+  if (!date) return 'Sin fecha';
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
+  return parsed.toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+};
 const formatDate = (date) => {
   if (!date) return 'Sin fecha';
-  return new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
+  return parsed.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 };
 
 const formatTimeLabel = (date) => {
   if (!date) return 'Sin hora';
-  return new Date(date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return 'Sin hora';
+  return parsed.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
 const formatDateTime = (date) => {
   if (!date) return 'Fecha no disponible';
-  return new Date(date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return 'Fecha no disponible';
+  return parsed.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
 const createEmptyReportForm = () => ({
@@ -153,15 +166,68 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const photos = useMemo(() => normalizePhotos(currentEvent?.photos), [currentEvent?.photos]);
   const reports = useMemo(() => normalizeReports(currentEvent?.reports), [currentEvent?.reports]);
   const eventStatus = getEventStatus(currentEvent);
+  const visualState = getEventVisualState(currentEvent);
+  const canStartEvent = isEventStartable(currentEvent);
   const executive = currentEvent?.executive || event?.executive || null;
   const hasExecutiveAssociation = Boolean(executive?.id);
   const isEventFinalized = eventStatus === 'finalized';
   const isEventNotStarted = eventStatus === 'not_started';
   const canManageReports = eventStatus === 'active';
 
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[CoordinatorEventDetailScreen] photos received', {
+        eventId: currentEvent?.id,
+        total: photos.length,
+        photos,
+      });
+    }
+  }, [currentEvent?.id, photos]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user?.id && event?.id) {
+        refreshCurrentEventFromServer();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [user?.id, event?.id]);
+
+  useEffect(() => {
+    setCurrentEvent(event);
+
+    const syncLatest = async () => {
+      if (!user?.id || !event?.id) {
+        return;
+      }
+
+      await refreshCurrentEventFromServer();
+    };
+
+    void syncLatest();
+  }, [event, user?.id]);
+
   const updateEventState = (updatedEvent) => {
     setCurrentEvent(updatedEvent);
     onEventUpdated?.(updatedEvent);
+  };
+
+  const refreshCurrentEventFromServer = async () => {
+    try {
+      const serverEvents = await getCoordinatorEvents(user?.id);
+      const latestEvent = Array.isArray(serverEvents)
+        ? serverEvents.find((item) => String(item.id) === String(event?.id))
+        : null;
+
+      if (latestEvent) {
+        updateEventState(latestEvent);
+      }
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[CoordinatorEventDetailScreen] refresh failed', error?.message || error);
+      }
+    }
   };
 
   const handleContactExecutive = async (channel) => {
@@ -336,6 +402,14 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
     }));
   };
 
+  const handleOpenGallery = () => {
+    if (__DEV__) {
+      console.log('[CoordinatorEventDetailScreen] open gallery', { eventId: currentEvent?.id, photos: photos.length });
+    }
+
+    setGalleryVisible(true);
+  };
+
   const handleToggleReportComposer = () => {
     if (!canManageReports) {
       Alert.alert(
@@ -434,7 +508,16 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
       closeMilestoneCapture();
     } catch (error) {
       console.error('Milestone confirm failed:', error);
-      Alert.alert('Error', error?.response?.data?.message || error?.message || 'No se pudo completar la acción.');
+
+      const errorMessage = error?.response?.data?.message || error?.message || 'No se pudo completar la acción.';
+      const eventAlreadyStarted = /ya fue iniciado/i.test(errorMessage);
+      const eventAlreadyFinalized = /ya ha finalizado/i.test(errorMessage);
+
+      if (eventAlreadyStarted || eventAlreadyFinalized) {
+        await refreshCurrentEventFromServer();
+      }
+
+      Alert.alert('Error', errorMessage);
     } finally {
       setMilestoneUploading(false);
     }
@@ -454,8 +537,10 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
           <Text style={styles.metaText}>Hasta: {formatDate(currentEvent?.endDate)}</Text>
           <Text style={styles.metaText}>Puntos asignados: {currentEvent?.assignmentSummary?.pointsCount || 0}</Text>
           <Text style={styles.metaText}>Ejecutivo: {currentEvent?.executive?.name || currentEvent?.executive?.fullName || 'No disponible'}</Text>
+          <StatusBadge label={visualState.label} tone={visualState.tone} />
+          {visualState.isInactive ? <Text style={styles.noticeText}>{visualState.description}</Text> : null}
           <View style={styles.milestoneActionsRow}>
-            {eventStatus === 'not_started' ? (
+            {canStartEvent ? (
               <TouchableOpacity style={styles.milestoneActionButton} onPress={() => handleOpenMilestoneCapture('start')}>
                 <Text style={styles.milestoneActionText}>INICIAR EVENTO</Text>
               </TouchableOpacity>
@@ -504,7 +589,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
               <TouchableOpacity style={styles.secondaryButton} onPress={handlePickPhoto} disabled={uploadingPhoto}>
                 <Text style={styles.secondaryButtonText}>{uploadingPhoto ? 'GUARDANDO...' : 'CARGAR FOTO'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setGalleryVisible(true)}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenGallery}>
                 <Text style={styles.secondaryButtonText}>VER GALERÍA</Text>
               </TouchableOpacity>
             </View>

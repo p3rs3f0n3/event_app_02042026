@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Alert, Modal, TextInput, AppState } from 'react-native';
 
 import { getEvents, inactivateEvent } from '../api/api';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
-import { getEventStatus, getInactiveBadgeLabel, getInactiveDescription } from '../utils/eventLifecycle';
+import { getEventStatus, getInactiveBadgeLabel, getInactiveDescription, getEventVisualState } from '../utils/eventLifecycle';
 import { getUserDisplayName } from '../utils/user';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 import { useResponsiveMetrics } from '../utils/responsive';
@@ -29,10 +29,28 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
     fetchEvents();
   }, [user?.id]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user?.id) {
+        fetchEvents();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [user?.id]);
+
   const fetchEvents = async () => {
     try {
       const data = await getEvents(user?.id);
-      setEvents(Array.isArray(data) ? data : []);
+      const nextEvents = Array.isArray(data) ? data : [];
+      setEvents(nextEvents);
+
+      if (selectedEvent) {
+        const refreshedSelected = nextEvents.find((event) => String(event.id) === String(selectedEvent.id));
+        if (refreshedSelected) {
+          setSelectedEvent(refreshedSelected);
+        }
+      }
     } catch (error) {
       Alert.alert('Error', 'No se pudieron cargar los eventos');
     } finally {
@@ -40,8 +58,18 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
     }
   };
 
-  const formatDate = (date) => new Date(date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const formatTime = (date) => new Date(date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const formatDate = (date) => {
+    if (!date) return 'Sin fecha';
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
+    return parsed.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  };
+  const formatTime = (date) => {
+    if (!date) return 'Sin hora';
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return 'Sin hora';
+    return parsed.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
   const activeEvents = events.filter((event) => getEventStatus(event) === 'active');
   const inactiveEvents = events.filter((event) => getEventStatus(event) !== 'active');
 
@@ -84,17 +112,21 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
     }
   };
 
-  const EventCard = ({ event, onPress }) => (
-    <TouchableOpacity style={[styles.eventButton, getEventStatus(event) !== 'active' && styles.eventButtonInactive]} onPress={onPress}>
-      <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventIcon, getEventStatus(event) !== 'active' && styles.eventIconInactive]} />
-      <View style={[styles.eventInfo, getEventStatus(event) !== 'active' && styles.eventInfoInactive]}>
-        <Text style={styles.eventTitle}>{event.name}</Text>
-        <Text style={styles.eventSubtitle}>{event.client}</Text>
-        <Text style={styles.description}>{formatDate(event.startDate)}</Text>
-        {getEventStatus(event) !== 'active' ? <StatusBadge label={getInactiveBadgeLabel(event)} tone="muted" /> : null}
-      </View>
-    </TouchableOpacity>
-  );
+  const EventCard = ({ event, onPress }) => {
+    const visualState = getEventVisualState(event);
+
+    return (
+      <TouchableOpacity style={[styles.eventButton, visualState.isInactive && styles.eventButtonInactive]} onPress={onPress}>
+        <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventIcon, visualState.isInactive && styles.eventIconInactive]} />
+        <View style={[styles.eventInfo, visualState.isInactive && styles.eventInfoInactive]}>
+          <Text style={styles.eventTitle}>{event.name}</Text>
+          <Text style={styles.eventSubtitle}>{event.client}</Text>
+          <Text style={styles.description}>{formatDate(event.startDate)}</Text>
+          <StatusBadge label={visualState.label} tone={visualState.tone} />
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -106,12 +138,14 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
   }
 
   if (selectedEvent) {
+    const selectedVisualState = getEventVisualState(selectedEvent);
+
     return (
       <ScreenShell palette={palette} contentContainerStyle={styles.screenContent}>
         <SectionTitle title="Detalle del evento" subtitle="Revisión operativa y acciones administrativas del ejecutivo." />
 
         {selectedEvent.image ? (
-          <Image source={{ uri: selectedEvent.image }} style={[styles.detailImage, selectedEvent.isInactive && styles.eventIconInactive]} />
+          <Image source={{ uri: selectedEvent.image }} style={[styles.detailImage, selectedVisualState.isInactive && styles.eventIconInactive]} />
         ) : null}
 
         <SurfaceCard style={styles.infoBox}>
@@ -119,7 +153,8 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
           <Text style={styles.detailLabel}>Cliente: <Text style={styles.detailValue}>{selectedEvent.client}</Text></Text>
           <Text style={styles.detailLabel}>Desde: <Text style={styles.detailValue}>{formatDate(selectedEvent.startDate)}</Text></Text>
           <Text style={styles.detailLabel}>Hasta: <Text style={styles.detailValue}>{formatDate(selectedEvent.endDate)}</Text></Text>
-          {selectedEvent.isInactive ? (
+          <StatusBadge label={selectedVisualState.label} tone={selectedVisualState.tone} />
+          {selectedVisualState.isInactive ? (
             <View style={styles.inactiveBox}>
               <Text style={styles.inactiveBoxTitle}>{getInactiveBadgeLabel(selectedEvent)}</Text>
               <Text style={styles.inactiveBoxText}>{getInactiveDescription(selectedEvent)}</Text>

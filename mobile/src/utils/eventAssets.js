@@ -19,7 +19,7 @@ export const normalizePhotoItem = (photo, index = 0) => {
     return null;
   }
 
-  const uri = toTrimmedString(photo.uri || photo.url || photo.photoUrl || photo.src);
+  const uri = toTrimmedString(photo.uri || photo.url || photo.photoUrl || photo.photo_url || photo.src);
   if (!uri) {
     return null;
   }

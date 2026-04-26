@@ -11,7 +11,7 @@ const ensureEventUploadsDir = async () => {
   return uploadsRoot;
 };
 
-const getPublicBaseUrl = () => process.env.PUBLIC_BASE_URL || `http://localhost:${config.app.port}`;
+const getPublicBaseUrl = () => process.env.PUBLIC_BASE_URL || '';
 
 const detectExtension = ({ mimeType, fileName } = {}) => {
   const normalizedMimeType = normalizeString(mimeType).toLowerCase();
@@ -41,7 +41,9 @@ const storeEventUploadFromBuffer = async ({ buffer, mimeType, fileName }) => {
   return {
     fileName: uniqueName,
     absolutePath,
-    publicUrl: `${getPublicBaseUrl()}/uploads/events/${uniqueName}`,
+    publicUrl: getPublicBaseUrl()
+      ? `${getPublicBaseUrl().replace(/\/$/, '')}/uploads/events/${uniqueName}`
+      : `/uploads/events/${uniqueName}`,
     mimeType: normalizeString(mimeType).toLowerCase() || 'image/jpeg',
     size: buffer.length,
   };

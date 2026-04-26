@@ -1318,6 +1318,9 @@ class EventAppRepository {
       manualInactivatedAt: new Date().toISOString(),
       manualInactivationComment: comment,
       manualInactivatedByUserId: createdByUserId,
+      startRealAt: this.db.events[eventIndex].startRealAt || this.db.events[eventIndex].startDate || new Date().toISOString(),
+      endRealAt: this.db.events[eventIndex].endRealAt || new Date().toISOString(),
+      eventStatus: 'finalized',
     }, this.getClients());
 
     this.save();
@@ -1683,7 +1686,7 @@ class EventAppRepository {
     this.db.events[eventIndex] = normalizeEvent({
       ...event,
       eventStatus: 'active',
-      startRealAt: milestonePhoto.createdAt,
+      startRealAt: event.startRealAt || milestonePhoto.createdAt || event.startDate || null,
       startLat: payload.lat ?? null,
       startLon: payload.lon ?? null,
       startPhotoUrl: payload.photoUri || null,
@@ -1743,7 +1746,8 @@ class EventAppRepository {
     this.db.events[eventIndex] = normalizeEvent({
       ...event,
       eventStatus: 'finalized',
-      endRealAt: milestonePhoto.createdAt,
+      startRealAt: event.startRealAt || event.startDate || milestonePhoto.createdAt || null,
+      endRealAt: event.endRealAt || milestonePhoto.createdAt || event.endDate || null,
       endLat: payload.lat ?? null,
       endLon: payload.lon ?? null,
       endPhotoUrl: payload.photoUri || null,

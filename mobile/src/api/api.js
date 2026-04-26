@@ -95,9 +95,12 @@ export const sendExpoPushNotification = async (data) => withApiErrorHandling(asy
 ).data);
 
 export const getAppConfig = async () => (await getAPI().get('/app-config')).data;
-export const getEvents = async (createdByUserId) => normalizeEventDtoList((await getAPI().get('/events', { params: { createdByUserId } })).data);
-export const getCoordinatorEvents = async (userId) => normalizeEventDtoList((await getAPI().get('/coordinator/events', { params: { userId } })).data);
-export const getClientEvents = async (userId) => normalizeEventDtoList((await getAPI().get('/client/events', { params: { userId } })).data);
+const normalizeEventResponse = (data) => normalizeEventDto(data, { photoBaseUrl: currentBaseUrl });
+const normalizeEventResponseList = (data) => normalizeEventDtoList(data, { photoBaseUrl: currentBaseUrl });
+
+export const getEvents = async (createdByUserId) => normalizeEventResponseList((await getAPI().get('/events', { params: { createdByUserId } })).data);
+export const getCoordinatorEvents = async (userId) => normalizeEventResponseList((await getAPI().get('/coordinator/events', { params: { userId } })).data);
+export const getClientEvents = async (userId) => normalizeEventResponseList((await getAPI().get('/client/events', { params: { userId } })).data);
 export const getClients = async (params = {}) => (await getAPI().get('/clients', { params })).data;
 export const getAdminClients = async () => withApiErrorHandling(async () => (await getAPI().get('/admin/clients')).data);
 export const findAdminClientByNit = async (nit) => withApiErrorHandling(async () => (await getAPI().get('/admin/clients/by-nit', { params: { nit } })).data);
@@ -138,11 +141,11 @@ export const exportAdminStaffCsv = async ({ actorUserId }) => withApiErrorHandli
 ).data);
 export const getColombiaCities = async () => (await getAPI().get('/colombia-cities')).data;
 export const addColombiaCity = async (name) => withApiErrorHandling(async () => (await getAPI().post('/colombia-cities', { name })).data);
-export const createEvent = async (data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().post('/events', data)).data));
-export const updateEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().put(`/events/${id}`, data)).data));
-export const inactivateEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().post(`/events/${id}/inactivate`, data)).data));
-export const addCoordinatorEventPhoto = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().post(`/events/${id}/photos`, data)).data));
-export const addCoordinatorEventReport = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().post(`/events/${id}/reports`, data)).data));
-export const saveExecutiveEventReport = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().put(`/events/${id}/executive-report`, data)).data));
-export const startEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().post(`/events/${id}/start`, data, { headers: { 'Content-Type': 'multipart/form-data' } })).data));
-export const endEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventDto((await getAPI().post(`/events/${id}/end`, data, { headers: { 'Content-Type': 'multipart/form-data' } })).data));
+export const createEvent = async (data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().post('/events', data)).data));
+export const updateEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().put(`/events/${id}`, data)).data));
+export const inactivateEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().post(`/events/${id}/inactivate`, data)).data));
+export const addCoordinatorEventPhoto = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().post(`/events/${id}/photos`, data)).data));
+export const addCoordinatorEventReport = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().post(`/events/${id}/reports`, data)).data));
+export const saveExecutiveEventReport = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().put(`/events/${id}/executive-report`, data)).data));
+export const startEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().post(`/events/${id}/start`, data, { headers: { 'Content-Type': 'multipart/form-data' } })).data));
+export const endEvent = async (id, data) => withApiErrorHandling(async () => normalizeEventResponse((await getAPI().post(`/events/${id}/end`, data, { headers: { 'Content-Type': 'multipart/form-data' } })).data));

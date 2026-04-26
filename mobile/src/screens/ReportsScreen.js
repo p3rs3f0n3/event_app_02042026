@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Image, Alert, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Image, Alert, TextInput, AppState } from 'react-native';
 
 import { getEvents, saveExecutiveEventReport } from '../api/api';
 import { ScreenShell, AppButton, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
 import { normalizePhotos, normalizeReports } from '../utils/eventAssets';
 import { createExecutiveReportDraft, normalizeExecutiveReport } from '../utils/executiveReport';
-import { getEventStatus, getInactiveBadgeLabel } from '../utils/eventLifecycle';
+import { getEventStatus, getEventVisualState } from '../utils/eventLifecycle';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 import { useResponsiveMetrics } from '../utils/responsive';
 
@@ -20,8 +20,18 @@ const FORM_FIELDS = [
   ['recommendations', 'Recomendaciones *'],
 ];
 
-const formatDate = (value) => new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-const formatDateTime = (value) => (value ? new Date(value).toLocaleString('es-ES') : 'Sin fecha');
+const formatDate = (value) => {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+  return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+const formatDateTime = (value) => {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+  return date.toLocaleString('es-ES');
+};
 
 const getReportStatusMeta = (report) => {
   if (report?.status === 'published') {
@@ -103,6 +113,16 @@ const ReportsScreen = ({ onBack, user }) => {
 
   useEffect(() => {
     fetchEvents(false);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user?.id) {
+        fetchEvents(false);
+      }
+    });
+
+    return () => subscription.remove();
   }, [user?.id]);
 
   const selectedEvent = useMemo(() => events.find((event) => event.id === selectedEventId) || null, [events, selectedEventId]);
@@ -222,16 +242,17 @@ const ReportsScreen = ({ onBack, user }) => {
                           group.items.map((event) => {
                             const report = normalizeExecutiveReport(event.executiveReport);
                             const statusMeta = getReportStatusMeta(report);
+                            const visualState = getEventVisualState(event);
 
                             return (
                               <TouchableOpacity key={event.id} style={styles.eventCard} onPress={() => handleSelectEvent(event)}>
-                                <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventImage, event.isInactive && styles.eventImageInactive]} />
-                                <View style={[styles.eventBody, event.isInactive && styles.eventBodyInactive]}>
+                                <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={[styles.eventImage, visualState.isInactive && styles.eventImageInactive]} />
+                                <View style={[styles.eventBody, visualState.isInactive && styles.eventBodyInactive]}>
                                   <Text style={styles.eventTitle}>{event.name}</Text>
                                   <Text style={styles.eventMeta}>{event.client}</Text>
                                   <Text style={styles.eventMeta}>{formatDate(event.startDate)} → {formatDate(event.endDate)}</Text>
                                   <Text style={styles.eventMeta}>Fotos: {event.photos?.length || 0} · Reportes: {event.reports?.length || 0}</Text>
-                                  {event.isInactive ? <StatusBadge label={getInactiveBadgeLabel(event)} tone="muted" /> : null}
+                                  <StatusBadge label={visualState.label} tone={visualState.tone} />
                                   <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
                                 </View>
                               </TouchableOpacity>

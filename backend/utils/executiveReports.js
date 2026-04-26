@@ -119,7 +119,7 @@ const sanitizeEventForClient = ({ event, executiveContact }) => {
   return {
     ...canonicalEvent,
     reports: [],
-    photos: [],
+    photos: canonicalEvent.photos,
     executiveReport: sanitizePublishedExecutiveReport(canonicalEvent.executiveReport, { photos: canonicalEvent.photos }),
   };
 };

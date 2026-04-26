@@ -50,6 +50,8 @@ const normalizePhotoEntry = (photo, index = 0) => {
     ...photo,
     id: normalizeString(photo.id) || `photo-${index + 1}`,
     uri,
+    photoUrl: uri,
+    photo_url: uri,
     createdAt: photo.createdAt || photo.created_at || null,
     author: normalizeAuthor(photo.author),
     mimeType: normalizeString(photo.mimeType || photo.mime_type || '') || null,
@@ -123,6 +125,8 @@ const normalizeReportEntry = (report, index = 0) => {
 const buildCoordinatorPhoto = ({ uri, mimeType, fileSize, fileName, coordinatorProfile, user }) => ({
   id: `photo-${Date.now()}`,
   uri,
+  photoUrl: uri,
+  photo_url: uri,
   createdAt: new Date().toISOString(),
   source: 'coordinator',
   mimeType: normalizeString(mimeType) || null,
@@ -189,6 +193,8 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
 const buildEventMilestonePhoto = ({ uri, mimeType, fileSize, fileName, user, event, milestoneType, lat, lon, timestamp }) => ({
   id: `${milestoneType}-${Date.now()}`,
   uri,
+  photoUrl: uri,
+  photo_url: uri,
   createdAt: timestamp || new Date().toISOString(),
   source: milestoneType,
   mimeType: normalizeString(mimeType) || null,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { getClientEvents } from '../api/api';
 import { APP_DISPLAY_NAME } from '../config/appMetadata';
@@ -11,8 +11,21 @@ import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
 import { shareClientReportPdf } from '../utils/clientReportPdf';
 import { useResponsiveMetrics } from '../utils/responsive';
+import { getEventVisualState } from '../utils/eventLifecycle';
 
-const formatDate = (value) => new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const formatDate = (value) => {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+  return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
+const formatDateTime = (value) => {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+  return date.toLocaleString('es-ES');
+};
 
 const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationData = null, onNotificationHandled = null }) => {
   const [currentView, setCurrentView] = useState('menu');
@@ -32,7 +45,15 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
     setLoading(true);
     try {
       const response = await getClientEvents(user?.id);
-      setEvents(Array.isArray(response) ? response : []);
+      const nextEvents = Array.isArray(response) ? response : [];
+      setEvents(nextEvents);
+
+      if (selectedEvent) {
+        const refreshedSelected = nextEvents.find((item) => String(item.id) === String(selectedEvent.id));
+        if (refreshedSelected) {
+          setSelectedEvent(refreshedSelected);
+        }
+      }
     } catch (error) {
       Alert.alert('Error', 'No se pudieron cargar tus eventos.');
     } finally {
@@ -45,6 +66,16 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
       fetchEvents();
     }
   }, [currentView, user?.id]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user?.id) {
+        fetchEvents();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [user?.id, currentView, selectedEvent]);
 
   useEffect(() => {
     const notificationId = notificationData?.notificationId || null;
@@ -126,12 +157,14 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
       <View style={styles.listGap}>
         {events.map((event) => {
           const publishedReport = normalizeExecutiveReport(event.executiveReport);
+          const visualState = getEventVisualState(event);
 
           return (
             <TouchableOpacity key={event.id} style={styles.eventCard} onPress={() => { setSelectedEvent(event); setCurrentView('detail'); }}>
               <Text style={styles.eventTitle}>{event.name}</Text>
               <Text style={styles.eventMeta}>{event.client}</Text>
               <Text style={styles.eventMeta}>{formatDate(event.startDate)} → {formatDate(event.endDate)}</Text>
+              <StatusBadge label={visualState.label} tone={visualState.tone} />
               <StatusBadge label={publishedReport ? 'Informe final publicado' : 'Informe final pendiente'} tone={publishedReport ? 'success' : 'warning'} />
             </TouchableOpacity>
           );
@@ -149,15 +182,26 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
     const executive = event?.executive || null;
     const hasExecutiveAssociation = Boolean(executive?.id);
 
+    if (__DEV__) {
+      console.log('[ClientHomeScreen] photos received', {
+        eventId: event?.id,
+        total: event?.photos?.length || 0,
+        photos: event?.photos || [],
+      });
+    }
+
     return (
       <ScreenShell palette={palette}>
         <SectionTitle title={event?.name} subtitle={`${event?.client} · visión compartida con el cliente`} />
+
+        <StatusBadge label={getEventVisualState(event).label} tone={getEventVisualState(event).tone} />
 
         <SurfaceCard>
           <Text style={styles.cardTitle}>Resumen del evento</Text>
           <Text style={styles.detailRow}>Cliente: {event?.client}</Text>
           <Text style={styles.detailRow}>Inicio: {formatDate(event?.startDate)}</Text>
           <Text style={styles.detailRow}>Fin: {formatDate(event?.endDate)}</Text>
+          {getEventVisualState(event).isInactive ? <Text style={styles.pendingText}>{getEventVisualState(event).description}</Text> : null}
           <Text style={styles.detailRow}>Ciudades: {event?.cities?.length || 0}</Text>
           <Text style={styles.detailRow}>Puntos operativos: {points}</Text>
         </SurfaceCard>
@@ -194,7 +238,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
             <View style={styles.reportGap}>
               <StatusBadge label="Publicado" tone="success" />
               <Text style={styles.reportTitle}>{report.title}</Text>
-              <Text style={styles.reportMeta}>Publicado: {report.publishedAt ? new Date(report.publishedAt).toLocaleString('es-ES') : 'Sin fecha'}</Text>
+              <Text style={styles.reportMeta}>Publicado: {formatDateTime(report.publishedAt)}</Text>
               <Text style={styles.reportSectionTitle}>Resumen ejecutivo</Text>
               <Text style={styles.reportBody}>{report.executiveSummary}</Text>
               <Text style={styles.reportSectionTitle}>Cumplimiento de objetivos</Text>

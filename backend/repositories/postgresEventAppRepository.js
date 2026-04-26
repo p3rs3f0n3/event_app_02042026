@@ -39,6 +39,14 @@ const DUPLICATE_COORDINATOR_CEDULA_MESSAGE = 'Ya existe un coordinador con esa c
 const DUPLICATE_EXECUTIVE_CEDULA_MESSAGE = 'Ya existe un ejecutivo con esa cédula.';
 const DUPLICATE_STAFF_CEDULA_MESSAGE = 'Ya existe una persona de staff con esa cédula.';
 
+const EVENT_SELECT_COLUMNS = `
+  e.id, e.name, e.client, e.client_id, e.client_user_id, e.image,
+  e.start_date, e.end_date, e.event_status, e.start_real_at, e.end_real_at,
+  e.start_lat, e.start_lon, e.end_lat, e.end_lon, e.start_photo_url, e.end_photo_url,
+  e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
+  e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id
+`;
+
 const isPostgresUniqueViolation = (error) => error?.code === '23505';
 
 const mapAdminUniqueViolation = (error) => {
@@ -1424,11 +1432,10 @@ class PostgresEventAppRepository {
     const clients = await this.getClients();
     const result = await query(
       `
-        SELECT e.id, e.name, e.client, e.client_id, e.client_user_id, e.image, e.start_date, e.end_date, e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
-               e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
-               COALESCE(
-                  json_agg(
-                    json_build_object(
+        SELECT ${EVENT_SELECT_COLUMNS},
+                COALESCE(
+                   json_agg(
+                     json_build_object(
                       'name', COALESCE(ci.name, ec.city_name),
                       'isOther', COALESCE(ci.is_other, FALSE),
                       'points', ec.points
@@ -1616,6 +1623,9 @@ class PostgresEventAppRepository {
         SET manual_inactivated_at = NOW(),
             manual_inactivation_comment = $2,
             manual_inactivated_by_user_id = $3,
+            start_real_at = COALESCE(start_real_at, start_date, NOW()),
+            end_real_at = COALESCE(end_real_at, NOW()),
+            event_status = 'finalized',
             updated_at = NOW()
         WHERE id = $1
         RETURNING id
@@ -1633,12 +1643,8 @@ class PostgresEventAppRepository {
   async #getEventById(id) {
     const result = await query(
       `
-        SELECT e.id, e.name, e.client, e.client_user_id, e.image, e.start_date, e.end_date, e.event_status, e.start_real_at, e.end_real_at,
-               e.start_lat, e.start_lon, e.end_lat, e.end_lon, e.start_photo_url, e.end_photo_url,
-               e.status, e.reports, e.photos, e.executive_report, e.created_by_user_id,
-                e.client_id,
-               e.manual_inactivated_at, e.manual_inactivation_comment, e.manual_inactivated_by_user_id,
-               COALESCE(
+        SELECT ${EVENT_SELECT_COLUMNS},
+                COALESCE(
                   json_agg(
                     json_build_object(
                       'name', COALESCE(ci.name, ec.city_name),
@@ -2251,7 +2257,7 @@ class PostgresEventAppRepository {
       `
         UPDATE events
         SET event_status = 'active',
-            start_real_at = COALESCE(start_real_at, $2::timestamptz),
+            start_real_at = COALESCE(start_real_at, $2::timestamptz, start_date),
             start_lat = COALESCE(start_lat, $3::numeric),
             start_lon = COALESCE(start_lon, $4::numeric),
             start_photo_url = COALESCE(start_photo_url, $5),
@@ -2340,7 +2346,8 @@ class PostgresEventAppRepository {
       `
         UPDATE events
         SET event_status = 'finalized',
-            end_real_at = COALESCE(end_real_at, $2::timestamptz),
+            start_real_at = COALESCE(start_real_at, start_date, $2::timestamptz),
+            end_real_at = COALESCE(end_real_at, $2::timestamptz, end_date),
             end_lat = COALESCE(end_lat, $3::numeric),
             end_lon = COALESCE(end_lon, $4::numeric),
             end_photo_url = COALESCE(end_photo_url, $5),

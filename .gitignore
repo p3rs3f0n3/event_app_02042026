@@ -16,6 +16,10 @@ consolas.bat
 
 tas-done-alert.ps1
 
+backend/uploads/
+.atl/
+openspec/
+
 .DS_Store
 npm-debug.*
 yarn-debug.*

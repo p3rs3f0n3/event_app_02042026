@@ -19,84 +19,139 @@ const toLocalCalendarKey = (value) => {
 export const normalizeEventStatus = (value) => {
   const status = String(value || '').toLowerCase();
 
-  if (status === 'started') {
+  if (status === 'created' || status === 'not_started') {
+    return 'not_started';
+  }
+
+  if (status === 'started' || status === 'active') {
     return 'active';
   }
 
-  if (status === 'active' || status === 'not_started' || status === 'finalized') {
-    return status;
+  if (status === 'finished' || status === 'finalized') {
+    return 'finalized';
   }
 
-  return status;
+  return status || 'not_started';
 };
 
 export const getEventStatus = (event, now = new Date()) => {
-  const currentKey = toLocalCalendarKey(now);
-  const startKey = toLocalCalendarKey(event?.startDate || event?.start_date);
-  const endKey = toLocalCalendarKey(event?.endDate || event?.end_date);
   const storedStatus = normalizeEventStatus(event?.eventStatus || event?.event_status);
+  const hasStartRealAt = Boolean(parseDate(event?.startRealAt || event?.start_real_at));
+  const hasEndRealAt = Boolean(parseDate(event?.endRealAt || event?.end_real_at));
 
   if (event?.inactiveReason === 'manual' || event?.manualInactivatedAt || event?.manual_inactivated_at) {
     return 'finalized';
   }
 
-  if (storedStatus === 'finalized') {
+  if (hasEndRealAt || storedStatus === 'finalized') {
     return 'finalized';
   }
 
-  if (storedStatus === 'active') {
-    if (currentKey && endKey && currentKey > endKey) {
-      return 'finalized';
-    }
-
+  if (hasStartRealAt || storedStatus === 'active') {
     return 'active';
   }
 
+  return 'not_started';
+};
+
+export const isEventExpiredByDate = (event, now = new Date()) => {
+  const currentKey = toLocalCalendarKey(now);
+  const endKey = toLocalCalendarKey(event?.endDate || event?.end_date);
+
+  if (!currentKey || !endKey) {
+    return false;
+  }
+
+  return getEventStatus(event, now) === 'not_started' && currentKey > endKey;
+};
+
+export const isEventStartable = (event, now = new Date()) => {
+  const currentKey = toLocalCalendarKey(now);
+  const startKey = toLocalCalendarKey(event?.startDate || event?.start_date);
+  const endKey = toLocalCalendarKey(event?.endDate || event?.end_date);
+
   if (!currentKey || !startKey || !endKey) {
-    return 'not_started';
+    return false;
   }
 
-  if (currentKey < startKey) {
-    return 'not_started';
+  if (getEventStatus(event, now) !== 'not_started') {
+    return false;
   }
 
-  if (currentKey > endKey) {
-    return 'finalized';
+  return currentKey >= startKey && currentKey <= endKey;
+};
+
+export const getEventVisualState = (event, now = new Date()) => {
+  if (event?.inactiveReason === 'manual' || event?.manualInactivatedAt || event?.manual_inactivated_at) {
+    return {
+      key: 'manual_inactive',
+      label: 'INACTIVO MANUAL',
+      description: event?.manualInactivationComment || 'Evento inactivado manualmente por el ejecutivo',
+      tone: 'muted',
+      isInactive: true,
+      inactiveReason: 'manual',
+    };
   }
 
-  return 'active';
+  const status = getEventStatus(event, now);
+
+  if (status === 'active') {
+    return {
+      key: 'active',
+      label: 'En curso',
+      description: null,
+      tone: 'success',
+      isInactive: false,
+      inactiveReason: null,
+    };
+  }
+
+  if (status === 'finalized' || Boolean(parseDate(event?.endRealAt || event?.end_real_at))) {
+    return {
+      key: 'finished',
+      label: 'Evento finalizado por el coordinador',
+      description: 'El evento ha finalizado por el coordinador',
+      tone: 'muted',
+      isInactive: true,
+      inactiveReason: 'finished',
+    };
+  }
+
+  if (isEventExpiredByDate(event, now)) {
+    return {
+      key: 'expired',
+      label: 'Evento inactivo por fecha',
+      description: 'La fecha del evento ya venció sin iniciar',
+      tone: 'warning',
+      isInactive: true,
+      inactiveReason: 'expired',
+    };
+  }
+
+  return {
+    key: 'pending',
+    label: 'Pendiente',
+    description: 'El evento aún no ha iniciado',
+    tone: 'info',
+    isInactive: false,
+    inactiveReason: null,
+  };
 };
 
 export const isEventCurrentlyActive = (event, now = new Date()) => getEventStatus(event, now) === 'active';
 
 export const getInactiveBadgeLabel = (event) => {
-  const status = getEventStatus(event);
-  if (status === 'active') {
-    return null;
-  }
-
-  if (status === 'not_started') {
-    return 'NO INICIADO';
-  }
-
-  return event.inactiveReason === 'manual' ? 'INACTIVO MANUAL' : 'FINALIZADO';
+  const visualState = getEventVisualState(event);
+  return visualState.isInactive ? visualState.label : null;
 };
 
 export const getInactiveDescription = (event) => {
-  const status = getEventStatus(event);
-  if (status === 'active') {
+  const visualState = getEventVisualState(event);
+  if (!visualState.isInactive) {
     return null;
   }
 
-  if (status === 'not_started') {
-    return 'El evento aún no ha iniciado';
-  }
-
-  if (event.inactiveReason === 'manual') {
-    return event.manualInactivationComment || 'Evento inactivado manualmente por el ejecutivo';
-  }
-
-  return 'El evento ha finalizado';
+  return visualState.description;
 };
 
 export { parseDate, toLocalCalendarKey };

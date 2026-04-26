@@ -1279,6 +1279,19 @@ app.post('/api/events/:id/start', upload.single('photo'), asyncHandler(async (re
     return badRequest(res, 'El usuario es obligatorio');
   }
 
+  const existingEvent = await req.app.locals.repository.getEventById(req.params.id);
+  if (!existingEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
+
+  console.info('[events] start requested', {
+    eventId: Number(req.params.id),
+    userId,
+    currentStatus: existingEvent.eventStatus || existingEvent.event_status || null,
+    startRealAt: existingEvent.startRealAt || existingEvent.start_real_at || null,
+    endRealAt: existingEvent.endRealAt || existingEvent.end_real_at || null,
+  });
+
   const updatedEvent = await req.app.locals.repository.startEvent(req.params.id, {
     userId,
     photoFile: req.file,
@@ -1306,6 +1319,15 @@ app.post('/api/events/:id/start', upload.single('photo'), asyncHandler(async (re
     return res.status(404).json({ message: 'Evento no encontrado' });
   }
 
+  console.info('[events] status transitioned', {
+    eventId: Number(updatedEvent.id),
+    from: existingEvent.eventStatus || existingEvent.event_status || null,
+    to: updatedEvent.eventStatus || updatedEvent.event_status || null,
+    startRealAt: updatedEvent.startRealAt || updatedEvent.start_real_at || null,
+    endRealAt: updatedEvent.endRealAt || updatedEvent.end_real_at || null,
+    userId,
+  });
+
   void notifyEventStartRecipients(req.app.locals.repository, updatedEvent, req.app.locals.eventNotificationEmailService)
     .catch((error) => {
       console.error('❌ Event start notification dispatch failed', {
@@ -1325,6 +1347,19 @@ app.post('/api/events/:id/end', upload.single('photo'), asyncHandler(async (req,
   if (!Number.isInteger(userId) || userId <= 0) {
     return badRequest(res, 'El usuario es obligatorio');
   }
+
+  const existingEvent = await req.app.locals.repository.getEventById(req.params.id);
+  if (!existingEvent) {
+    return res.status(404).json({ message: 'Evento no encontrado' });
+  }
+
+  console.info('[events] end requested', {
+    eventId: Number(req.params.id),
+    userId,
+    currentStatus: existingEvent.eventStatus || existingEvent.event_status || null,
+    startRealAt: existingEvent.startRealAt || existingEvent.start_real_at || null,
+    endRealAt: existingEvent.endRealAt || existingEvent.end_real_at || null,
+  });
 
   const updatedEvent = await req.app.locals.repository.endEvent(req.params.id, {
     userId,
@@ -1349,6 +1384,15 @@ app.post('/api/events/:id/end', upload.single('photo'), asyncHandler(async (req,
   if (!updatedEvent) {
     return res.status(404).json({ message: 'Evento no encontrado' });
   }
+
+  console.info('[events] status transitioned', {
+    eventId: Number(updatedEvent.id),
+    from: existingEvent.eventStatus || existingEvent.event_status || null,
+    to: updatedEvent.eventStatus || updatedEvent.event_status || null,
+    startRealAt: updatedEvent.startRealAt || updatedEvent.start_real_at || null,
+    endRealAt: updatedEvent.endRealAt || updatedEvent.end_real_at || null,
+    userId,
+  });
 
   await notifyClientAboutMilestone(req.app.locals.repository, updatedEvent, 'event_end');
   return res.json(updatedEvent);

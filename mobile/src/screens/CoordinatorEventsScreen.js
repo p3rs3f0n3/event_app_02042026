@@ -1,10 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getCoordinatorEvents } from '../api/api';
 import { useResponsiveMetrics } from '../utils/responsive';
 import { getAppPalette, getResponsiveTokens } from '../theme/tokens';
+import { StatusBadge } from '../components/ui';
+import { getEventVisualState } from '../utils/eventLifecycle';
 
-const formatDate = (date) => new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+const formatDate = (date) => {
+  if (!date) return 'Sin fecha';
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
+  return parsed.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refreshToken = 0 }) => {
   const [events, setEvents] = useState([]);
@@ -29,6 +36,18 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
     loadEvents();
   }, [refreshToken, user?.id]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user?.id) {
+        getCoordinatorEvents(user.id)
+          .then((response) => setEvents(Array.isArray(response) ? response : []))
+          .catch(() => {});
+      }
+    });
+
+    return () => subscription.remove();
+  }, [user?.id]);
+
   if (loading) {
     return (
       <View style={styles.loading}> 
@@ -50,18 +69,23 @@ const CoordinatorEventsScreen = ({ user, onBack, onSelectEvent, roleConfig, refr
               <Text style={styles.emptyText}>Cuando un ejecutivo te asigne puntos, aparecerán aquí.</Text>
             </View>
           ) : (
-            events.map((event) => (
-              <TouchableOpacity key={event.id} style={styles.eventCard} onPress={() => onSelectEvent(event)}>
-                <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={styles.eventImage} />
-                <View style={styles.eventBody}>
-                  <Text style={styles.eventTitle}>{event.name}</Text>
-                  <Text style={styles.eventText}>{event.client}</Text>
-                  <Text style={styles.eventText}>Fechas: {formatDate(event.startDate)} - {formatDate(event.endDate)}</Text>
-                  <Text style={styles.eventText}>Puntos asignados: {event.assignmentSummary?.pointsCount || 0}</Text>
-                  <Text style={styles.eventText}>Fotos: {event.photos?.length || 0} · Informes: {event.reports?.length || 0}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
+            events.map((event) => {
+              const visualState = getEventVisualState(event);
+
+              return (
+                <TouchableOpacity key={event.id} style={styles.eventCard} onPress={() => onSelectEvent(event)}>
+                  <Image source={{ uri: event.image || 'https://cdn-icons-png.flaticon.com/512/1162/1162238.png' }} style={styles.eventImage} />
+                  <View style={styles.eventBody}>
+                    <Text style={styles.eventTitle}>{event.name}</Text>
+                    <Text style={styles.eventText}>{event.client}</Text>
+                    <Text style={styles.eventText}>Fechas: {formatDate(event.startDate)} - {formatDate(event.endDate)}</Text>
+                    <Text style={styles.eventText}>Puntos asignados: {event.assignmentSummary?.pointsCount || 0}</Text>
+                    <Text style={styles.eventText}>Fotos: {event.photos?.length || 0} · Informes: {event.reports?.length || 0}</Text>
+                    <StatusBadge label={visualState.label} tone={visualState.tone} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
