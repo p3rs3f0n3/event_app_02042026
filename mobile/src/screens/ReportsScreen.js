@@ -305,7 +305,7 @@ const ReportsScreen = ({ onBack, user }) => {
             const selected = draft.selectedPhotoIds.includes(photo.id);
             return (
               <TouchableOpacity key={photo.id} style={[styles.photoCard, selected && styles.selectedCard, isPublished && styles.lockedAsset]} onPress={() => toggleSelection('selectedPhotoIds', photo.id)} disabled={isPublished}>
-                <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+                <Image source={{ uri: photo.photo_url }} style={styles.photoPreview} />
                 <Text style={styles.assetCaption}>{photo.author?.fullName || 'Coordinador'}</Text>
                 <Text style={styles.assetCaption}>{selected ? 'Incluida en el informe final' : isPublished ? 'No incluida' : 'Tocar para incluir'}</Text>
               </TouchableOpacity>

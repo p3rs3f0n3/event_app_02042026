@@ -7,7 +7,7 @@ const { enrichEventLifecycle, getEventStatus, toLocalCalendarKey } = require('..
 const { cloneAuditPayload, sanitizeAuditLogRecord } = require('../utils/auditLogs');
 const { normalizeString } = require('../utils/validation');
 const { comparePassword, createPasswordHash } = require('../utils/passwords');
-const { storeEventUploadFromBuffer } = require('../utils/eventUploads');
+const { storeEventUploadFromBuffer, storeEventUploadFromBase64 } = require('../utils/eventUploads');
 const {
   DEFAULT_PROFILE_PHOTO,
   isDocumentEquivalent,
@@ -2067,8 +2067,22 @@ class PostgresEventAppRepository {
       return false;
     }
 
+    let finalUri = uri;
+    if (uri && uri.startsWith('data:image/')) {
+      try {
+        const upload = await storeEventUploadFromBase64({
+          base64: uri,
+          mimeType,
+          fileName,
+        });
+        finalUri = upload.publicUrl;
+      } catch (error) {
+        console.error('[repository] Error converting base64 photo', error);
+      }
+    }
+
     const photo = buildCoordinatorPhoto({
-      uri,
+      uri: finalUri,
       mimeType,
       fileSize,
       fileName,

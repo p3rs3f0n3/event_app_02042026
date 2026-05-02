@@ -19,7 +19,13 @@ const canonicalizePhotoUri = (value) => {
   const uri = String(value || '').trim();
   if (!uri) return '';
 
-  if (/^(data:|file:|content:)/i.test(uri)) {
+  // We no longer return base64 in canonical responses to force using physical files
+  if (/^(data:)/i.test(uri)) {
+    console.warn('[events] base64 found in canonical response, this should be avoided');
+    return uri; // Keep it if it somehow leaked, but the goal is to not have it here
+  }
+
+  if (/^(file:|content:)/i.test(uri)) {
     return uri;
   }
 
@@ -36,21 +42,18 @@ const mergeCanonicalPhotos = (event) => {
     ? event.photos.map((photo) => {
       const normalized = normalizePhotoEntry(photo);
       if (!normalized) return null;
-      const uri = canonicalizePhotoUri(normalized.uri || normalized.photoUrl || normalized.photo_url);
+      const photo_url = canonicalizePhotoUri(normalized.photo_url || normalized.uri || normalized.photoUrl);
 
       return {
         ...normalized,
-        uri,
-        photoUrl: uri,
-        photo_url: uri,
+        photo_url,
       };
     }).filter(Boolean)
     : [];
+
   const derivedMilestones = [
     event?.startPhotoUrl ? {
       id: `start-photo-${event?.id || 'event'}`,
-      uri: canonicalizePhotoUri(event.startPhotoUrl),
-      photoUrl: canonicalizePhotoUri(event.startPhotoUrl),
       photo_url: canonicalizePhotoUri(event.startPhotoUrl),
       createdAt: event.startRealAt || null,
       source: 'start_photo',
@@ -59,8 +62,6 @@ const mergeCanonicalPhotos = (event) => {
     } : null,
     event?.endPhotoUrl ? {
       id: `end-photo-${event?.id || 'event'}`,
-      uri: canonicalizePhotoUri(event.endPhotoUrl),
-      photoUrl: canonicalizePhotoUri(event.endPhotoUrl),
       photo_url: canonicalizePhotoUri(event.endPhotoUrl),
       createdAt: event.endRealAt || null,
       source: 'end_photo',
@@ -71,8 +72,8 @@ const mergeCanonicalPhotos = (event) => {
 
   const merged = new Map();
   [...photos, ...derivedMilestones].forEach((photo) => {
-    if (!photo?.uri) return;
-    const key = photo.uri;
+    if (!photo?.photo_url) return;
+    const key = photo.photo_url;
     if (!merged.has(key)) {
       merged.set(key, photo);
     }

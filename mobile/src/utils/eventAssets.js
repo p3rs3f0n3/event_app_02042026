@@ -8,7 +8,7 @@ export const normalizePhotoItem = (photo, index = 0) => {
   if (typeof photo === 'string') {
     return {
       id: `photo-${index + 1}`,
-      uri: photo,
+      photo_url: photo,
       createdAt: null,
       author: null,
       source: 'legacy',
@@ -19,15 +19,15 @@ export const normalizePhotoItem = (photo, index = 0) => {
     return null;
   }
 
-  const uri = toTrimmedString(photo.uri || photo.url || photo.photoUrl || photo.photo_url || photo.src);
-  if (!uri) {
+  const photo_url = toTrimmedString(photo.photo_url || photo.uri || photo.url || photo.photoUrl || photo.src);
+  if (!photo_url) {
     return null;
   }
 
   return {
     ...photo,
     id: toTrimmedString(photo.id) || `photo-${index + 1}`,
-    uri,
+    photo_url,
     createdAt: photo.createdAt || photo.created_at || null,
     author: photo.author || null,
     source: toTrimmedString(photo.source) || 'coordinator',

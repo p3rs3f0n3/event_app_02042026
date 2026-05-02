@@ -30,7 +30,7 @@ const normalizePhotoEntry = (photo, index = 0) => {
   if (typeof photo === 'string') {
     return {
       id: `photo-${index + 1}`,
-      uri: photo,
+      photo_url: photo,
       createdAt: null,
       author: null,
       source: 'legacy',
@@ -41,7 +41,7 @@ const normalizePhotoEntry = (photo, index = 0) => {
     return null;
   }
 
-  const uri = normalizeString(photo.uri || photo.url || photo.photoUrl || photo.src);
+  const uri = normalizeString(photo.uri || photo.url || photo.photoUrl || photo.src || photo.photo_url);
   if (!uri) {
     return null;
   }
@@ -49,8 +49,6 @@ const normalizePhotoEntry = (photo, index = 0) => {
   return {
     ...photo,
     id: normalizeString(photo.id) || `photo-${index + 1}`,
-    uri,
-    photoUrl: uri,
     photo_url: uri,
     createdAt: photo.createdAt || photo.created_at || null,
     author: normalizeAuthor(photo.author),
@@ -124,8 +122,6 @@ const normalizeReportEntry = (report, index = 0) => {
 
 const buildCoordinatorPhoto = ({ uri, mimeType, fileSize, fileName, coordinatorProfile, user }) => ({
   id: `photo-${Date.now()}`,
-  uri,
-  photoUrl: uri,
   photo_url: uri,
   createdAt: new Date().toISOString(),
   source: 'coordinator',
@@ -192,8 +188,6 @@ const buildCoordinatorReport = ({ payload, coordinatorProfile, user }) => {
 
 const buildEventMilestonePhoto = ({ uri, mimeType, fileSize, fileName, user, event, milestoneType, lat, lon, timestamp }) => ({
   id: `${milestoneType}-${Date.now()}`,
-  uri,
-  photoUrl: uri,
   photo_url: uri,
   createdAt: timestamp || new Date().toISOString(),
   source: milestoneType,

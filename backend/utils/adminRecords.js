@@ -40,13 +40,13 @@ const normalizeStoredProfilePhoto = (value) => {
   }
 
   if (typeof value === 'object' && !Array.isArray(value)) {
-    const uri = normalizePhotoMetadataValue(value.uri || value.url || value.photoUrl || value.src);
-    if (!uri) {
+    const photo_url = normalizePhotoMetadataValue(value.photo_url || value.uri || value.url || value.photoUrl || value.src);
+    if (!photo_url) {
       return null;
     }
 
     return {
-      uri,
+      photo_url,
       mimeType: normalizePhotoMetadataValue(value.mimeType || value.mime_type),
       fileName: normalizePhotoMetadataValue(value.fileName || value.file_name),
       fileSize: normalizePhotoFileSize(value.fileSize || value.file_size),
@@ -67,12 +67,12 @@ const normalizeStoredProfilePhoto = (value) => {
     try {
       return normalizeStoredProfilePhoto(JSON.parse(trimmedValue));
     } catch (error) {
-      return { uri: trimmedValue, mimeType: null, fileName: null, fileSize: null, source: 'legacy' };
+      return { photo_url: trimmedValue, mimeType: null, fileName: null, fileSize: null, source: 'legacy' };
     }
   }
 
   return {
-    uri: trimmedValue,
+    photo_url: trimmedValue,
     mimeType: null,
     fileName: null,
     fileSize: null,
@@ -84,18 +84,18 @@ const normalizeProfilePhotoField = (value) => {
   const normalizedField = normalizePhotoAssetField(value, { defaultUri: DEFAULT_PROFILE_PHOTO });
 
   return {
-    photo: normalizedField.uri,
+    photo: normalizedField.photo_url,
     photoMetadata: normalizedField.metadata,
   };
 };
 
 const normalizePhotoAssetField = (value, { defaultUri = null } = {}) => {
   const normalizedPhoto = normalizeStoredProfilePhoto(value);
-  const uri = normalizedPhoto?.uri || defaultUri || null;
+  const photo_url = normalizedPhoto?.photo_url || defaultUri || null;
 
-  if (!uri) {
+  if (!photo_url) {
     return {
-      uri: null,
+      photo_url: null,
       metadata: null,
     };
   }
@@ -108,7 +108,7 @@ const normalizePhotoAssetField = (value, { defaultUri = null } = {}) => {
   );
 
   return {
-    uri,
+    photo_url,
     metadata: hasMetadata
       ? {
         mimeType: normalizedPhoto.mimeType,
@@ -126,12 +126,12 @@ const serializeProfilePhotoField = (value) => {
 
 const serializePhotoAssetField = (value, { fallbackUri = null } = {}) => {
   const normalizedPhoto = normalizeStoredProfilePhoto(value);
-  if (!normalizedPhoto?.uri) {
+  if (!normalizedPhoto?.photo_url) {
     return fallbackUri;
   }
 
   if (!normalizedPhoto.mimeType && !normalizedPhoto.fileName && !normalizedPhoto.fileSize && (!normalizedPhoto.source || normalizedPhoto.source === 'legacy')) {
-    return normalizedPhoto.uri;
+    return normalizedPhoto.photo_url;
   }
 
   return JSON.stringify(normalizedPhoto);
@@ -252,7 +252,7 @@ const sanitizeExecutiveAdminRecord = (value, linkedUser = null) => {
 };
 
 const sanitizeCoordinatorAdminRecord = ({ coordinator, user = null }) => ({
-  ...normalizeProfilePhotoField(coordinator.photoMetadata ? { uri: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
+  ...normalizeProfilePhotoField(coordinator.photoMetadata ? { photo_url: coordinator.photo, ...coordinator.photoMetadata } : coordinator.photo),
   id: Number(coordinator.id),
   userId: Number(coordinator.userId || coordinator.user_id || user?.id || 0) || null,
   username: user?.username || null,
@@ -273,7 +273,7 @@ const sanitizeStaffAdminRecord = (staffMember) => {
   const sizes = resolveStaffSizeFields(staffMember);
 
   return {
-    ...normalizeProfilePhotoField(staffMember.photoMetadata ? { uri: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
+    ...normalizeProfilePhotoField(staffMember.photoMetadata ? { photo_url: staffMember.photo, ...staffMember.photoMetadata } : staffMember.photo),
     id: Number(staffMember.id),
     fullName: staffMember.name || staffMember.fullName || staffMember.full_name,
     cedula: staffMember.cedula,

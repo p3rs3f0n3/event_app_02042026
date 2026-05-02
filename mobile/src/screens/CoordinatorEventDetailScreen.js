@@ -581,7 +581,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
             <Text style={styles.helperHint}>Formatos válidos: {VALID_PHOTO_FORMATS_LABEL}.</Text>
             <Text style={styles.helperHint}>Tamaño máximo por foto: {MAX_PHOTO_SIZE_MB} MB.</Text>
             {photos.length > 0 ? (
-              <Image source={{ uri: photos[photos.length - 1].uri }} style={styles.latestPhoto} />
+              <Image source={{ uri: photos[photos.length - 1].photo_url }} style={styles.latestPhoto} />
             ) : (
               <Text style={styles.emptyText}>Todavía no hay fotos cargadas.</Text>
             )}
@@ -749,8 +749,8 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
                 <Text style={styles.modalEmptyText}>Todavía no hay fotos disponibles para consulta.</Text>
               ) : (
                 photos.map((photo, index) => (
-                  <View key={photo.id || `${photo.uri}-${index}`} style={styles.galleryCard}>
-                    <Image source={{ uri: photo.uri }} style={styles.galleryPhoto} />
+                  <View key={photo.id || `${photo.photo_url}-${index}`} style={styles.galleryCard}>
+                    <Image source={{ uri: photo.photo_url }} style={styles.galleryPhoto} />
                     <Text style={styles.galleryMeta}>{formatDateTime(photo.createdAt)}</Text>
                     {!!photo?.author?.fullName && <Text style={styles.galleryMeta}>Cargó: {photo.author.fullName}</Text>}
                   </View>

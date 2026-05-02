@@ -49,8 +49,21 @@ const storeEventUploadFromBuffer = async ({ buffer, mimeType, fileName }) => {
   };
 };
 
+const storeEventUploadFromBase64 = async ({ base64, mimeType, fileName }) => {
+  if (!base64 || typeof base64 !== 'string') {
+    throw new Error('La imagen base64 es obligatoria');
+  }
+
+  // Remove data:image/xxx;base64, prefix if present
+  const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
+  const buffer = Buffer.from(base64Data, 'base64');
+
+  return storeEventUploadFromBuffer({ buffer, mimeType, fileName });
+};
+
 module.exports = {
   ensureEventUploadsDir,
   getPublicBaseUrl,
   storeEventUploadFromBuffer,
+  storeEventUploadFromBase64,
 };

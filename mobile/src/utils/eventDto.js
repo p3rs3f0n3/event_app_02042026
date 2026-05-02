@@ -56,8 +56,6 @@ export const normalizeEventDto = (event, { photoBaseUrl = '' } = {}) => {
   const executive = normalizeExecutive(event);
   const photos = normalizePhotos(event.photos).map((photo) => ({
     ...photo,
-    uri: normalizePhotoUri(photo.uri || photo.photoUrl || photo.photo_url, photoBaseUrl),
-    photoUrl: normalizePhotoUri(photo.photoUrl || photo.photo_url || photo.uri, photoBaseUrl),
     photo_url: normalizePhotoUri(photo.photo_url || photo.photoUrl || photo.uri, photoBaseUrl),
   }));
 

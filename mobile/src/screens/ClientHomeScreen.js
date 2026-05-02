@@ -212,7 +212,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
               {event.photos.map((photo) => (
                 <TouchableOpacity key={photo.id} style={styles.photoCard} activeOpacity={0.9} onPress={() => setSelectedPhoto(photo)}>
-                  <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+                  <Image source={{ uri: photo.photo_url }} style={styles.photoPreview} />
                   <Text style={styles.photoCaption}>{photo.milestoneType === 'start_photo' ? 'Foto inicio' : photo.milestoneType === 'end_photo' ? 'Foto fin' : 'Foto'}</Text>
                 </TouchableOpacity>
               ))}
@@ -260,7 +260,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
                     {report.selectedPhotos.map((photo) => (
                       <TouchableOpacity key={photo.id} style={styles.photoCard} activeOpacity={0.9} onPress={() => setSelectedPhoto(photo)}>
-                        <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+                        <Image source={{ uri: photo.photo_url }} style={styles.photoPreview} />
                         <Text style={styles.photoCaption}>{photo.author?.fullName || 'Coordinación'}</Text>
                         <Text style={styles.photoHint}>Tocá la foto para verla grande</Text>
                       </TouchableOpacity>
@@ -279,7 +279,7 @@ const ClientHomeScreen = ({ user, onLogout, appConfig, roleConfig, notificationD
         <Modal visible={Boolean(selectedPhoto)} transparent animationType="fade" onRequestClose={() => setSelectedPhoto(null)}>
           <Pressable style={styles.photoModalBackdrop} onPress={() => setSelectedPhoto(null)}>
             <View style={styles.photoModalCard}>
-              {selectedPhoto ? <Image source={{ uri: selectedPhoto.uri }} style={styles.photoModalImage} /> : null}
+              {selectedPhoto ? <Image source={{ uri: selectedPhoto.photo_url }} style={styles.photoModalImage} /> : null}
               <Text style={styles.photoModalCaption}>{selectedPhoto?.author?.fullName || 'Coordinación'}</Text>
               <AppButton title="CERRAR" variant="secondary" onPress={() => setSelectedPhoto(null)} />
             </View>
