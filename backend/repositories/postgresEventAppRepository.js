@@ -33,6 +33,10 @@ const {
 } = require('../utils/staffCategories');
 const { serializeStaffMeasurements } = require('../utils/staffMeasurements');
 
+const DATA_IMAGE_URI_PATTERN = /^data:image\/[a-z0-9.+-]+;base64,/i;
+
+const isDataImageUri = (value) => DATA_IMAGE_URI_PATTERN.test(String(value || '').trim());
+
 const DUPLICATE_USERNAME_MESSAGE = 'El nombre de usuario ya está en uso y debe ser único para iniciar sesión.';
 const DUPLICATE_CLIENT_NIT_MESSAGE = 'Ya existe un cliente con ese NIT.';
 const DUPLICATE_COORDINATOR_CEDULA_MESSAGE = 'Ya existe un coordinador con esa cédula.';
@@ -190,6 +194,312 @@ const mapEventRow = (row, clients = []) => {
     manualInactivationComment: row.manual_inactivation_comment,
     manualInactivatedByUserId: row.manual_inactivated_by_user_id,
   };
+};
+
+const convertDataImageUriToUpload = async (uri, { mimeType = null, fileName = null } = {}) => {
+  if (!isDataImageUri(uri)) {
+    return null;
+  }
+
+  return storeEventUploadFromBase64({
+    base64: uri,
+    mimeType,
+    fileName,
+  });
+};
+
+const sanitizeLegacyEventPhotos = async (eventId, photos = []) => {
+  const normalizedPhotos = [];
+  let changed = false;
+
+  for (const photo of Array.isArray(photos) ? photos : []) {
+    const normalized = normalizePhotoEntry(photo);
+    if (!normalized) {
+      continue;
+    }
+
+    if (isDataImageUri(normalized.photo_url)) {
+      const upload = await convertDataImageUriToUpload(normalized.photo_url, {
+        mimeType: normalized.mimeType,
+        fileName: normalized.fileName,
+      });
+
+      if (upload?.publicUrl) {
+        normalizedPhotos.push({
+          ...normalized,
+          uri: upload.publicUrl,
+          photo_url: upload.publicUrl,
+          mimeType: upload.mimeType,
+          fileName: upload.fileName,
+          fileSize: upload.size,
+          source: normalized.source || 'legacy',
+        });
+        changed = true;
+        continue;
+      }
+    }
+
+    normalizedPhotos.push(normalized);
+  }
+
+  if (changed) {
+    await query(
+      `
+        UPDATE events
+        SET photos = $2::jsonb,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [Number(eventId), JSON.stringify(normalizedPhotos)],
+    );
+  }
+
+  return normalizedPhotos;
+};
+
+const sanitizeNestedDataImages = async (value) => {
+  if (Array.isArray(value)) {
+    let changed = false;
+    const nextItems = [];
+
+    for (const item of value) {
+      const [cleanedItem, itemChanged] = await sanitizeNestedDataImages(item);
+      nextItems.push(cleanedItem);
+      changed = changed || itemChanged;
+    }
+
+    return [nextItems, changed];
+  }
+
+  if (!value || typeof value !== 'object') {
+    return [value, false];
+  }
+
+  let changed = false;
+  const nextValue = { ...value };
+
+  for (const [key, child] of Object.entries(nextValue)) {
+    if (typeof child === 'string' && ['photo', 'photo_url', 'uri', 'image'].includes(key) && isDataImageUri(child)) {
+      const upload = await convertDataImageUriToUpload(child, {
+        mimeType: nextValue.mimeType || nextValue.mime_type,
+        fileName: nextValue.fileName || nextValue.file_name,
+      });
+
+      if (upload?.publicUrl) {
+        nextValue[key] = upload.publicUrl;
+        if (key === 'photo' && !nextValue.photo_url) {
+          nextValue.photo_url = upload.publicUrl;
+        }
+        changed = true;
+      }
+      continue;
+    }
+
+    if (Array.isArray(child) || (child && typeof child === 'object')) {
+      const [cleanedChild, childChanged] = await sanitizeNestedDataImages(child);
+      if (childChanged) {
+        nextValue[key] = cleanedChild;
+        changed = true;
+      }
+    }
+  }
+
+  return [nextValue, changed];
+};
+
+const sanitizeLegacyEventCities = async (eventId, cities = []) => {
+  if (!Array.isArray(cities) || cities.length === 0) {
+    return cities;
+  }
+
+  const cleanedCities = [];
+
+  for (const city of cities) {
+    const [cleanedCity, changed] = await sanitizeNestedDataImages(city);
+    cleanedCities.push(cleanedCity);
+
+    if (changed) {
+      await query(
+        `
+          UPDATE event_cities
+          SET points = $2::jsonb
+          WHERE event_id = $1
+            AND LOWER(city_name) = LOWER($3)
+        `,
+        [Number(eventId), JSON.stringify(cleanedCity.points || []), normalizeString(cleanedCity.name)],
+      );
+    }
+  }
+
+  return cleanedCities;
+};
+
+const sanitizeLegacyEventRowMedia = async (row) => {
+  const nextRow = { ...row };
+  const updates = [];
+  const values = [Number(nextRow.id)];
+
+  const pushUpdate = (column, value) => {
+    values.push(value);
+    updates.push(`${column} = $${values.length}`);
+  };
+
+  if (isDataImageUri(nextRow.image)) {
+    const upload = await convertDataImageUriToUpload(nextRow.image);
+    if (upload?.publicUrl) {
+      nextRow.image = upload.publicUrl;
+      pushUpdate('image', upload.publicUrl);
+    }
+  }
+
+  if (isDataImageUri(nextRow.start_photo_url)) {
+    const upload = await convertDataImageUriToUpload(nextRow.start_photo_url);
+    if (upload?.publicUrl) {
+      nextRow.start_photo_url = upload.publicUrl;
+      pushUpdate('start_photo_url', upload.publicUrl);
+    }
+  }
+
+  if (isDataImageUri(nextRow.end_photo_url)) {
+    const upload = await convertDataImageUriToUpload(nextRow.end_photo_url);
+    if (upload?.publicUrl) {
+      nextRow.end_photo_url = upload.publicUrl;
+      pushUpdate('end_photo_url', upload.publicUrl);
+    }
+  }
+
+  if (Array.isArray(nextRow.photos) && nextRow.photos.length > 0) {
+    const sanitizedPhotos = await sanitizeLegacyEventPhotos(nextRow.id, nextRow.photos);
+    if (sanitizedPhotos.length !== nextRow.photos.length || sanitizedPhotos.some((photo, index) => photo?.photo_url !== normalizePhotoEntry(nextRow.photos[index])?.photo_url)) {
+      nextRow.photos = sanitizedPhotos;
+    }
+  }
+
+  if (Array.isArray(nextRow.cities) && nextRow.cities.length > 0) {
+    nextRow.cities = await sanitizeLegacyEventCities(nextRow.id, nextRow.cities);
+  }
+
+  if (nextRow.executive_report && typeof nextRow.executive_report === 'object') {
+    const [sanitizedReport, reportChanged] = await sanitizeNestedDataImages(nextRow.executive_report);
+    if (reportChanged) {
+      nextRow.executive_report = sanitizedReport;
+      pushUpdate('executive_report', JSON.stringify(sanitizedReport));
+    }
+  }
+
+  if (updates.length > 0) {
+    updates.push('updated_at = NOW()');
+    await query(`UPDATE events SET ${updates.join(', ')} WHERE id = $1`, values);
+  }
+
+  return nextRow;
+};
+
+const sanitizeLegacyGalleryRow = async (row) => {
+  if (!isDataImageUri(row.uri)) {
+    return row;
+  }
+
+  const upload = await convertDataImageUriToUpload(row.uri, {
+    mimeType: row.mimeType,
+    fileName: row.fileName,
+  });
+
+  if (!upload?.publicUrl) {
+    return row;
+  }
+
+  await query(
+    `
+      UPDATE event_photos
+      SET photo_url = $2,
+          photo_path = $3,
+          mime_type = $4,
+          file_name = $5,
+          file_size = $6,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [Number(row.id), upload.publicUrl, upload.absolutePath, upload.mimeType, upload.fileName, upload.size],
+  );
+
+  return {
+    ...row,
+    uri: upload.publicUrl,
+    mimeType: upload.mimeType,
+    fileName: upload.fileName,
+    fileSize: upload.size,
+  };
+};
+
+const sanitizeLegacyCoordinatorPhotoRow = async (row) => {
+  if (!row || !isDataImageUri(row.photo)) {
+    return row;
+  }
+
+  const upload = await convertDataImageUriToUpload(row.photo, {
+    mimeType: row.mimeType,
+    fileName: row.fileName,
+  });
+
+  if (!upload?.publicUrl) {
+    return row;
+  }
+
+  await query(
+    `
+      UPDATE coordinators
+      SET photo = $2,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [Number(row.id), upload.publicUrl],
+  );
+
+  return {
+    ...row,
+    photo: upload.publicUrl,
+  };
+};
+
+const resolveEventImageStorage = async (image) => {
+  if (!image) {
+    return null;
+  }
+
+  if (typeof image === 'string') {
+    const trimmed = normalizeString(image);
+    if (!trimmed) {
+      return null;
+    }
+
+    if (isDataImageUri(trimmed)) {
+      const upload = await convertDataImageUriToUpload(trimmed);
+      return upload?.publicUrl || null;
+    }
+
+    return trimmed;
+  }
+
+  if (typeof image === 'object' && !Array.isArray(image)) {
+    const uri = normalizeString(image.uri || image.url || image.photoUrl || image.src || image.photo_url);
+    if (!uri) {
+      return null;
+    }
+
+    if (isDataImageUri(uri)) {
+      const upload = await convertDataImageUriToUpload(uri, {
+        mimeType: image.mimeType || image.mime_type,
+        fileName: image.fileName || image.file_name,
+      });
+
+      return upload?.publicUrl || null;
+    }
+
+    return serializePhotoAssetField(image, { fallbackUri: null });
+  }
+
+  return null;
 };
 
 const mergeEventPhotos = (legacyPhotos = [], dbPhotos = []) => {
@@ -593,7 +903,9 @@ class PostgresEventAppRepository {
       `,
     );
 
-    return result.rows.map((row) => sanitizeCoordinatorAdminRecord({
+    const sanitizedRows = await Promise.all(result.rows.map((row) => sanitizeLegacyCoordinatorPhotoRow(row)));
+
+    return sanitizedRows.map((row) => sanitizeCoordinatorAdminRecord({
       coordinator: row,
         user: row.username ? {
           id: row.user_id_ref,
@@ -641,7 +953,7 @@ class PostgresEventAppRepository {
       [normalizedUserId],
     );
 
-    return coordinatorResult.rows[0] || null;
+    return sanitizeLegacyCoordinatorPhotoRow(coordinatorResult.rows[0] || null);
   }
 
   async getCoordinators({ city } = {}) {
@@ -659,7 +971,8 @@ class PostgresEventAppRepository {
       [normalizeString(city) || null],
     );
 
-    return result.rows.map((row) => sanitizeCoordinatorAdminRecord({ coordinator: row }));
+    const sanitizedRows = await Promise.all(result.rows.map((row) => sanitizeLegacyCoordinatorPhotoRow(row)));
+    return sanitizedRows.map((row) => sanitizeCoordinatorAdminRecord({ coordinator: row }));
   }
 
   async getCoordinatorEvents({ userId }) {
@@ -1454,7 +1767,8 @@ class PostgresEventAppRepository {
       [Number.isInteger(Number(createdByUserId)) && Number(createdByUserId) > 0 ? Number(createdByUserId) : null],
     );
 
-    const events = result.rows.map((row) => mapEventRow(row, clients));
+    const hydratedRows = await Promise.all(result.rows.map((row) => sanitizeLegacyEventRowMedia(row)));
+    const events = hydratedRows.map((row) => mapEventRow(row, clients));
     const executiveIds = [...new Set(events.map((event) => Number(event.createdByUserId)).filter((id) => Number.isInteger(id) && id > 0))];
     const executiveContactsById = new Map();
 
@@ -1492,7 +1806,9 @@ class PostgresEventAppRepository {
     );
 
     const galleryByEventId = new Map();
-    galleryResult.rows.forEach((row) => {
+    const hydratedGalleryRows = await Promise.all(galleryResult.rows.map((row) => sanitizeLegacyGalleryRow(row)));
+
+    hydratedGalleryRows.forEach((row) => {
       const eventPhotos = galleryByEventId.get(Number(row.event_id)) || [];
       eventPhotos.push({
         id: `${row.milestone_type || 'photo'}-${row.event_id}-${row.createdAt || Date.now()}`,
@@ -1542,6 +1858,7 @@ class PostgresEventAppRepository {
     try {
       await client.query('BEGIN');
       const matchedClient = await this.findClientByIdentifiers({ clientId: eventData.clientId, clientUserId: eventData.clientUserId });
+      const storageImage = await resolveEventImageStorage(eventData.image);
 
         const eventResult = await client.query(
           `
@@ -1549,7 +1866,7 @@ class PostgresEventAppRepository {
           VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_started', 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
           RETURNING id
         `,
-        [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, storageImage || serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       const event = eventResult.rows[0];
@@ -1572,6 +1889,7 @@ class PostgresEventAppRepository {
     try {
       await client.query('BEGIN');
       const matchedClient = await this.findClientByIdentifiers({ clientId: eventData.clientId, clientUserId: eventData.clientUserId });
+      const storageImage = await resolveEventImageStorage(eventData.image);
 
       const eventResult = await client.query(
         `
@@ -1592,7 +1910,7 @@ class PostgresEventAppRepository {
           WHERE id = $1
           RETURNING id
         `,
-        [id, eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
+        [id, eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, storageImage || serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
       );
 
       if (eventResult.rowCount === 0) {
@@ -1668,7 +1986,8 @@ class PostgresEventAppRepository {
       return null;
     }
 
-    const event = mapEventRow(result.rows[0], await this.getClients());
+    const sanitizedEventRow = await sanitizeLegacyEventRowMedia(result.rows[0]);
+    const event = mapEventRow(sanitizedEventRow, await this.getClients());
     const galleryResult = await query(
       `
         SELECT id, event_id, milestone_type, photo_url AS uri, photo_path, mime_type AS "mimeType", file_name AS "fileName", file_size AS "fileSize",
@@ -1680,7 +1999,9 @@ class PostgresEventAppRepository {
       [id],
     );
 
-    const galleryPhotos = galleryResult.rows.map((row) => ({
+    const sanitizedGalleryRows = await Promise.all(galleryResult.rows.map((row) => sanitizeLegacyGalleryRow(row)));
+
+    const galleryPhotos = sanitizedGalleryRows.map((row) => ({
       id: `${row.milestone_type || 'photo'}-${row.id}`,
       uri: row.uri,
       createdAt: row.createdAt,

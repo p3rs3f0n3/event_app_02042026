@@ -22,7 +22,7 @@ const canonicalizePhotoUri = (value) => {
   // We no longer return base64 in canonical responses to force using physical files
   if (/^(data:)/i.test(uri)) {
     console.warn('[events] base64 found in canonical response, this should be avoided');
-    return uri; // Keep it if it somehow leaked, but the goal is to not have it here
+    return '';
   }
 
   if (/^(file:|content:)/i.test(uri)) {
