@@ -70,8 +70,8 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
     if (Number.isNaN(parsed.getTime())) return 'Sin hora';
     return parsed.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
-  const activeEvents = events.filter((event) => getEventStatus(event) === 'active');
-  const inactiveEvents = events.filter((event) => getEventStatus(event) !== 'active');
+  const activeEvents = events.filter((event) => ['created', 'started'].includes(getEventStatus(event)));
+  const inactiveEvents = events.filter((event) => !['created', 'started'].includes(getEventStatus(event)));
 
   const toggleSection = (section) => {
     setExpandedSections((current) => ({
@@ -185,7 +185,7 @@ const ReviewEventsScreen = ({ onBack, user, onEdit }) => {
           </View>
         ))}
 
-          {getEventStatus(selectedEvent) === 'active' ? (
+          {getEventStatus(selectedEvent) === 'started' ? (
             <>
               <AppButton title="EDITAR EVENTO" onPress={() => onEdit(selectedEvent)} />
               <AppButton title="INACTIVAR EVENTO" variant="danger" onPress={() => setShowInactivationModal(true)} />

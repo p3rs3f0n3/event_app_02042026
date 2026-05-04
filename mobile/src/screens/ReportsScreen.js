@@ -52,7 +52,7 @@ const createListSections = (events) => {
   };
 
   (Array.isArray(events) ? events : []).forEach((event) => {
-    const bucketKey = getEventStatus(event) === 'active' ? 'active' : 'inactive';
+    const bucketKey = ['created', 'started'].includes(getEventStatus(event)) ? 'active' : 'inactive';
     buckets[bucketKey].items.push(event);
   });
 

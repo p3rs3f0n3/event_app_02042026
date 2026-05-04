@@ -170,9 +170,9 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
   const canStartEvent = isEventStartable(currentEvent);
   const executive = currentEvent?.executive || event?.executive || null;
   const hasExecutiveAssociation = Boolean(executive?.id);
-  const isEventFinalized = eventStatus === 'finalized';
-  const isEventNotStarted = eventStatus === 'not_started';
-  const canManageReports = eventStatus === 'active';
+  const isEventFinalized = eventStatus === 'finished';
+  const isEventNotStarted = eventStatus === 'created';
+  const canManageReports = eventStatus === 'started';
 
   useEffect(() => {
     if (__DEV__) {
@@ -433,12 +433,12 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
 
   const handleOpenMilestoneCapture = async (mode) => {
     try {
-      if (mode === 'start' && eventStatus !== 'not_started') {
+      if (mode === 'start' && eventStatus !== 'created') {
         Alert.alert('No disponible', 'El evento ya fue iniciado o está finalizado.');
         return;
       }
 
-      if (mode === 'end' && eventStatus !== 'active') {
+      if (mode === 'end' && eventStatus !== 'started') {
         Alert.alert('No disponible', 'El evento debe estar iniciado para poder finalizarlo.');
         return;
       }
@@ -545,7 +545,7 @@ const CoordinatorEventDetailScreen = ({ event, user, onBack, onEventUpdated, rol
                 <Text style={styles.milestoneActionText}>INICIAR EVENTO</Text>
               </TouchableOpacity>
             ) : null}
-            {eventStatus === 'active' ? (
+            {eventStatus === 'started' ? (
               <TouchableOpacity style={styles.milestoneActionButton} onPress={() => handleOpenMilestoneCapture('end')}>
                 <Text style={styles.milestoneActionText}>FINALIZAR EVENTO</Text>
               </TouchableOpacity>

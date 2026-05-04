@@ -12,79 +12,101 @@ const createClient = () => new Client({
   ssl: config.postgres.ssl ? { rejectUnauthorized: false } : false,
 });
 
-const normalizeStatus = (value) => {
-  const status = String(value || '').toLowerCase();
-  if (status === 'created' || status === 'not_started') return 'not_started';
-  if (status === 'started' || status === 'active') return 'active';
-  if (status === 'finished' || status === 'finalized') return 'finalized';
-  return 'not_started';
-};
-
 const run = async () => {
   const client = createClient();
   await client.connect();
 
   try {
+    console.log('--- EVENT STATUS UNIFICATION MIGRATION ---');
+    console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'APPLY (writing to DB)'}`);
+
     const summary = await client.query(`
       SELECT
-        COUNT(*) FILTER (WHERE LOWER(COALESCE(event_status, '')) IN ('created', 'started', 'finished')) AS alias_rows,
-        COUNT(*) FILTER (WHERE start_real_at IS NOT NULL AND LOWER(COALESCE(event_status, '')) NOT IN ('active', 'started', 'finalized', 'finished')) AS start_status_mismatch_rows,
-        COUNT(*) FILTER (WHERE end_real_at IS NOT NULL AND LOWER(COALESCE(event_status, '')) NOT IN ('finalized', 'finished')) AS end_status_mismatch_rows,
-        COUNT(*) FILTER (WHERE LOWER(COALESCE(event_status, '')) IN ('active', 'started') AND start_real_at IS NULL) AS missing_start_rows,
-        COUNT(*) FILTER (WHERE LOWER(COALESCE(event_status, '')) IN ('finalized', 'finished') AND end_real_at IS NULL) AS missing_end_rows,
-        COUNT(*) FILTER (WHERE start_date > end_date) AS inverted_schedule_rows
+        COUNT(*) AS total_events,
+        COUNT(*) FILTER (WHERE event_status IN ('not_started', 'active', 'finalized')) AS old_status_count,
+        COUNT(*) FILTER (WHERE event_status = 'created' AND end_date < NOW()) AS pending_expiry_count,
+        COUNT(*) FILTER (WHERE start_real_at IS NOT NULL AND event_status = 'created') AS missing_started_status,
+        COUNT(*) FILTER (WHERE end_real_at IS NOT NULL AND event_status IN ('created', 'started')) AS missing_finished_status
       FROM events
     `);
 
     const stats = summary.rows[0] || {};
-    console.log('Event lifecycle repair summary:');
+    console.log('Migration summary stats:');
     console.log(JSON.stringify(stats, null, 2));
 
     if (dryRun) {
-      console.log('Dry run only. Re-run with --apply to update rows.');
+      console.log('\nDry run only. Re-run with --apply to update rows.');
       return;
     }
 
     await client.query('BEGIN');
 
-    const updated = await client.query(`
+    // 1. Map nomenclature and fix status based on real dates
+    const migration = await client.query(`
       UPDATE events
       SET
-        event_status = CASE LOWER(COALESCE(event_status, ''))
-          WHEN 'created' THEN 'not_started'
-          WHEN 'not_started' THEN 'not_started'
-          WHEN 'started' THEN 'active'
-          WHEN 'active' THEN 'active'
-          WHEN 'finished' THEN 'finalized'
-          WHEN 'finalized' THEN 'finalized'
-          ELSE 'not_started'
+        event_status = CASE
+          -- Priority: Real end date -> finished
+          WHEN end_real_at IS NOT NULL THEN 'finished'
+          -- Priority: Real start date -> started
+          WHEN start_real_at IS NOT NULL THEN 'started'
+          -- Priority: Expired date (never started) -> inactive_by_date
+          WHEN event_status IN ('created', 'not_started') AND end_date < NOW() THEN 'inactive_by_date'
+          -- Nomenclature mapping
+          WHEN event_status IN ('not_started', 'created', 'pending') THEN 'created'
+          WHEN event_status IN ('active', 'started') THEN 'started'
+          WHEN event_status IN ('finalized', 'finished') THEN 'finished'
+          ELSE COALESCE(event_status, 'created')
         END,
-        start_real_at = CASE
-          WHEN LOWER(COALESCE(event_status, '')) IN ('active', 'started', 'finalized', 'finished') AND start_real_at IS NULL
-            THEN COALESCE(start_date, start_real_at, NOW())
-          ELSE start_real_at
-        END,
-        end_real_at = CASE
-          WHEN LOWER(COALESCE(event_status, '')) IN ('finalized', 'finished') AND end_real_at IS NULL
-            THEN COALESCE(end_date, end_real_at, NOW())
-          ELSE end_real_at
+        status = CASE
+          WHEN end_real_at IS NOT NULL THEN 'Finalizado'
+          WHEN start_real_at IS NOT NULL THEN 'En curso'
+          WHEN event_status IN ('created', 'not_started') AND end_date < NOW() THEN 'Inactivo por fecha'
+          WHEN event_status IN ('not_started', 'created', 'pending') THEN 'Pendiente'
+          WHEN event_status IN ('active', 'started') THEN 'En curso'
+          WHEN event_status IN ('finalized', 'finished') THEN 'Finalizado'
+          ELSE status
         END,
         updated_at = NOW()
       WHERE
-        LOWER(COALESCE(event_status, '')) IN ('created', 'started', 'finished', 'active', 'finalized')
-        OR (LOWER(COALESCE(event_status, '')) IN ('active', 'started') AND start_real_at IS NULL)
-        OR (LOWER(COALESCE(event_status, '')) IN ('finalized', 'finished') AND end_real_at IS NULL)
-        OR (start_real_at IS NOT NULL AND LOWER(COALESCE(event_status, '')) NOT IN ('active', 'started', 'finalized', 'finished'))
-        OR (end_real_at IS NOT NULL AND LOWER(COALESCE(event_status, '')) NOT IN ('finalized', 'finished'))
+        event_status IN ('not_started', 'active', 'finalized', 'pending', 'expired')
+        OR (event_status = 'created' AND end_date < NOW())
+        OR (start_real_at IS NOT NULL AND event_status = 'created')
+        OR (end_real_at IS NOT NULL AND event_status <> 'finished')
     `);
 
-    console.log(`Updated ${updated.rowCount} event row(s).`);
+    console.log(`\nUpdated ${migration.rowCount} event row(s) to new status nomenclature.`);
+
+    // 2. Fix missing dates for consistent reporting
+    const dateFix = await client.query(`
+      UPDATE events
+      SET
+        start_real_at = COALESCE(start_real_at, start_date, NOW()),
+        updated_at = NOW()
+      WHERE event_status IN ('started', 'finished') AND start_real_at IS NULL
+    `);
+
+    if (dateFix.rowCount > 0) {
+      console.log(`Backfilled start_real_at for ${dateFix.rowCount} started/finished events.`);
+    }
+
+    const endDateFix = await client.query(`
+      UPDATE events
+      SET
+        end_real_at = COALESCE(end_real_at, end_date, NOW()),
+        updated_at = NOW()
+      WHERE event_status = 'finished' AND end_real_at IS NULL
+    `);
+
+    if (endDateFix.rowCount > 0) {
+      console.log(`Backfilled end_real_at for ${endDateFix.rowCount} finished events.`);
+    }
 
     await client.query('COMMIT');
-    console.log('Repair completed successfully.');
+    console.log('\nMigration completed successfully.');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Repair failed:', error.message);
+    console.error('\nMigration failed:', error.message);
     process.exitCode = 1;
   } finally {
     await client.end();

@@ -1938,7 +1938,7 @@ class PostgresEventAppRepository {
         const eventResult = await client.query(
           `
           INSERT INTO events (name, client, client_id, client_user_id, image, start_date, end_date, event_status, status, reports, photos, executive_report, created_by_user_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_started', 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 'created', 'Pendiente', '[]'::jsonb, '[]'::jsonb, NULL, $8)
           RETURNING id
         `,
         [eventData.name, eventData.client, matchedClient?.clientId || null, matchedClient?.userId || null, storageImage || serializePhotoAssetField(eventData.image, { fallbackUri: null }), eventData.startDate, eventData.endDate, eventData.createdByUserId],
@@ -1977,7 +1977,7 @@ class PostgresEventAppRepository {
               start_date = $7,
               end_date = $8,
               created_by_user_id = COALESCE(created_by_user_id, $9),
-              event_status = COALESCE(event_status, 'not_started'),
+              event_status = COALESCE(event_status, 'created'),
               manual_inactivated_at = NULL,
               manual_inactivation_comment = NULL,
               manual_inactivated_by_user_id = NULL,
@@ -2506,8 +2506,8 @@ class PostgresEventAppRepository {
     }
 
     const eventStatus = getEventStatus(event);
-    if (eventStatus !== 'active') {
-      return { errorCode: eventStatus === 'not_started' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
+    if (eventStatus !== 'started') {
+      return { errorCode: eventStatus === 'created' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
     }
 
     if (Number(event.createdByUserId) !== Number(payload.authorUserId)) {
@@ -2546,8 +2546,8 @@ class PostgresEventAppRepository {
     }
 
     const eventStatus = getEventStatus(event);
-    if (eventStatus !== 'active') {
-      return { errorCode: eventStatus === 'not_started' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
+    if (eventStatus !== 'started') {
+      return { errorCode: eventStatus === 'created' ? 'EVENT_NOT_STARTED' : 'EVENT_FINALIZED' };
     }
 
     const coordinatorProfile = await this.findCoordinatorProfileByUserId(payload.authorUserId);
@@ -2666,7 +2666,7 @@ class PostgresEventAppRepository {
     await query(
       `
         UPDATE events
-        SET event_status = 'active',
+        SET event_status = 'started',
             start_real_at = COALESCE(start_real_at, $2::timestamptz, start_date),
             start_lat = COALESCE(start_lat, $3::numeric),
             start_lon = COALESCE(start_lon, $4::numeric),
@@ -2688,11 +2688,11 @@ class PostgresEventAppRepository {
     }
 
     const eventStatus = getEventStatus(event);
-    if (eventStatus === 'finalized') {
+    if (eventStatus === 'finished') {
       return { errorCode: 'EVENT_FINALIZED' };
     }
 
-    if (eventStatus !== 'active') {
+    if (eventStatus !== 'started') {
       return { errorCode: 'EVENT_NOT_STARTED' };
     }
 
@@ -2755,7 +2755,7 @@ class PostgresEventAppRepository {
     await query(
       `
         UPDATE events
-        SET event_status = 'finalized',
+        SET event_status = 'finished',
             start_real_at = COALESCE(start_real_at, start_date, $2::timestamptz),
             end_real_at = COALESCE(end_real_at, $2::timestamptz, end_date),
             end_lat = COALESCE(end_lat, $3::numeric),
