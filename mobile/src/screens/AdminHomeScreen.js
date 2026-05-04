@@ -31,6 +31,8 @@ import {
 } from '../api/api';
 import UserProfileCard from '../components/UserProfileCard';
 import { AppButton, ScreenShell, SectionTitle, StatusBadge, SurfaceCard } from '../components/ui';
+import AdminChangePasswordCard from '../components/AdminChangePasswordCard';
+import AdminResetUserPasswordCard from '../components/AdminResetUserPasswordCard';
 import { getAppPalette, getResponsiveTokens, SHADOWS } from '../theme/tokens';
 import { downloadFile } from '../utils/downloadFile';
 import { useResponsiveMetrics } from '../utils/responsive';
@@ -1477,6 +1479,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
               <Text style={styles.listMeta}>{clientLookup.result.contactFullName}{clientLookup.result.contactRole ? ` · ${clientLookup.result.contactRole}` : ''}</Text>
               <Text style={styles.listMeta}>@{clientLookup.result.username}{clientLookup.result.nit ? ` · NIT ${clientLookup.result.nit}` : ''}</Text>
               <Text style={styles.listMeta}>{clientLookup.result.email || clientLookup.result.phone || 'Sin dato adicional'}</Text>
+              <AdminChangePasswordCard adminUser={user} targetUser={clientLookup.result} palette={palette} buttonLabel="CAMBIAR CONTRASEÑA" buttonVariant="secondary" />
             </View>
           ) : null}
           {clientLookup.status === 'exists' ? (
@@ -1593,6 +1596,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
               <Text style={styles.listMeta}>{executiveLookup.result.email || executiveLookup.result.phone || 'Sin dato adicional'}</Text>
               <Text style={styles.listMeta}>{executiveLookup.result.address || 'Sin dirección cargada'}</Text>
               <Text style={styles.listMeta}>{executiveLookup.result.whatsappPhone ? `WhatsApp ${executiveLookup.result.whatsappPhone}` : 'Sin WhatsApp cargado'}</Text>
+              <AdminChangePasswordCard adminUser={user} targetUser={executiveLookup.result} palette={palette} buttonLabel="CAMBIAR CONTRASEÑA" buttonVariant="secondary" />
             </View>
           ) : null}
           {executiveLookup.status === 'exists' ? (
@@ -1665,6 +1669,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
                 <Text style={styles.listMeta}>{coordinatorLookup.result.city} · {coordinatorLookup.result.cedula}</Text>
                 <Text style={styles.listMeta}>{coordinatorLookup.result.username ? `@${coordinatorLookup.result.username}` : 'Sin usuario vinculado'}</Text>
                 <Text style={styles.listMeta}>{coordinatorLookup.result.email || coordinatorLookup.result.phone || 'Sin dato adicional'}</Text>
+                <AdminChangePasswordCard adminUser={user} targetUser={coordinatorLookup.result} palette={palette} buttonLabel="CAMBIAR CONTRASEÑA" buttonVariant="secondary" />
               </View>
             ) : null}
           </View>
@@ -1927,6 +1932,7 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
               <Text style={styles.listMeta}>{staffLookup.result.cedula} · Sexo: {staffLookup.result.sexo || 'Sin dato'}</Text>
               <Text style={styles.listMeta}>{getStaffSizeSummary(staffLookup.result)}</Text>
               <Text style={styles.listMeta}>{staffLookup.result.sexo === 'mujer' ? `Busto ${staffLookup.result.busto || 'N/D'} · Cintura ${staffLookup.result.cintura || 'N/D'} · Cadera ${staffLookup.result.cadera || 'N/D'}` : 'Medidas detalladas no aplican para hombre.'}</Text>
+              <AdminChangePasswordCard adminUser={user} targetUser={staffLookup.result} palette={palette} buttonLabel="CAMBIAR CONTRASEÑA" buttonVariant="secondary" />
             </View>
           ) : null}
           {staffLookup.status === 'exists' ? (
@@ -1972,6 +1978,8 @@ const AdminHomeScreen = ({ user, onLogout, appConfig, roleConfig }) => {
       />
 
       <UserProfileCard user={user} palette={palette} title="Perfil administrativo" buttonLabel="MI CONTRASEÑA" buttonVariant="primary" />
+
+      <AdminResetUserPasswordCard adminUser={user} palette={palette} />
 
       <SurfaceCard style={styles.heroCard}>
         <Text style={styles.cardTitle}>Control administrativo con persistencia real</Text>

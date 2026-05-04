@@ -30,6 +30,7 @@ const {
   validateAdminExecutivePayload,
   validateAdminExecutiveUpdatePayload,
   validateAdminEntityInactivationPayload,
+  validateAdminChangePasswordPayload,
   validateAdminStaffPayload,
   validateAdminStaffUpdatePayload,
   validateChangePasswordPayload,
@@ -285,6 +286,52 @@ app.post('/api/change-password', asyncHandler(async (req, res) => {
   if (result?.errorCode === 'INVALID_CURRENT_PASSWORD') {
     return res.status(401).json({ message: 'La contraseña actual es incorrecta' });
   }
+
+  return res.json({
+    message: 'Contraseña actualizada correctamente',
+    userId: result.id,
+    username: result.username,
+  });
+}));
+
+app.post('/api/admin/users/:id/change-password', asyncHandler(async (req, res) => {
+  const validationError = validateAdminChangePasswordPayload({
+    userId: req.params.id,
+    actorUserId: req.body?.actorUserId,
+    newPassword: req.body?.newPassword,
+  });
+
+  if (validationError) {
+    return badRequest(res, validationError);
+  }
+
+  const actor = await req.app.locals.repository.findUserById(Number(req.body.actorUserId));
+  if (!actor) {
+    return res.status(404).json({ message: 'Usuario administrador no encontrado' });
+  }
+
+  if (String(actor.role || '').toUpperCase() !== 'ADMIN') {
+    return res.status(403).json({ message: 'No tienes permisos para cambiar contraseñas de otros usuarios' });
+  }
+
+  const result = await req.app.locals.repository.adminChangeUserPassword({
+    actorUserId: Number(req.body.actorUserId),
+    targetUserKey: normalizeString(req.params.id),
+    newPassword: normalizeString(req.body.newPassword),
+  });
+
+  if (result?.errorCode === 'USER_NOT_FOUND') {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+
+  if (result?.errorCode === 'FORBIDDEN') {
+    return res.status(403).json({ message: 'No tienes permisos para cambiar contraseñas de otros usuarios' });
+  }
+
+  console.log('🔐 Admin changed user password', {
+    actorUserId: Number(req.body.actorUserId),
+    targetUserId: Number(req.params.id),
+  });
 
   return res.json({
     message: 'Contraseña actualizada correctamente',

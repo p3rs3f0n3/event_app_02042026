@@ -715,6 +715,81 @@ class PostgresEventAppRepository {
     };
   }
 
+  async adminChangeUserPassword({ actorUserId, targetUserKey, newPassword }) {
+    const actor = await this.findUserById(actorUserId);
+    if (!actor || String(actor.role || '').toUpperCase() !== 'ADMIN') {
+      return { errorCode: 'FORBIDDEN' };
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const targetKey = String(targetUserKey || '').trim();
+      const targetResult = await client.query(
+        `
+          SELECT u.id, u.username
+          FROM users u
+          WHERE u.is_active = TRUE
+            AND (
+              u.id = $1
+              OR LOWER(u.username) = LOWER($2)
+            )
+          LIMIT 1
+        `,
+        [Number(targetKey), targetKey],
+      );
+
+      const targetUser = targetResult.rows[0];
+      if (!targetUser) {
+        await client.query('ROLLBACK');
+        return { errorCode: 'USER_NOT_FOUND' };
+      }
+
+      const updatedResult = await client.query(
+        `
+          UPDATE users
+          SET password_hash = $2,
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, username
+        `,
+        [Number(targetUser.id), createPasswordHash(newPassword)],
+      );
+
+      const updatedUser = updatedResult.rows[0];
+
+      await this.#insertAuditLog(client, {
+        actorUserId: Number(actorUserId),
+        entityType: 'user',
+        entityId: Number(updatedUser.id),
+        action: 'admin_change_password',
+        previousValues: {
+          userId: Number(updatedUser.id),
+          username: targetUser.username,
+        },
+        newValues: {
+          userId: Number(updatedUser.id),
+          username: targetUser.username,
+          changedByUserId: Number(actorUserId),
+        },
+      });
+
+      await client.query('COMMIT');
+
+      return {
+        id: updatedUser.id,
+        username: updatedUser.username,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async saveExpoPushToken({ userId, expoPushToken }) {
     const result = await query(
       `

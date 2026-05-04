@@ -57,6 +57,30 @@ const validateChangePasswordPayload = (payload) => {
   return null;
 };
 
+const validateAdminChangePasswordPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'Payload de cambio de contraseña inválido';
+  }
+
+  if (!isNonEmptyString(payload.userId)) {
+    return 'El usuario es requerido';
+  }
+
+  if (!isValidIdValue(payload.actorUserId)) {
+    return 'El usuario administrador es requerido';
+  }
+
+  if (!isNonEmptyString(payload.newPassword)) {
+    return 'La nueva contraseña es obligatoria';
+  }
+
+  if (String(payload.newPassword).trim().length < 8) {
+    return 'La nueva contraseña debe tener al menos 8 caracteres';
+  }
+
+  return null;
+};
+
 const validateAcceptTermsPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return 'Payload de aceptación de términos inválido';
@@ -537,6 +561,7 @@ module.exports = {
   validateCoordinatorPhotoPayload,
   validateCoordinatorReportPayload,
   validateChangePasswordPayload,
+  validateAdminChangePasswordPayload,
   validateExecutiveReportPayload,
   validateLoginPayload,
   validateManualInactivationPayload,

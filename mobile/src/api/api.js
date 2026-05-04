@@ -78,6 +78,14 @@ export const changePassword = async ({ userId, currentPassword, newPassword }) =
   }
 };
 
+export const adminChangeUserPassword = async ({ actorUserId, userId, newPassword }) => {
+  try {
+    return (await getAPI().post(`/admin/users/${userId}/change-password`, { actorUserId, newPassword })).data;
+  } catch (error) {
+    throw extractApiErrorMessage(error);
+  }
+};
+
 export const acceptTerms = async (userId) => {
   try {
     return (await getAPI().post('/terms/accept', { userId })).data;
